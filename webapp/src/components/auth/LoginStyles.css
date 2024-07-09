@@ -1,0 +1,43 @@
+/* LoginStyles.css */
+
+.login-page-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: rgb(207, 250, 254);
+    background-image: radial-gradient(at 78% 34%, rgb(3, 105, 161) 0, transparent 33%), radial-gradient(at 86% 46%, rgb(115, 115, 115) 0, transparent 67%), radial-gradient(at 7% 43%, rgb(30, 58, 138) 0, transparent 82%), radial-gradient(at 26% 28%, rgb(13, 148, 136) 0, transparent 63%), radial-gradient(at 24% 70%, rgb(244, 114, 182) 0, transparent 42%), radial-gradient(at 84% 68%, rgb(217, 249, 157) 0, transparent 76%);
+}
+
+.login-form-container {
+    max-width: 400px;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    background-color: white;
+    text-align: center;
+}
+
+.logo-image {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 20px;
+    border-radius: 50%;
+    /* Make the image rounded */
+}
+
+.gradient-text {
+    background-image: linear-gradient(to right, rgb(134, 155, 239), rgb(59, 130, 246), rgb(147, 51, 234));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.title {
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+
+.description {
+    margin-bottom: 40px;
+}

@@ -1,0 +1,27 @@
+{
+    "name": "lambdas",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "directories": {
+        "lib": "lib"
+    },
+    "scripts": {
+        "lint": "eslint ."
+    },
+    "author": "khasnis",
+    "license": "MIT-0",
+    "devDependencies": {
+        "@aws-sdk/client-connect": "^3.398.0",
+        "@types/lodash": "^4.17.1",
+        "aws-sdk": "^2.1620.0",
+        "esbuild": "^0.19.2"
+    },
+    "dependencies": {
+        "@aws-sdk/client-dynamodb": "^3.574.0",
+        "@types/aws-lambda": "^8.10.119",
+        "cognito-at-edge": "^1.5.1",
+        "lodash": "^4.17.21",
+        "eslint": "^8.47.0"
+    }
+}
