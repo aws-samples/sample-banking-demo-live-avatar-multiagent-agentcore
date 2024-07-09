@@ -6,7 +6,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 
-// import { CognitoStack } from '../lib/infrastructure/cognito-stack';
+import { CognitoStack } from '../lib/infrastructure/cognito-stack';
 import { DemoAPIStack } from '../lib/api/demoAPI-stack';
 import { DemoDatabaseStack } from './api/demo-table-stack';
 
@@ -27,12 +27,12 @@ export class CdkBackendStack extends cdk.Stack {
 
     // create infrastructure stacks
       // Authentication
-    // const cognitoStack = new CognitoStack(this, 'CognitoStack', {
-    //   cdkAppName: appName
-    // });
-    this.domainName = 'genailabs381492099169'
-    this.userPoolId = 'us-east-1_yLe9iu9Il'
-    this.userPoolClientId = '792tvb07i9g6pks5fr6hincght'
+    const cognitoStack = new CognitoStack(this, 'CognitoStack', {
+      cdkAppName: appName
+    });
+    this.domainName = cognitoStack.userPoolDomain.domain
+    this.userPoolId = cognitoStack.userPool.userPoolId
+    this.userPoolClientId = cognitoStack.userPoolClient.userPoolClientId
 
     // create demo database stack
     const demoDatabaseStack = new DemoDatabaseStack(this, 'DemoDatabaseStack', {

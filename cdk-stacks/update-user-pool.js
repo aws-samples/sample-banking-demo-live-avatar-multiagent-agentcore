@@ -7,8 +7,6 @@ AWS.config.update({
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION,
 });
-//TODO: Remove
-process.exit(1);
 
 // Read the cdk-outputs.json file
 fs.readFile('cdk-outputs.json', 'utf8', async (err, data) => {
