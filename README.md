@@ -7,6 +7,8 @@ This project has some starter code for a webapp and backend infrastructure. It i
 
 To kick off using the project you will need to take the following initial steps:
 
+- Add in your project details into [z_governance/1-PROJECT-DETAILS.md](./z_governance/1-PROJECT-DETAILS.md) and keep these files updated as you go along.
+
 - Set up a midway client in https://integ.ep.federate.a2z.com/
 - Store the Client Secret in the account you want to deploy into in AWS Secrets Manager as a plaintext string with the client id as the name.
 - Update the variables in [cdk-stacks/stacks/infrastructure/cognito-stack.ts](./cdk-stacks/stacks/infrastructure/cognito-stack.ts). The domain must be unique.
