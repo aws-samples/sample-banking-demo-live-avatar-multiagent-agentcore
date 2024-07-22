@@ -1,5 +1,6 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
+/* eslint-disable no-undef */
 
 const { merge } = require('webpack-merge')
 const commonConfig = require('./webpack.config.common')

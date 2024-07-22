@@ -16,8 +16,13 @@ export class CognitoStack extends NestedStack {
 
   constructor(scope: Construct, id: string, props: CognitoStackProps) {
     super(scope, id, props);
-    // Cognito identifier
-    const cognitoIdentifier = `genailabs${this.account}`
+    // TODO UPDATE THESE TO YOUR VALUES
+    const cognitoDomain = `<TODO>-${this.account.substring(0,5)}-${this.region}`
+    const federateClientId = `<TODO>`
+    const federateClientSecret = federateClientId
+    // TODO MAKE SURE TO UPDATE THIS TO PROD FEDERATE WHEN MOVING OUT OF INITIAL DEV
+    const oidc_issuer = 'https://idp-integ.federate.amazon.com'
+
 
     // Create a User Pool
     const userPool = new cognito.UserPool(this, 'UserPool', {
@@ -40,23 +45,20 @@ export class CognitoStack extends NestedStack {
         posix: new cognito.StringAttribute({mutable: true }),
         ldap: new cognito.StringAttribute({ mutable: true }),
       },
-      advancedSecurityMode: cognito.AdvancedSecurityMode.OFF
+      advancedSecurityMode: cognito.AdvancedSecurityMode.ENFORCED,
+      passwordPolicy:{
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: true,
+        tempPasswordValidity: Duration.days(7),
+      },
     });
-    NagSuppressions.addResourceSuppressions(userPool, [
-      {
-        id: 'AwsSolutions-COG1',
-        reason: 'This is the Log Bucket.'
-      },
-      {
-        id: 'AwsSolutions-COG3',
-        reason: 'This is the Log Bucket.'
-      },
-    ])
 
     // Add the OIDC identity provider
-    // TODO 
-    const clientSecret = secretsmanager.Secret.fromSecretNameV2(this, "ImportedSecret", `${cognitoIdentifier}`);
-  
+    const clientSecret = secretsmanager.Secret.fromSecretNameV2(this, "ImportedSecret", `${federateClientSecret}`);
+
     const oidcProvider = new cognito.CfnUserPoolIdentityProvider(this, 'UserPoolIdentityProvider', {
         userPoolId: userPool.userPoolId,
         providerType: 'OIDC',
@@ -68,17 +70,17 @@ export class CognitoStack extends NestedStack {
           'custom:posix': 'POSIX_GROUPS'
         },
         providerDetails: {
-          client_id: cognitoIdentifier,
-          client_secret: clientSecret.secretValueFromJson(cognitoIdentifier).unsafeUnwrap(),
+          client_id: federateClientId,
+          client_secret: clientSecret.secretValue.unsafeUnwrap(),
           attributes_request_method: 'GET',
           authorize_scopes: 'openid',
-          oidc_issuer: 'https://idp-integ.federate.amazon.com',
+          oidc_issuer: oidc_issuer,
         },
       });
 
     // Create the User Pool client
     const userPoolClient = userPool.addClient('GenAILabsUserPoolClient', {
-        userPoolClientName: `${cognitoIdentifier}client`,
+        userPoolClientName: `${federateClientId}-client`,
         generateSecret: false,
         refreshTokenValidity: Duration.minutes(60),
         authFlows: {
@@ -91,9 +93,10 @@ export class CognitoStack extends NestedStack {
                 implicitCodeGrant: false
             },
             scopes: [
-                cognito.OAuthScope.OPENID, 
-                cognito.OAuthScope.PROFILE
-                ],
+              cognito.OAuthScope.OPENID,
+              cognito.OAuthScope.PROFILE,
+              cognito.OAuthScope.COGNITO_ADMIN
+            ],
             callbackUrls: ['https://<PLACEHOLDER>.cloudfront.net/oauth2/idpresponse'],
             logoutUrls: ['https://<PLACEHOLDER>.cloudfront.net/logout'],
             },
@@ -105,7 +108,7 @@ export class CognitoStack extends NestedStack {
     userPoolClient.node.addDependency(oidcProvider);
 
     const userPoolDomain = new cognito.CfnUserPoolDomain(this, 'UserPoolDomain', {
-      domain: cognitoIdentifier,
+      domain: cognitoDomain,
       userPoolId: userPool.userPoolId,
     });
 

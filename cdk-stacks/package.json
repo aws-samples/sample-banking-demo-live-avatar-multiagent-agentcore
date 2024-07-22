@@ -10,10 +10,11 @@
         "test": "jest",
         "cdk": "cdk",
         "cdk:synth": "cdk synth -c application_version=$npm_package_version",
-        "build-lambda-edge": "esbuild lambdas/edge-functions/midway-auth.js --bundle --platform=node --external:aws-sdk --outdir=build_lambda_midway_auth --target=node18",
+        "build-lambda-edge": "esbuild lambdas/edge-functions/midway-auth.js --bundle --platform=node --external:aws-sdk --outdir=build/build_lambda_midway_auth --target=node20",
         "prepare-deploy": "export JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1 && npm install -g aws-cdk@latest && npm install aws-sdk && cdk --version && cd ../webapp && npm install && npm run build && ls -l build/ && cd ../cdk-stacks && npm install && ls -l node_modules && cd lambdas && npm install && ls -l node_modules && cd .. && npm i -g esbuild && npm run build-lambda-edge",
         "deploy-backend": "export JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1 && npm run cdk:synth && cdk diff && cdk deploy GenAILabs-Demo-BackendStack --require-approval never --outputs-file cdk-backend-outputs.json -c application_version=$npm_package_version && cat cdk-backend-outputs.json",
-        "deploy-frontend": "export JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1 && cdk deploy GenAILabs-Demo-FrontendStack --require-approval never --outputs-file cdk-outputs.json -c application_version=$npm_package_version && cat cdk-outputs.json && export WEB_APP_URL=$(jq -r '.\"GenAILabs-Demo-FrontendStack\".webAppURL' cdk-outputs.json) && export CLOUDFRONT_DIST_ID=$(jq -r '.\"GenAILabs-Demo-FrontendStack\".cloudfrontDistributionId' cdk-outputs.json) && node update-user-pool.js && node generate-frontend-config.js && node invalidate-cache.js $CLOUDFRONT_DIST_ID"
+        "deploy-frontend": "export JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1 && cdk deploy GenAILabs-Demo-FrontendStack --require-approval never --outputs-file cdk-outputs.json -c application_version=$npm_package_version && cat cdk-outputs.json && export WEB_APP_URL=$(jq -r '.\"GenAILabs-Demo-FrontendStack\".webAppURL' cdk-outputs.json) && export CLOUDFRONT_DIST_ID=$(jq -r '.\"GenAILabs-Demo-FrontendStack\".cloudfrontDistributionId' cdk-outputs.json) && node update-user-pool.mjs && node generate-frontend-config.mjs && node invalidate-cache.mjs $CLOUDFRONT_DIST_ID",
+        "cdk:deploy": "npm run prepare-deploy && npm run deploy-backend && npm run deploy-frontend"
     },
     "devDependencies": {
         "@types/jest": "^29.5.12",
@@ -26,11 +27,14 @@
         "typescript": "~5.4.5"
     },
     "dependencies": {
+        "@aws-sdk/client-cloudfront": "^3.614.0",
         "@aws-sdk/client-cognito-identity-provider": "^3.587.0",
+        "@aws-sdk/client-s3": "^3.614.0",
         "@aws-sdk/client-ssm": "^3.45.0",
         "aws-cdk-lib": "^2.139.1",
-        "aws-sdk": "^2.1651.0",
+        "aws-sdk": "^2.1659.0",
         "constructs": "^10.0.0",
+        "esbuild": "0.21.5",
         "source-map-support": "^0.5.21"
     }
 }

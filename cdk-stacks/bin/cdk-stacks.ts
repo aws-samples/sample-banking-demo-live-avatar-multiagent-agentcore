@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
-import { CdkBackendStack } from '../lib/cdk-backend-stack';
-import { CdkFrontendStack } from '../lib/cdk-frontend-stack';
+import { CdkBackendStack } from '../stacks/cdk-backend-stack';
+import { CdkFrontendStack } from '../stacks/cdk-frontend-stack';
 import { AwsSolutionsChecks } from 'cdk-nag'
 import { Aspects } from 'aws-cdk-lib';
 

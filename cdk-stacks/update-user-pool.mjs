@@ -1,13 +1,27 @@
-const AWS = require('aws-sdk');
-const fs = require('fs');
+import {
+  CognitoIdentityProviderClient,
+  UpdateUserPoolClientCommand,
+  DescribeUserPoolClientCommand
+} from "@aws-sdk/client-cognito-identity-provider";
+import fs from 'fs';
 
 // Configure AWS credentials
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION,
-});
+const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
+const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
+const AWS_SESSION_TOKEN = process.env.AWS_SESSION_TOKEN;
+const AWS_REGION = process.env.AWS_REGION;
 
+const FRONTEND_STACKNAME = 'GenAILabs-Demo-FrontendStack'
+
+// Initialize Cognito Identity Provider client
+const cognitoClient = new CognitoIdentityProviderClient({
+  region: AWS_REGION,
+  credentials: {
+    accessKeyId: AWS_ACCESS_KEY_ID,
+    secretAccessKey: AWS_SECRET_ACCESS_KEY,
+    sessionToken: AWS_SESSION_TOKEN,
+  },
+});
 // Read the cdk-outputs.json file
 fs.readFile('cdk-outputs.json', 'utf8', async (err, data) => {
   if (err) {
@@ -18,9 +32,10 @@ fs.readFile('cdk-outputs.json', 'utf8', async (err, data) => {
   try {
     // Parse the JSON data
     const outputs = JSON.parse(data);
+    console.log(outputs);
 
     // Extract the relevant values from the CDK outputs
-    const frontendStackOutputs = outputs['GenAILabs-Demo-FrontendStack'];
+    const frontendStackOutputs = outputs[FRONTEND_STACKNAME];
 
     // Get the user pool client ID, user pool ID, and region from the CDK outputs
     const userPoolClientId = frontendStackOutputs['cognitoAppClientId'];
@@ -29,16 +44,14 @@ fs.readFile('cdk-outputs.json', 'utf8', async (err, data) => {
     // Get the CloudFront domain from the frontend stack outputs
     const cloudFrontDomain = frontendStackOutputs['webAppURL'];
 
-    // Create a Cognito client with the region from the CDK outputs
-    const cognito = new AWS.CognitoIdentityServiceProvider({ region: 'us-east-1' });
-
     // Get the current user pool client configuration
     const userPoolClientParams = {
       UserPoolId: userPoolId,
       ClientId: userPoolClientId,
     };
 
-    const userPoolClient = await cognito.describeUserPoolClient(userPoolClientParams).promise();
+    const describeUserPoolClientCommand = new DescribeUserPoolClientCommand(userPoolClientParams);
+    const userPoolClient = await cognitoClient.send(describeUserPoolClientCommand);
 
     const currentCallbackUrls = userPoolClient.UserPoolClient.CallbackURLs || [];
     const currentLogoutUrls = userPoolClient.UserPoolClient.LogoutURLs || [];
@@ -67,10 +80,13 @@ fs.readFile('cdk-outputs.json', 'utf8', async (err, data) => {
       AllowedOAuthFlowsUserPoolClient: true
     };
 
-    const userPoolClientResponse = await cognito.updateUserPoolClient(updateUserPoolClientParams).promise();
+    const command = new UpdateUserPoolClientCommand(updateUserPoolClientParams);
+    const userPoolClientResponse =  await cognitoClient.send(command);
 
     console.log('User pool client updated successfully', userPoolClientResponse);
   } catch (error) {
     console.error('Error updating user pool client:', error);
   }
 });
+
+
