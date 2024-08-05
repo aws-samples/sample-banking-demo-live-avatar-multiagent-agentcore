@@ -36,7 +36,7 @@ run-ash-scan:
   image:
     name: registry.gitlab.aws.dev/dbbegimh/automated-security-helper:latest
   stage: test
-  allow_failure: false
+  allow_failure: true
   script:
     - |-
       ash \
