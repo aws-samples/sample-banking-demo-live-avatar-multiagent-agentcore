@@ -3,11 +3,11 @@
 import * as crypto from 'crypto';
 
 export const uuid = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-        const r = crypto.randomBytes(1)[0] & 0x0f;
-        const v = c === 'x' ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      });
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = crypto.randomBytes(1)[0] & 0x0f;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 export const validateEmailAddress = (email: string): boolean => {
@@ -37,10 +37,10 @@ export const wait = (time: number): Promise<void> => {
 }
 
 export const customBackoff = (retryCount: number): number => {
-    const timeToWait = 2 ** (retryCount + 1) * 1000;
-    const jitterBytes = crypto.randomBytes(1);
-    const jitter = (jitterBytes[0] / 255) * (1000 - 100) + 100;
-    const waitWithJitter = timeToWait + Math.floor(jitter);
-    console.debug(`retry count: ${retryCount}, timeToWait: ${timeToWait}, jitter: ${jitter} waiting: ${waitWithJitter}ms`);
-    return waitWithJitter;
-  };
+  const timeToWait = 2 ** (retryCount + 1) * 1000;
+  const jitterBytes = crypto.randomBytes(1);
+  const jitter = (jitterBytes[0] / 255) * (1000 - 100) + 100;
+  const waitWithJitter = timeToWait + Math.floor(jitter);
+  console.debug(`retry count: ${retryCount}, timeToWait: ${timeToWait}, jitter: ${jitter} waiting: ${waitWithJitter}ms`);
+  return waitWithJitter;
+};
