@@ -22,7 +22,7 @@ export const listItems = async (limit = 10) => {
         data: { demos: [], nextToken: 'null'}
       }
       const restOperation = get({
-        apiName: 'dataAPI',
+        apiName: 'demoAPI',
         path: '/getData',
         options: {
           headers: {

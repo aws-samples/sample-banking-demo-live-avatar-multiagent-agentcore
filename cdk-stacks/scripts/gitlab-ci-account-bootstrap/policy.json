@@ -40,6 +40,34 @@
             "Resource": [
                 "*"
             ]
+        },
+        {
+            "Action": [
+                "codeartifact:ListDomains",
+                "codeartifact:ListRepositoriesInDomain",
+                "codeartifact:DescribeDomain",
+                "codeartifact:ListPackages",
+                "codeartifact:ListPackageVersions",
+                "codeartifact:DescribeRepository",
+                "codeartifact:DescribePackageVersion",
+                "codeartifact:GetPackageVersionReadme",
+                "codeartifact:ListPackageVersionDependencies",
+                "codeartifact:GetAuthorizationToken",
+                "codeartifact:GetRepositoryEndpoint",
+                "codeartifact:ReadFromRepository"
+            ],
+            "Effect": "Allow",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "sts:GetServiceBearerToken",
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "sts:AWSServiceName": "codeartifact.amazonaws.com"
+                }
+            }
         }
     ]
 }
