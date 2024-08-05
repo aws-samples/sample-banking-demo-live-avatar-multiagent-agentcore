@@ -16,12 +16,15 @@ export class CognitoStack extends NestedStack {
 
   constructor(scope: Construct, id: string, props: CognitoStackProps) {
     super(scope, id, props);
+    // TODO UPDATE configuration to figure out if environment is production
+    const isProduction = false;
+
     // TODO UPDATE THESE TO YOUR VALUES
     const cognitoDomain = `<TODO>-${this.account.substring(0,5)}-${this.region}`
     const federateClientId = `<TODO>`
     const federateClientSecretName = federateClientId
     // TODO MAKE SURE TO UPDATE THIS TO PROD FEDERATE WHEN MOVING OUT OF INITIAL DEV
-    const oidc_issuer = 'https://idp-integ.federate.amazon.com'
+    const oidc_issuer = isProduction ? 'https://idp.federate.amazon.com' : 'https://idp-integ.federate.amazon.com';
 
 
     // Create a User Pool
