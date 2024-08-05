@@ -6,8 +6,8 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 
-import { CognitoStack } from '../lib/infrastructure/cognito-stack';
-import { DemoAPIStack } from '../lib/api/demoAPI-stack';
+import { CognitoStack } from './infrastructure/cognito-stack';
+import { DemoAPIStack } from './api/demoAPI-stack';
 import { DemoDatabaseStack } from './api/demo-table-stack';
 
 export class CdkBackendStack extends cdk.Stack {
@@ -119,6 +119,10 @@ export class CdkBackendStack extends cdk.Stack {
     new cdk.CfnOutput(this, "demoAPIEndpoint", {
       key: 'demoAPIEndpoint',
       value: demoAPIStack.demoAPI.apiEndpoint
+    });
+    new cdk.CfnOutput(this, "backendRegion", {
+      key: 'backendRegion',
+      value: this.region
     });
   }
 }

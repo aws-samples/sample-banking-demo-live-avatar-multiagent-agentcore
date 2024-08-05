@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { applyMode, Mode } from '@cloudscape-design/global-styles'
 
-const useLocalStorage = (key, initialValue) => {
+const useLocalStorage = (key:string, initialValue:boolean) => {
   const [localStorageValue, setLocalStorageValue] = useState(() => {
     try {
       const item = window.localStorage.getItem(key)
@@ -31,7 +31,7 @@ export const useApplySiteSettings = () => {
   }, [darkMode])
 
   const toggleDarkMode = () => {
-    setDarkMode((prevMode) => !prevMode)
+    setDarkMode((prevMode:any) => !prevMode)
   }
 
   return [darkMode, toggleDarkMode]

@@ -1,6 +1,6 @@
 import React from 'react'
 import Alert from '@cloudscape-design/components/alert'
-import {Link} from 'react-router-dom'
+import {Link} from '@cloudscape-design/components';
 
 function RenderError() {
   return (

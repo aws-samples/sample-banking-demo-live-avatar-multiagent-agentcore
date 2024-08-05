@@ -3,7 +3,7 @@ import {ContentLayout, Header} from '@cloudscape-design/components'
 import image from '../images/gen-ai-demo-in-progress.png'
 
 export const LandingPage = () => {
- 
+
   return (
     <ContentLayout
       header={
@@ -14,7 +14,7 @@ export const LandingPage = () => {
                     Gen AI Labs Demo Name
         </Header>
       }
-      variant="awsui-experimental"
+      //variant="awsui-experimental"
     >
       <div>
         <img src={image} alt='genaidemo' width='50%' height='50%'></img>

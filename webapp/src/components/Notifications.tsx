@@ -4,11 +4,11 @@
 import React, { useEffect, useState }  from 'react'
 import Flashbar from '@cloudscape-design/components/flashbar'
 
-import { useAppState } from '../providers/AppStateProvider'
+import {NotificationItem, useAppState} from '../providers/AppStateProvider'
 
 const Notifications = () => {
   const { notificationItem } = useAppState()
-  const [items, setItems] = useState([])
+  const [items, setItems] = useState([] as NotificationItem[])
 
   useEffect(() => {
     if (notificationItem.type) { // Flashbar will allow the render of an empty object
@@ -25,6 +25,7 @@ const Notifications = () => {
   }, [notificationItem])
 
   return (
+    //@ts-ignore
     <Flashbar stackItems items={items} />
   )
 }

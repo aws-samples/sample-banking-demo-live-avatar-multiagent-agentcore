@@ -1,17 +1,42 @@
 {
-    "env": {
-        "browser": true,
-        "es2021": true
+    "env":{
+        "webextensions": true,
+        "es6": true
     },
-    "extends": "eslint:recommended",
     "parserOptions": {
-        "ecmaVersion": 12,
-        "sourceType": "module",
-        "requireConfigFile": false
+        "ecmaVersion": 2020,
+        "ecmaFeatures": {
+            "jsx": true
+        },
+        "sourceType": "module"
     },
-    "parser": "@babel/eslint-parser",
-    "plugins": [
-        "@babel/plugin-proposal-class-properties"
+    "extends": [
+        "eslint:recommended"
     ],
-    "rules": {}
+    "overrides": [
+        {
+            "files": ["public/**"],
+            "env": {
+                "browser": true
+            }
+        },
+        {
+            "files": ["**/*.ts", "**/*.tsx"],
+            "plugins": [
+                "@typescript-eslint"
+            ],
+            "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
+            "parser": "@typescript-eslint/parser",
+            "parserOptions": {
+                "project": ["./tsconfig.json"]
+            },
+            "rules": {
+                "@typescript-eslint/ban-ts-comment": 0,
+                "@typescript-eslint/no-var-requires": 1,
+                "@typescript-eslint/no-unused-vars": 1,
+                "no-unused-vars": 1,
+                "@typescript-eslint/no-explicit-any": 1
+            }
+        }
+    ]
 }

@@ -12,7 +12,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 
-import { FrontendS3DeploymentStack } from "../lib/frontend/frontend-s3-deployment-stack";
+import { FrontendS3DeploymentStack } from "./frontend/frontend-s3-deployment-stack";
 import { Effect, PolicyStatement, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 
 export interface CdkFrontendStackProps extends StackProps {
@@ -55,7 +55,7 @@ export class CdkFrontendStack extends Stack {
             'userPoolAppId': props.cognitoAppClientId,
             'userPoolDomain': `${props.cognitoDomainName}.auth.us-east-1.amazoncognito.com`
          });
-  
+
         // Create an SSM string parameter
         new ssm.StringParameter(this, 'CognitoConfig', {
             parameterName: '/genAiLabsDemo/cognitoConfig',
@@ -64,7 +64,7 @@ export class CdkFrontendStack extends Stack {
 
         // Using this method since the midway-auth library may not be available in a pipeline
         const midwayAuthLambda = new cloudfront.experimental.EdgeFunction(this, 'MidwayAuthLambdaFn', {
-            code: lambda.Code.fromAsset('build_lambda_midway_auth'),
+            code: lambda.Code.fromAsset('build/build_lambda_midway_auth'),
             handler: 'midway-auth.handler',
             description: 'Midway lambda@edge function',
             runtime: lambda.Runtime.NODEJS_18_X,
@@ -109,7 +109,7 @@ export class CdkFrontendStack extends Stack {
                 edgeLambdas: [{
                     functionVersion: midwayAuthLambdaAlias.version,
                     eventType: cloudfront.LambdaEdgeEventType.VIEWER_REQUEST
-                  }],   
+                  }],
             },
             enableLogging: true,
             logBucket: props.accessLogsBucket,
@@ -134,7 +134,7 @@ export class CdkFrontendStack extends Stack {
             )
         )
 
-        // Add Origin Access Control to CloudFront Distribution 
+        // Add Origin Access Control to CloudFront Distribution
         const cfnDistribution = webAppCloudFrontDistribution.node.defaultChild as cloudfront.CfnDistribution;
         cfnDistribution.addPropertyOverride('DistributionConfig.Origins.0.S3OriginConfig.OriginAccessIdentity', '')
         cfnDistribution.addPropertyOverride(
@@ -149,7 +149,7 @@ export class CdkFrontendStack extends Stack {
                 reason: "Using CloudFront Provided Cert which defaults this to TLS1.  Hoping to avoid customer needing to provision cert just to deploy solution."
             }
         ]);
-  
+
 
         /**************************************************************************************************************
          * CDK Outputs *

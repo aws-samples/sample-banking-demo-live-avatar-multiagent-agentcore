@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react'
 import {
   createBrowserRouter,
   RouterProvider,
-  Outlet,
-  useNavigate
+  Outlet, useNavigate,
 } from 'react-router-dom'
 import '@cloudscape-design/global-styles/index.css'
 import {
@@ -16,12 +15,16 @@ import Notifications from './components/Notifications'
 import { LandingPage } from './components/LandingPage'
 import logo from './images/AWS_logo_RGB_WHT.png'
 import { useAppState } from './providers/AppStateProvider'
-import { getAuthentication, signOut } from './auth'
-import { Amplify } from '@aws-amplify/core'
 import '@aws-amplify/ui-react/styles.css'
 import LoginPrompt from './components/auth/LoginPrompt'
+import {fetchUserAttributes, signInWithRedirect} from "aws-amplify/auth";
+import {useAuthenticator} from "@aws-amplify/ui-react";
+import { ConsoleLogger } from 'aws-amplify/utils';
 
-const logger = new Amplify.Logger('GenAILabsDemo')
+
+const logger = new ConsoleLogger('GenAILabsDemo');
+
+
 const router = createBrowserRouter([
   {
     path: '/',
@@ -36,29 +39,41 @@ const router = createBrowserRouter([
   }
 ])
 
+
 function App() {
+  const { authStatus, user } = useAuthenticator((context) => [context.user])
+  const { setUserDetails } = useAppState()
 
-  const { pushNotification } = useAppState()
-
-  const { user, setUser } = useAppState()
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-
-  // configure user effect at login
   useEffect(() => {
-    const fetchAuthInfo = async () => {
+
+    const updateUserDetails = async () => {
+      const userAttr = await fetchUserAttributes()
+      //console.debug("user attributes", userAttr);
+      setUserDetails(userAttr)
+    }
+
+    const authenticateUser = async () => {
       try {
-        const authenticationInfo = await getAuthentication()
-        setUser(authenticationInfo)
-        setIsAuthenticated(true)
+        console.log('Current authentication status', authStatus)
+
+        if (authStatus === 'unauthenticated') {
+          console.log('Signing in....')
+          await signInWithRedirect({provider: {custom: 'AmazonFederate'}})
+          await updateUserDetails()
+        }
+        else if (authStatus === 'authenticated') {
+          //console.debug('Authenticated user:', user)
+          await updateUserDetails()
+        }
+
       } catch (error) {
-        console.error('Error fetching authentication info:', error)
-        pushNotification('There was an error retrieving authentication info', '', 'error', true)
-        setIsAuthenticated(false)
+        console.error('Authentication error:', error)
       }
     }
-    fetchAuthInfo()
-  }, [])
-  if (isAuthenticated) {
+    authenticateUser()
+  }, [authStatus])
+
+  if (authStatus === 'authenticated') {
     // User is authenticated, tokens are valid.
     logger.info('User is ', user)
     return <RouterProvider router={router} />
@@ -66,10 +81,12 @@ function App() {
   else {
     return <LoginPrompt />
   }
+
 }
+
 function AppContainerLayout() {
   const {
-    user,
+    userDetails,
     isNavigationOpen,
     setIsNavigationOpen,
     activeHref, darkMode,
@@ -88,7 +105,7 @@ function AppContainerLayout() {
 
   const navigate = useNavigate()
 
-  function followLink(e) {
+  function followLink(e: { preventDefault: () => void; detail: { href: any } }) {
     e.preventDefault()
     const { href } = e.detail
     if (href.startsWith('http') || href.startsWith('mailto:')) {
@@ -118,16 +135,17 @@ function AppContainerLayout() {
           },
           {
             type: 'menu-dropdown',
-            text: user?.name,
-            description: user?.email,
+            text: userDetails?.name,
+            description: userDetails?.email,
             iconName: 'user-profile',
-            onItemClick: (event) => event.detail.id === 'signout' && signOut(),
+            //onItemClick: (event) => event.detail.id === 'signout' && signOut(),
             items: [
-              { id: 'signout', text: 'Sign out' }]
+            //  { id: 'signout', text: 'Sign out' }
+            ]
           }]}
       />
       <AppLayout
-        toolsHideOnScroll={false}
+        //toolsHideOnScroll={false}
         navigationOpen={isNavigationOpen}
         onNavigationChange={(event) => setIsNavigationOpen(event.detail.open)}
         navigation={
