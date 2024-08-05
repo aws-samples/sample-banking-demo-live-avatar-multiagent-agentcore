@@ -19,7 +19,7 @@ export class CognitoStack extends NestedStack {
     // TODO UPDATE THESE TO YOUR VALUES
     const cognitoDomain = `<TODO>-${this.account.substring(0,5)}-${this.region}`
     const federateClientId = `<TODO>`
-    const federateClientSecret = federateClientId
+    const federateClientSecretName = federateClientId
     // TODO MAKE SURE TO UPDATE THIS TO PROD FEDERATE WHEN MOVING OUT OF INITIAL DEV
     const oidc_issuer = 'https://idp-integ.federate.amazon.com'
 
@@ -57,7 +57,7 @@ export class CognitoStack extends NestedStack {
     });
 
     // Add the OIDC identity provider
-    const clientSecret = secretsmanager.Secret.fromSecretNameV2(this, "ImportedSecret", `${federateClientSecret}`);
+    const clientSecret = secretsmanager.Secret.fromSecretNameV2(this, "ImportedSecret", `${federateClientSecretName}`);
 
     const oidcProvider = new cognito.CfnUserPoolIdentityProvider(this, 'UserPoolIdentityProvider', {
         userPoolId: userPool.userPoolId,
