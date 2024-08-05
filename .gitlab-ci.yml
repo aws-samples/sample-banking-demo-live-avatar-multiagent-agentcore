@@ -7,12 +7,6 @@
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 image: node:latest
 
-cache:
-  paths:
-    - cdk-stacks/node_modules/
-    - cdk-stacks/lambdas/node_modules/
-    - webapp/node_modules/
-
 stages:
   - lint
   - test
@@ -42,7 +36,7 @@ run-ash-scan:
   image:
     name: registry.gitlab.aws.dev/dbbegimh/automated-security-helper:latest
   stage: test
-  allow_failure: true
+  allow_failure: false
   script:
     - |-
       ash \
@@ -51,12 +45,95 @@ run-ash-scan:
   artifacts:
     paths:
       - ash_output
-    when: on_success
+    when: always
   rules:
     - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_IID
       when: on_success
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'develop'
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'main'
+      when: on_success
+
+fortify-sast:
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_IID
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'develop'
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'main'
+      when: on_success
+
+checkov-sast:
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_IID
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'develop'
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'main'
+      when: on_success
+
+gl-semgrep-sast:
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_IID
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'develop'
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'main'
+      when: on_success
+
+gl-nodejs-scan-sast:
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_IID
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'develop'
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'main'
+      when: on_success
+
+gl-secret-detection:
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_IID
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'develop'
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'main'
+      when: on_success
+
+semgrep-sast-scan:
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_IID
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'develop'
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'main'
+      when: on_success
+
+grype-sca:
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_IID
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
     - if: $CI_COMMIT_BRANCH == 'develop'
       when: on_success
     - if: $CI_COMMIT_BRANCH == 'main'
@@ -91,13 +168,34 @@ lint:
 variables:
   GITLAB_CICD_ROLE_NAME: gitlab-runner-role
   REGION: us-east-1
-  DEVELOP_ACCOUNT_ID: "381492099169" # Add Dev Account ID
-  PRODUCTION_ACCOUNT_ID: "381492099169" # Add Prod Account ID
+  DEVELOP_ACCOUNT_ID: "123456789012" # Add Dev Account ID
+  PRODUCTION_ACCOUNT_ID: "123456789013" # Add Prod Account ID
+  AMAZON_SHARED_CODE_ARTIFACT_DOMAIN: "amazon"
+  AMAZON_SHARED_CODE_ARTIFACT_NAMESPACE: "amzn"
+  AMAZON_SHARED_CODE_ARTIFACT_OWNER: 149122183214
+  AMAZON_SHARED_CODE_ARTIFACT_REGION: "us-west-2"
+  AMAZON_SHARED_CODE_ARTIFACT_REPOSITORY: "shared"
 
 # Common deploy stage
 .deploy_stage:
   stage: deploy
   before_script:
+    # Install Amazon CodeArtifact
+    - npm install -g npm@8 
+    - apk add --no-cache python3 py3-pip
+    - python3 -m venv /venv
+    - PATH="/venv/bin:$PATH"
+    - pip install awscli
+    - echo $AWS_CREDS_TARGET_ROLE
+    - >-
+      aws codeartifact login
+      --tool npm
+      --domain $AMAZON_SHARED_CODE_ARTIFACT_DOMAIN
+      --domain-owner $AMAZON_SHARED_CODE_ARTIFACT_OWNER
+      --namespace $AMAZON_SHARED_CODE_ARTIFACT_NAMESPACE
+      --region $AMAZON_SHARED_CODE_ARTIFACT_REGION
+      --repository $AMAZON_SHARED_CODE_ARTIFACT_REPOSITORY
+      
     # Install dependencies
     - apk add --no-cache jq
     - apk add bash
