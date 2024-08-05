@@ -3,6 +3,7 @@ test/*.js
 bin/*.js
 lib/*.js
 lib/*/*.js
+lambdas/**/*.js
 *.d.ts
 node_modules
 .env
@@ -13,3 +14,4 @@ build_lambda_midway_auth
 cdk.out
 cdk-outputs.json
 cdk-backend-outputs.json
+scripts/gitlab-ci-account-bootstrap/bootstrap-template.json
