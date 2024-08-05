@@ -42,7 +42,7 @@ const authConfig: AuthConfig= {
 
 const apiConfig: APIConfig = {
   "REST": {
-    "dataAPI": {
+    "demoAPI": {
       "endpoint": `${webAppConfig.backendAPIEndpoint}`,
       "region": `${webAppConfig.backendRegion}`,
     }
@@ -59,7 +59,7 @@ const config: ResourcesConfig = {
 
 Amplify.configure(config);
 
-const DEMO_NAME = 'Insurance'
+const DEMO_NAME = 'SampleDemo'
 
 const container = document.getElementById('root')
 const root = createRoot(container!)
