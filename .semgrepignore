@@ -9,6 +9,7 @@ dist/
 .yarn/
 cdk-stacks/**.js
 cdk-stacks/lambdas/repository/DemoRepository.ts
+cdk-stacks/**.mjs
 
 # Common test paths
 test/
