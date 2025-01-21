@@ -255,3 +255,8 @@ export default tseslint.config({
   },
 })
 ```
+
+## Next Steps
+
+* 📚 [Kyber CLI Handbook](../../assets/kyber-cli-handbook.md)
+* 📚 [CDK Infra](../infra/README.md)

@@ -9,7 +9,7 @@ This documentation will walkthrough AWS CDK app setup, configurations and provid
 ![arch-app](../../assets/readme-images/arch-app.png)
 
 1. Demo webapp is rendered on a browser such as Chrome/Firefox
-2. The webapp in the `packages/webapp` is served via Amazon CloudFront CDN
+2. The webapp in the `packages/webapp` is served via Amazon CloudFront CDN backed by Amazon S3 bucket
 3. The entire app infra is protected using AWS Web Application Firewall that covers Amazon CloudFront, Amazon API Gateway, Amazon AppSync & Amazon Cognito
 4. AWS Certificate manager is used to provide HTTPS support for all Amazon CloudFront calls for superior encryption at transit
 5. Amazon Cognito is used to authorize & authenticate users and integrates with Amazon Federate with Midway OIDC authentication
@@ -133,6 +133,27 @@ The Amazon WAF stack is configured to offers -
 
 More limiting rules and configurations can be added as desired. The WAF is regional and is deployed to the desired target region and can be associated to any resource that can be WAFed such as Amazon AppSync, Amazon Cognito etc.
 
+If WAF is being too aggressive with some of the gating rules you may change the rule action to `COUNT` rather than to `BLOCK`.
+
+```json
+ruleActionOverrides: [
+   // to allow requests from POSTMAN/ CURL to APPSYNC
+   // this may allow true positives and not recommended 
+   {
+         actionToUse: {
+            count: {},
+         },
+         name: "CategoryHttpLibrary"
+   },
+   {
+         actionToUse: {
+            count: {},
+         },
+         name: "SignalNonBrowserUserAgent"
+   },
+],
+```
+
 ## Website WAF Stack
 
 > packages/infra/stacks/website-waf-stack.ts
@@ -198,8 +219,13 @@ The GraphQl schema is created under `packages/infra/graphql/schema.graphql` in t
 
 We also configure a resolver Lambda (Python) with a layer that can be triggered from the front end using a simple GraphQL mutation query.
 
-The GraphQl is endpoint secured via Cognito and WAF so that any logged in user (Midway/ Cognito user) can hit the GraphQL endpoint and perform queries, mutations & subscriptions.
+The GraphQl endpoint is secured via Cognito and WAF so that any logged in user (Midway/ Cognito user) can hit the GraphQL endpoint and perform queries, mutations & subscriptions.
 
 Optionally, you can enable an API Key based access as well to allow other systems (Such as Gen-AI Agents) to access the AppSync GraphQL queries.
 
 We also log all AppSync access to Amazon CloudWatch.
+
+## Next Steps
+
+* 📚 [Kyber CLI Handbook](../../assets/kyber-cli-handbook.md)
+* 📚 [Webapp](../webapp/README.md)

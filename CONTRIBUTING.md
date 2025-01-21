@@ -8,7 +8,7 @@ This guide will walk you through on setting up the starter kit repo itself so th
 
 ## Overview
 
-The starter kit container repo itself is a mono repo that includes  projects under `utils`. As of now we have only one `utility` project with is the `packager-utility`. This utility packages the actual starter kit to a zip file whe you commit your changes to the starter kit.
+The starter kit container repo itself is a mono repo that includes  projects under `utils`. As of now we have only one `utility` project with is the `packager-utility`. This utility packages the actual starter kit to a zip file when you commit your changes to the starter kit.
 
 The actual starter kit is provided as a standalone mono repo setup which gets packaged as a zip file that is downloaded by the user while they setup their demo environment.
 
