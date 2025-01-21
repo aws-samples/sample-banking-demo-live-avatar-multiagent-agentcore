@@ -1,5 +1,15 @@
 #### 2.0.0-alpha (2025-01-21)
 
+##### New Features
+
+* **initial commit:**  initial commit (e19ce80b)
+
+##### Refactors
+
+* **app:**  :wastebasket: clean repo (eb80a786)
+
+#### 2.0.0-alpha (2025-01-21)
+
 ##### Refactors
 
 * **app:**  :wastebasket: clean repo (eb80a786)

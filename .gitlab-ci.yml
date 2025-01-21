@@ -21,7 +21,7 @@ zip-deploy:
     AWS_DEFAULT_REGION: $AWS_REGION
      
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "v2.0.0-alpha"
   before_script:    
     - apk add --no-cache jq aws-cli zip     
             
