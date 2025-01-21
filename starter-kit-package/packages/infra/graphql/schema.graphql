@@ -1,0 +1,31 @@
+type ToDo @model @auth(rules: [{ allow: private }]) {
+	id: ID!
+	ownerID: ID! @index(name: "byOwnerID", queryField: "todoByOwnerID")
+	title: String
+	completed: Boolean
+}
+
+# this model captures a chat message by a human
+type Chat @model @auth(rules: [{ allow: private }]) {
+	id: ID!
+	userID: ID! @index(name: "byUser")
+	human: String!
+	bot: String
+	data: String # for now this will be a JSON string
+}
+
+# filter subscription updates based on user ID
+# https://docs.amplify.aws/gen1/react/build-a-backend/graphqlapi/subscribe-data/#create-a-custom-graphql-subscription-by-id
+type Subscription {
+	onTaskByOwnerID(ownerID: ID!): ToDo
+		@aws_subscribe(mutations: ["createToDo", "updateToDo"])
+	onChatByUserId(userID: ID!): Chat
+		@aws_subscribe(mutations: ["createChat", "updateChat"])
+}
+
+# lambda resolver mutation
+type Mutation {
+	resolverLambda(args: String): String
+		@function(name: "resolverLambda")
+		@auth(rules: [{ allow: private }])
+}

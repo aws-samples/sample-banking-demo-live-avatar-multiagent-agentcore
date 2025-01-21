@@ -1,0 +1,43 @@
+{
+  "name": "webapp",
+  "private": true,
+  "version": "2.0.0-alpha",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "codegen": "npx @aws-amplify/cli codegen"
+  },
+  "dependencies": {
+    "@aws-amplify/ui-react": "*",
+    "@cloudscape-design/components": "*",
+    "@cloudscape-design/global-styles": "*",
+    "@tanstack/react-query": "*",
+    "aws-amplify": "*",
+    "jotai": "*",
+    "motion": "^11.18.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-icons": "*",
+    "react-router-dom": "*",
+    "react-slick": "^0.30.3",
+    "react-toastify": "*",
+    "slick-carousel": "^1.8.1",
+    "yup": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@types/react-slick": "^0.23.13",
+    "@typescript-eslint/eslint-plugin": "^8.20.0",
+    "@typescript-eslint/parser": "^8.20.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "*",
+    "eslint-plugin-react-hooks": "*",
+    "eslint-plugin-react-refresh": "*",
+    "typescript": "^5.7.3",
+    "vite": "*"
+  }
+}

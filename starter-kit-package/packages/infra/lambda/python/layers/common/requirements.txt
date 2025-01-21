@@ -1,0 +1,10 @@
+boto3 
+langchain
+langchain_community
+pypdfium2
+urllib3<2.0.0,>=1.26.0 # solving this issue by fixing urllib poetry 1.5.1 requires urllib3<2.0.0,>=1.26.0, but you have urllib3 2.2.2 which is incompatible. 
+requests
+opensearch-py
+retry
+aws-lambda-powertools
+requests-aws4auth

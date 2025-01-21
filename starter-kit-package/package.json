@@ -1,0 +1,43 @@
+{
+  "name": "PROJECT-IDENTIFIER",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Your project description here.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "private": true,
+  "scripts": {
+    "test": "with 💖 from Gen-AI Labs",
+    "validate": "npm run synth -w infra && npm run build -w webapp",
+    "commit": "npm run validate && npx generate-changelog && git add -A && npx cz",
+    "prepare": "husky",
+    "configure": "FORCE_COLOR=1 npm run -w infra configure",
+    "cli": "FORCE_COLOR=1 npm run -w infra cli",
+    "install-packages": "npm config set registry=https://registry.npmjs.com/ && npm install && cd ./packages/infra && npm install && cd ../webapp && npm install",
+    "clean-node-modules": "FORCE_COLOR=1 npm run -w infra clean-node-modules"
+  },
+  "keywords": [
+    "monorepo",
+    "demo starter kit v2"
+  ],
+  "author": "Tamil Jayakumar",
+  "license": "Amazon Software License 1.0",
+  "volta": {
+    "node": "22.8.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
+    "@commitlint/prompt-cli": "^19.7.0",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "generate-changelog": "^1.8.0",
+    "husky": "^9.1.7"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  }
+}

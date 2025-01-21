@@ -1,0 +1,9 @@
+{
+    "conventionalCommits.scopes": [
+        "raptor-cli",
+        "docs"
+    ],
+    "python.analysis.extraPaths": [
+        "./starter-kit-package/packages/infra/cdk.out/asset.4778a5f21eeb46246b5f64f5d5ef5b8ebc3d7b5a8f28c014891d8436ae65e502/python"
+    ]
+}

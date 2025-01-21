@@ -1,0 +1,6 @@
+# !/bin/bash
+
+git fetch origin
+git pull origin main --ff-only
+git status  
+

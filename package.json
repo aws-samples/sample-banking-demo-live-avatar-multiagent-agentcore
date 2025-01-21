@@ -1,0 +1,37 @@
+{
+  "name": "demo-starter-kit",
+  "version": "2.0.0-alpha",
+  "type": "module",
+  "private": true,
+  "description": "Main starter kit repo that encompasses the starter kit pack, the zip packager & other tooling.",
+  "main": "index.js",
+  "workspaces": [
+    "utils/*"
+  ],
+  "scripts": {
+    "test": "with 💖 from Gen-AI Labs",
+    "validate": "cd starter-kit-package && npm run synth -w infra && npm run build -w webapp",
+    "commit": "npm run validate && npx generate-changelog && npm run -w packager-utility package && git add -A && npx cz",
+    "prepare": "husky",
+    "package": "npm run -w utils package"
+  },
+  "keywords": [],
+  "author": "Tamil jayakumar - tamjay@",
+  "license": "Amazon Software License 1.0",
+  "volta": {
+    "node": "22.8.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
+    "@commitlint/prompt-cli": "^19.7.0",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "husky": "^9.1.7"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "packager-utility",
+  "version": "1.0.0",
+  "description": "NodeJS zipping utility to create a release zip packager on commit",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "package": "node index.cjs"
+  },
+  "keywords": [],
+  "author": "Tamil Jayakumar (@tamjay) ",
+  "license": "Amazon Software License 1.0",
+  "volta": {
+    "node": "22.8.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^22.10.5",
+    "adm-zip": "^0.5.16",
+    "archiver": "^7.0.1",
+    "fs": "^0.0.1-security",
+    "jszip": "^3.10.1",
+    "zip-a-folder": "^3.1.8"
+  }
+}
