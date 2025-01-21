@@ -1,5 +1,20 @@
 #### 2.0.0-alpha (2025-01-21)
 
+##### Documentation Changes
+
+* **readme:**  updsted some readme references (7421049e)
+
+##### New Features
+
+* **cicd:**  trigger cicid on alpha (f329c6d4)
+* **initial commit:**  initial commit (e19ce80b)
+
+##### Refactors
+
+* **app:**  :wastebasket: clean repo (eb80a786)
+
+#### 2.0.0-alpha (2025-01-21)
+
 ##### New Features
 
 * **cicd:**  trigger cicid on alpha (f329c6d4)
