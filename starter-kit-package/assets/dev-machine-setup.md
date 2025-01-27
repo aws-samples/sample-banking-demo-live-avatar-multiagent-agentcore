@@ -190,7 +190,7 @@ You may read more on setting global & local configs [here](https://realpython.co
 Verify if you have v1 by running
 
 ```sh
-which aws
+aws --version
 ```
 
 > ⚠️ - OS specific steps in the link below.
