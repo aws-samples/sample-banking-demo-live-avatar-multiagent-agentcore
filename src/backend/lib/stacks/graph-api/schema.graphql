@@ -1,0 +1,12 @@
+type Chat @model @auth(rules: [{ allow: private }]) {
+    userId: ID! @index(name: "byUserId", queryField: "chatByUserId")
+    email: AWSEmail!
+    human: String
+    assistant: String
+}
+
+type Mutation {
+    sendChat(human: String!): String
+        @function(name: "resolverLambda")
+        @auth(rules: [{ allow: private }])
+}
