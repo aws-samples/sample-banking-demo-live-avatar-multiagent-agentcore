@@ -232,7 +232,7 @@ The starter kit also includes two commit hooks, powered by [Husky](https://typic
 
 ## CDK Constructs
 
-Some aspects of the starter kit infrastructure are specific to internal Amazon authentication/security requirements. Remove the [pipeline](#pipeline-stack) stack as well as the [Cognito](#cognito-construct) and [CodeBuild](#codebuild-construct) constructs before sharing publicly.
+Some aspects of the starter kit infrastructure are specific to internal Amazon authentication/security requirements. Code in an "internal" folder **_should not_** be shared publicly.
 
 ### App
 
@@ -240,7 +240,7 @@ Some aspects of the starter kit infrastructure are specific to internal Amazon a
 
 The stack prefix and stage for the app are determined by a context variable passed by the [development CLI](#development). The account details are determined by the project configuration file itself.
 
-See [bin/demo.ts](../src/backend/bin/demo.ts) for more context.
+See [bin/demo.ts](../bin/demo.ts) for more context.
 
 ### Pipeline Stack
 

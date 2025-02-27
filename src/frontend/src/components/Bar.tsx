@@ -121,14 +121,14 @@ export default function Bar() {
                                     {
                                         id: "documentation",
                                         text: "Documentation",
-                                        href: "https://docs.aws.amazon.com/",
+                                        href: "https://w.amazon.com/bin/view/Internal-GenAI-Labs",
                                         external: true,
                                         externalIconAriaLabel: " (opens in new tab)",
                                     },
                                     {
                                         id: "feedback",
                                         text: "Feedback",
-                                        href: "https://aws.amazon.com/contact-us/",
+                                        href: "https://aws.amazon.com/contact-us/?cmpid=docs_headercta_contactus",
                                         external: true,
                                         externalIconAriaLabel: " (opens in new tab)",
                                     },
