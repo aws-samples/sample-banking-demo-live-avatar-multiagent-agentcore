@@ -1,36 +1,33 @@
-# Demo Starter Kit
+# GenAI Labs Demo Starter Kit
 
-This project has some starter code for a webapp and backend infrastructure. It is split into two main sections
+![cli-welcome](./docs/images/cli-welcome.png)
 
-1. `cdk-stacks` - all the CDK code to deploy the front and back end.
-2. `webapp`- a React web application
+This starter kit includes ready-to-deploy, compliant and secure CDK and React app components with Midway integration. It also includes customizable CLI tooling for easier demo configuration and management. While we offer this set of components and tools, you retain the freedom to customize any and all aspects of the starter kit to fit your use case (even if it has nothing to do with GenAI).
 
-To kick off using the project you will need to take the following initial steps:
+Let's get started...
 
-- Add in your project details into [z_governance/1-PROJECT-DETAILS.md](./z_governance/1-PROJECT-DETAILS.md) and keep these files updated as you go along.
+[TOC]
 
-- Set up a midway client in https://integ.ep.federate.a2z.com/
-- Store the Client Secret in the account you want to deploy into in AWS Secrets Manager as a plaintext string with the client id as the name.
-- Update the variables in [cdk-stacks/stacks/infrastructure/cognito-stack.ts](./cdk-stacks/stacks/infrastructure/cognito-stack.ts). The domain must be unique.
-```javascript
-    const cognitoDomain = `<TODO>-${this.account.substring(0,5)}-${this.region}`
-    const federateClientId = `<TODO>`
-    const federateClientSecret = federateClientId
-```
+## Developer Machine Setup
 
-- Once those are complete then navigate to the cdk-stacks folder and run the deploy scripts:
-```bash
-cd cdk-stacks
-npm run cdk:deploy
-```
+To ensure your Mac, Windows, or Cloud Desktop machine is properly set up for use with the starter kit, start [here](./docs/machine-setup.md).
 
-- Once complete ensure your cognito domain is in the Redirect URIs on your midway client (e.g. https://genai-labs-todo-demo-999999-us-east-1.auth.us-east-1.amazoncognito.com/oauth2/idpresponse)
-- Look for the Cloudfront URL in your outputs and open the link, you should be logged in immediately.
+## Demo Creation
 
-- To run locally ensure frontend-config.js was copied into your webapp folder as part of the deploy (or retrieve it from the webapp S3 bucket), and then run the start command.
-```bash
-cd webapp
-npm run start
-```
+If your demo has already been created and you are looking to set up the project, skip to the [next section](#demo-setup).
 
-- Add in your own screens and logic :D 
+If your developer machine has been properly set up and you are creating a brand new demo, start [here](./docs/demo-creation.md).
+
+- This is a one-time process when creating a brand new demo.
+
+## Demo Setup
+
+If your developer machine has been properly set up, your demo has already been created, and you are looking to set up the project, start [here](./docs/demo-setup.md).
+
+## Documentation
+
+See the [design documentation](./docs/design.md) to learn more about the Demo Starter Kit.
+
+## License
+
+[Apache License Version 2.0](/LICENSE)

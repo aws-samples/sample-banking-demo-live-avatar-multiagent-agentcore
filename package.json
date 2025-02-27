@@ -1,0 +1,71 @@
+{
+    "name": "PROJECT-IDENTIFIER",
+    "description": "project description",
+    "version": "2.0.0-beta",
+    "author": "GenAI Labs Team",
+    "license": "Apache License Version 2.0",
+    "private": true,
+    "workspaces": [
+        "src/*"
+    ],
+    "scripts": {
+        "setup": "pip install -r requirements-dev.txt && npm config set registry=https://registry.npmjs.com/ && npm install && cd ./src/backend && npm install && cd ../frontend && npm install",
+        "prepare": "husky",
+        "configure": "npx tsx tools/cli/configure.ts",
+        "format": "prettier --write . && ruff format .",
+        "lint": "eslint . && ruff check .",
+        "develop": "npx tsx tools/cli/develop.ts",
+        "stage": "git add -A",
+        "commit": "npx cz"
+    },
+    "lint-staged": {
+        "*.{js,jsx,ts,tsx}": [
+            "prettier --write",
+            "eslint --fix-dry-run"
+        ],
+        "*.{json,yaml,yml,md,html,css}": [
+            "prettier --write"
+        ],
+        "*.py": [
+            "ruff format",
+            "ruff check"
+        ]
+    },
+    "config": {
+        "commitizen": {
+            "path": "./node_modules/cz-conventional-changelog"
+        }
+    },
+    "engines": {
+        "node": "22.8.0"
+    },
+    "devDependencies": {
+        "@commitlint/cli": "^19.5.0",
+        "@commitlint/config-conventional": "^19.5.0",
+        "@commitlint/prompt-cli": "^19.5.0",
+        "@commitlint/types": "^19.5.0",
+        "@types/node": "22.7.9",
+        "@typescript-eslint/eslint-plugin": "^8.20.0",
+        "@typescript-eslint/parser": "^8.20.0",
+        "commitizen": "^4.3.1",
+        "cz-conventional-changelog": "^3.3.0",
+        "eslint": "^9.19.0",
+        "eslint-config-prettier": "^10.0.1",
+        "eslint-plugin-prettier": "^5.2.3",
+        "globals": "^15.14.0",
+        "husky": "^9.1.6",
+        "lint-staged": "^15.4.3",
+        "prettier": "^3.4.2",
+        "ts-node": "^10.9.2",
+        "tsx": "^4.19.3",
+        "typescript": "~5.6.3",
+        "typescript-eslint": "^8.23.0"
+    },
+    "dependencies": {
+        "chalk": "4.1.0",
+        "constructs": "^10.0.0",
+        "enquirer": "^2.4.1",
+        "yaml": "^2.7.0",
+        "zod": "^3.24.1"
+    }
+}

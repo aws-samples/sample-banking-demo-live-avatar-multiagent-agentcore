@@ -1,0 +1,26 @@
+{
+    "projectId": "PROJECT-IDENTIFIER",
+    "gitlabGroup": "genai-labs/demo-assets",
+    "gitlabProject": "GITLAB-PROJECT-NAME",
+    "codeArtifact": false,
+    "codePipeline": true,
+    "midway": true,
+    "accounts": {
+        "dev": {
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
+        },
+        "prod": {
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
+        },
+        "ALIAS_1": {
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
+        },
+        "ALIAS_2": {
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
+        }
+    }
+}
