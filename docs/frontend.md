@@ -37,7 +37,7 @@ The starter kit comes pre-built with very basic demos to demonstrate integration
 
 ### Chat
 
-The chat demo simplify posts a message using the [AWS Amplify POST request](https://docs.amplify.aws/react/build-a-backend/add-aws-services/rest-api/post-data/), which is processed by the [Lambda proxy](../src/backend/lib/stacks/rest-api/proxy-function/index.py) in the [REST API stack](../src/backend/lib/stacks/rest-api/index.ts) and returned in kind.
+The chat demo simplify posts a message using the [AWS Amplify POST request](https://docs.amplify.aws/react/build-a-backend/add-aws-services/rest-api/post-data/), which is processed by the [Lambda proxy](../src/backend/rest-api/proxy-function/index.py) in the [REST API stack](../src/backend/lib/stacks/rest-api/index.ts) and returned in kind.
 
 ### Gallery
 
