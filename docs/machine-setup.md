@@ -65,7 +65,7 @@ We highly recommend setting up a Python version manager so you can seamlessly sw
 
 ### Install
 
-12. After installing `pyenv` or `pyenv-win`, run the command `pyenv install 3.13.1` to install Python.
+12. After installing `pyenv` or `pyenv-win`, run the command `pyenv install 3.12.5` to install Python.
     - Make sure you install the same version of Python specified in [.python-version](../.python-version).
     - We have included this `.python-version` file so the starter kit uses the same version of Python across its users.
 13. If you have a global Python version configured via `pyenv`, then we recommend that you match the global version to the starter kit's version. Read more on setting global and local versions [here](https://realpython.com/intro-to-pyenv/#specifying-your-python-version).

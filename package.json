@@ -1,5 +1,6 @@
 {
     "name": "PROJECT-IDENTIFIER",
+    "description": "project description",
     "version": "2.0.0-beta",
     "author": "GenAI Labs Team",
     "license": "Apache License Version 2.0",

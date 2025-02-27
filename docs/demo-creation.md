@@ -16,7 +16,7 @@ You can use existing Isengard accounts provided you have access to an **Admin** 
 
 ## GitLab Repository
 
-### Fork It!
+### Fork It
 
 1. Navigate to the Demo Starter Kit [GitLab page](https://gitlab.aws.dev/genai-labs/templates/demo-starter-kit) then click **Fork**.
 
@@ -37,7 +37,7 @@ You can use existing Isengard accounts provided you have access to an **Admin** 
 
 7. Click **Fork project**.
 
-### Clone It!
+### Clone It
 
 8. From your demo's new GitLab page, click the **Code** dropdown and click the copy icon to copy the SSH URL.
 
@@ -57,7 +57,7 @@ The starter kit uses a file named `project-config.json` in the config folder to 
 12. Update **projectId** with a unique identifier less than 15 characters that best reflects your project name.
     - Use a shorthand name separated by a `-`. Do not use any other special characters such as `! , & * @ # < > ?`.
     - Ex: `email-generator`
-    * The CLI will throw an error if the project identifier is invalid.
+    - The CLI will throw an error if the project identifier is invalid.
 13. Update **gitlabGroup** if you created your GitLab project under a different group\*.
 14. Update **gitlabProject** with your GitLab project's name\*.
     - This should be the same name you provided for [step 2](#fork-it).
@@ -118,14 +118,17 @@ We have simplified Integration profile creation by creating a dummy profile for 
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
 33. Enter **Redirect URIs** using the following format `https://[PROJECT-IDENTIFIER]-[ACCOUNT_NUMBER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+
     - The project identifier, account numbers, and regions should reflect your [project configuration file](../config/project-config.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
     - Ex:
+
     ```
     https://email-generator-043309355269.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     https://email-generator-294075526655.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     https://email-generator-212075525600.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
     ```
+
 34. Turn the **Client Secret** switch on.
 
     ![federate-oidc-details](images/federate-oidc-details.png)
@@ -148,11 +151,14 @@ If you created a prod account in the [project configuration file](../config/proj
 44. Check the box titled **Unfabric guidelines** then click **Next**.
 45. Verify the **Client ID** is matches the one you previously provided.
 46. Update the **Redirect URI** for the prod account using the following format `https://[PROJECT-IDENTIFIER]-[PROD_ACCOUNT_NUMBER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+
     - The project identifier, account number, and region should reflect the prod account in your [project configuration file](../config/project-config.json).
     - Ex:
+
     ```
     https://email-generator-123409357812.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     ```
+
 47. Turn the **Client Secret** switch on then click **Next**.
 48. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
 49. On the **Service Profile Overview** page, click **Submit** then copy the generated Midway client secret key. **_Keep it safe_**.
@@ -198,7 +204,7 @@ Lets make some changes in the package before we commit our code.
 
 Now we are all set to make our first code check in! The starter kit comes pre-built with a commit CLI to improve the quality of Git commits.
 
-57. From the root directory, run the command `npm run commit`.
+57. From the root directory, run the command `git add -A && npm run commit`.
 58. For **Select the type of change that you're committing**, select **chore**.
 59. For **What is the scope of this change**, enter `app`.
 60. For **Write a short, imperative tense description of the change**, enter `initial code commit`.
@@ -207,7 +213,7 @@ Now we are all set to make our first code check in! The starter kit comes pre-bu
 
 63. If the commit hooks powered by Husky fail, you will need to repeat steps 2-7.
     - See the [design documentation](./design.md#commit) to learn more about the commit hooks.
-64. If the commit hooks succeed, you can push the committed files to your repository with the command `git push`.
+64. If the commit hooks succeed, you can push the committed files to your repository with the command `git push origin main`.
     - Pushing to main will trigger a pipeline execution.
 
 From now on, **_do not_** work and push changes on the `main` branch. Always work on a feature branch then submit a merge request via GitLab to merge changes to `main`.

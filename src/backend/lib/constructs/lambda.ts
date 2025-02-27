@@ -28,7 +28,7 @@ export class LabsNodejsFunction extends NodejsFunction {
     }
 }
 
-const pythonRuntime = Runtime.PYTHON_3_13;
+const pythonRuntime = Runtime.PYTHON_3_12;
 
 export class LabsPythonFunction extends PythonFunction {
     constructor(
