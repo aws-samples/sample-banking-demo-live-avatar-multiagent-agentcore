@@ -56,14 +56,13 @@
         "husky": "^9.1.6",
         "lint-staged": "^15.4.3",
         "prettier": "^3.4.2",
-        "ts-node": "^10.9.2",
         "tsx": "^4.19.3",
         "typescript": "~5.6.3",
         "typescript-eslint": "^8.23.0"
     },
     "dependencies": {
+        "@aws-sdk/client-cloudformation": "^3.738.0",
         "chalk": "4.1.0",
-        "constructs": "^10.0.0",
         "enquirer": "^2.4.1",
         "yaml": "^2.7.0",
         "zod": "^3.24.1"
