@@ -26,18 +26,17 @@ const codeArtifactPolicies = [
     }),
 ];
 
-const codeArtifactCommands = projectConfig?.codeArtifact
+const codeArtifactCommand = projectConfig?.codeArtifact
     ? [
           "aws codeartifact login --tool npm --repository shared --domain amazon --domain-owner 149122183214 --region $AWS_REGION",
-          "npm run setup",
       ]
-    : ["npm run setup"];
+    : [];
 
 export class LabsCodeBuildStep extends CodeBuildStep {
     constructor(id: string, props: CodeBuildStepProps) {
         super(id, {
             ...props,
-            installCommands: codeArtifactCommands,
+            installCommands: [...codeArtifactCommand, "npm run setup"],
             rolePolicyStatements: [...(props.rolePolicyStatements || []), ...codeArtifactPolicies],
         });
     }
@@ -52,9 +51,9 @@ export class LabsReactProject extends Project {
                 phases: {
                     install: {
                         runtimeVersions: {
-                            nodejs: "20",
+                            nodejs: "22",
                         },
-                        commands: codeArtifactCommands,
+                        commands: [...codeArtifactCommand, "npm install"],
                     },
                     build: {
                         commands: ["npm run build"],

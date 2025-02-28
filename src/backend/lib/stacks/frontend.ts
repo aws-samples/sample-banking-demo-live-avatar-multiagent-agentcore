@@ -180,7 +180,7 @@ export class FrontendBuildStack extends LabsStack {
                 phases: {
                     install: {
                         runtimeVersions: {
-                            nodejs: "20",
+                            nodejs: "22",
                         },
                         commands: ["npm install"],
                     },

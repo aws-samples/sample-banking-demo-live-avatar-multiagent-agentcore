@@ -17,14 +17,8 @@ If you are creating a brand new demo, create new dev/prod accounts using the ins
 6. Under **Bindle For Account**, search for then select `AWS-GenAI-Labs-Demo` (this should refer to the bindle ID `amzn1.bindle.resource.hs5yvj2a2rcp3cph4zqq`)\*.
     > [Why can't I find the GenAI Labs Bindle?](./faq.md#why-cant-i-find-the-genai-labs-bindle)
 7. Click **Next**. Leave the **Account Classification** as **Non-Production** and **Account Type** as **Individual**.
-8. Under **Owning CTI**, select the following\*:
-
-    **Category**: `AWS`
-
-    **Type**: `Generative AI`
-
-    **Item**: `aws-genai-labs-demo`
-
+8. Under **Owning CTI**, select your personal CTI properties.
+    - You will need to [create a personal CTI](./bindle-creation.md#cti-and-resolver-group) if you do not have one already.
 9. Click **Next**. On the **Optional Details** page, leave all the boxes unchecked then click **Next** again.
 10. Verify the final **Review and Submit** page then click **Submit**.
 
@@ -87,6 +81,4 @@ You can use an existing personal account or follow steps 1-18 in [Dev Account Cr
 
 <!-- prettier-ignore -->
 6. Under **Bindle For Account**, search for then select your personal bindle.
-    - You will need to [create a personal bindle](./bindle-creation.md) if you do not have one already.
-<!-- prettier-ignore -->
-8. Under **Owning CTI**, select your personal CTI properties.
+    - You will need to [create a personal bindle](./bindle-creation.md#bindle) if you do not have one already.
