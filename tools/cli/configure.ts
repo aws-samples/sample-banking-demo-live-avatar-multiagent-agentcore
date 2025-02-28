@@ -1,4 +1,4 @@
-#!/usr/bin/env ts-node
+#!/usr/bin/env node
 
 import { blueBright, bold, greenBright, redBright } from "chalk";
 import { writeFileSync } from "fs";
