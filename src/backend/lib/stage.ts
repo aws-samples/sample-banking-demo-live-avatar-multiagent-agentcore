@@ -9,6 +9,7 @@ import { GraphApiStack } from "./stacks/graph-api";
 import { RestApiStack } from "./stacks/rest-api";
 import { StorageHydrateStack, StorageStack } from "./stacks/storage";
 import { VpcStack } from "./stacks/vpc";
+import { SimulationStack } from "./stacks/simulation/simulation";
 
 export class ApplicationStage extends Stage {
     constructor(scope: Construct, id: string, props: StageProps) {
@@ -54,6 +55,8 @@ export class ApplicationStage extends Stage {
         new StorageHydrateStack(this, "storageHydrate", {
             storageBucket: storageStack.storageBucket,
         });
+
+        new SimulationStack(this, "simulationStack", {});
 
         // this stack must be named frontendBuild
         new FrontendBuildStack(this, "frontendBuild", {
