@@ -5,7 +5,7 @@ import { getCurrentUser } from "aws-amplify/auth";
 import { useEffect, useState } from "react";
 import Favicon from "../assets/favicon.png";
 
-const APP_NAME = "Smart Machines - Maintenance Assistant";
+const APP_NAME = "Demo Starter Kit";
 
 interface AuthedUser {
     userName: string;

@@ -1,25 +1,26 @@
 {
-    "projectId": "smart-machines",
+    "projectId": "PROJECT-IDENTIFIER",
     "gitlabGroup": "genai-labs/demo-assets",
-    "gitlabProject": "smart-machines-genai-maintenance-assistant",
+    "gitlabProject": "GITLAB-PROJECT-NAME",
     "codeArtifact": false,
     "codePipeline": true,
     "midway": true,
     "accounts": {
         "dev": {
-            "number": "588738597909",
-            "region": "us-west-2",
-            "midwaySecretId": "Dvvd6R"
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
         },
         "prod": {
-            "number": "484907515334",
-            "region": "us-west-2",
-            "midwaySecretId": "V4d72R"
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
         },
-        "azer": {
-            "number": "430118849080",
-            "region": "us-west-2",
-            "midwaySecretId": "atRcWe"
+        "ALIAS_1": {
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
+        },
+        "ALIAS_2": {
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
         }
     }
 }
