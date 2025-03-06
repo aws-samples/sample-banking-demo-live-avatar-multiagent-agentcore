@@ -15,6 +15,11 @@
             "number": "484907515334",
             "region": "us-west-2",
             "midwaySecretId": "V4d72R"
+        },
+        "azer": {
+            "number": "430118849080",
+            "region": "us-west-2",
+            "midwaySecretId": "atRcWe"
         }
     }
 }
