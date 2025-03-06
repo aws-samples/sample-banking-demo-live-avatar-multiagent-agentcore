@@ -234,7 +234,7 @@ From now on, **_do not_** work and push changes on the `main` branch. Always wor
         2. Deploy: this stage will compress the code base into a zip format, get cross-account credentials via AWS Credential Vendor, then upload the zip file to Amazon S3, kicking of the CodePipeline.
 
 68. Once the **zip-deploy** stage succeeds, navigate to the dev account's [AWS Management Console](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/) to verify that the pipeline is in-progress.
-69. Once the pipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendBuild**.
+69. Once the pipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendDeploy**.
 70. Click the **Outputs** tab then the **callbackUrl** to visit your new frontend React app.
 
     ![react-login](images/react-login.png)

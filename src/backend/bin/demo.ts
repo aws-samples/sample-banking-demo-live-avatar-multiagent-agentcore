@@ -23,3 +23,4 @@ if (projectConfig.codePipeline && stage === PresetStageType.Dev) {
 } else {
     new ApplicationStage(app, stage, properties);
 }
+app.synth();

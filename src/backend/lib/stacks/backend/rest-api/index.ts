@@ -1,7 +1,6 @@
 import {
     Duration,
     RemovalPolicy,
-    StackProps,
     aws_apigateway as apigateway,
     aws_cognito as cognito,
     aws_ec2 as ec2,
@@ -11,10 +10,9 @@ import {
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import * as path from "path";
-import { LabsPythonFunction, LabsPythonLayerVersion } from "../../constructs/lambda";
-import { LabsStack } from "../../constructs/stack";
+import { LabsPythonFunction, LabsPythonLayerVersion } from "../../../common/constructs/lambda";
 
-interface RestApiStackProps extends StackProps {
+interface LabsRestApiProps {
     urls: string[];
     vpc?: ec2.Vpc;
     securityGroup?: ec2.SecurityGroup;
@@ -22,14 +20,14 @@ interface RestApiStackProps extends StackProps {
     regionalWebAclArn: string;
 }
 
-export class RestApiStack extends LabsStack {
+export class LabsRestApi extends Construct {
     public readonly restApi: apigateway.LambdaRestApi;
 
-    constructor(scope: Construct, id: string, props: RestApiStackProps) {
-        super(scope, id, props);
+    constructor(scope: Construct, id: string, props: LabsRestApiProps) {
+        super(scope, id);
 
         const powertoolsLayer = new LabsPythonLayerVersion(this, "powertoolsLayer", {
-            entry: path.join(__dirname, "..", "..", "common", "layers", "powertools"),
+            entry: path.join(__dirname, "..", "..", "..", "common", "layers", "powertools"),
         });
 
         const pythonProxyFunction = new LabsPythonFunction(this, "pythonProxyFunction", {

@@ -28,10 +28,10 @@ enum Operations {
     REFRESH_CREDS = "Refresh Credentials 🔑",
     SYNTHESIZE_CDK = "Synthesize CDK Stacks 🗂️",
     DEPLOY_CDK = "Deploy CDK Stack(s) 🚀",
+    HOTSWAP_CDK = "Hotswap CDK Stack(s) 🔥",
     DEPLOY_FRONTEND = "Deploy Frontend 🖥️",
     REFRESH_ENV = "Refresh Local Environment 📦",
     TEST_FRONTEND = "Test Frontend Locally 💻",
-    HYDRATE_STORAGE = "Hydrate Storage 🚰",
     DESTROY_CDK = "Destroy CDK Stack(s) 🗑️",
     EXIT = "Exit 👋",
 }
@@ -46,7 +46,7 @@ const synthesizeStacks = async (stage: string): Promise<void> => {
 
 const selectStacks = async (
     stage: string,
-    action: "deploy" | "destroy"
+    action: "deploy" | "hotswap" | "destroy"
 ): Promise<string | undefined> => {
     if (await promptConfirm(`Would you like to just ${action} all ${stage} stacks?`)) {
         return `${getStackPrefix(stage)}*`;
@@ -79,16 +79,22 @@ const selectStacks = async (
     return stacks.map((stack) => `"${stack}"`).join(" ");
 };
 
-const deployStacks = async (stage: string): Promise<void> => {
+const deployStacks = async (stage: string, action: "deploy" | "hotswap"): Promise<void> => {
     if (stage === "prod") {
         console.log(prodMessage);
         return;
     }
-    const stacks = await selectStacks(stage, "deploy");
+    const stacks = await selectStacks(stage, action);
     if (stacks) {
-        await executeCommand(
-            `npm run -w backend cdk deploy ${stacks} -- --concurrency 4 --profile ${getProfileName(stage)} -c stage=${stage}`
-        );
+        if (action === "deploy") {
+            await executeCommand(
+                `npm run -w backend cdk deploy ${stacks} -- --concurrency 4 --profile ${getProfileName(stage)} -c stage=${stage}`
+            );
+        } else if (action === "hotswap") {
+            await executeCommand(
+                `npm run -w backend cdk deploy ${stacks} -- --hotswap --profile ${getProfileName(stage)} -c stage=${stage}`
+            );
+        }
     }
 };
 
@@ -99,7 +105,7 @@ const deployFrontendStack = async (stage: string): Promise<void> => {
     }
     if (await createLocalBuild()) {
         await executeCommand(
-            `npm run -w backend cdk deploy -- -e ${getStackPrefix(stage)}-frontendBuild --profile ${getProfileName(
+            `npm run -w backend cdk deploy -- -e ${getStackPrefix(stage)}-frontendDeploy --profile ${getProfileName(
                 stage
             )} -c stage=${stage}`
         );
@@ -129,14 +135,14 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
             region,
         });
         const command = new DescribeStacksCommand({
-            StackName: `${stage}-${projectConfig.projectId}-frontendBuild`,
+            StackName: `${stage}-${projectConfig.projectId}-frontendDeploy`,
         });
         const response = await cfClient.send(command);
         stackOutputs = response.Stacks?.[0].Outputs ?? [];
     } catch (error) {
         console.error(
             redBright(
-                "\n🛑 Failed to get stack outputs. Make sure the frontendBuild stack is deployed."
+                "\n🛑 Failed to get stack outputs. Make sure the frontendDeploy stack is deployed."
             )
         );
         console.error("\n", error);
@@ -219,18 +225,6 @@ const createLocalServer = async (stage: string): Promise<void> => {
     await freePort(3000);
 };
 
-const hydrateStorageStack = async (stage: string): Promise<void> => {
-    if (stage === "prod") {
-        console.log(prodMessage);
-        return;
-    }
-    await executeCommand(
-        `npm run -w backend cdk deploy -- -e ${getStackPrefix(stage)}-storageHydrate --hotswap-fallback --profile ${getProfileName(
-            stage
-        )} -c stage=${stage}`
-    );
-};
-
 const destroyStacks = async (stage: string): Promise<void> => {
     if (stage === "prod") {
         if (!(await promptConfirm("Are you sure you want to destroy prod stacks?"))) {
@@ -267,7 +261,10 @@ const operations = async () => {
                 await synthesizeStacks(stage);
                 break;
             case Operations.DEPLOY_CDK:
-                await deployStacks(stage);
+                await deployStacks(stage, "deploy");
+                break;
+            case Operations.HOTSWAP_CDK:
+                await deployStacks(stage, "hotswap");
                 break;
             case Operations.DEPLOY_FRONTEND:
                 await deployFrontendStack(stage);
@@ -277,9 +274,6 @@ const operations = async () => {
                 break;
             case Operations.TEST_FRONTEND:
                 await createLocalServer(stage);
-                break;
-            case Operations.HYDRATE_STORAGE:
-                await hydrateStorageStack(stage);
                 break;
             case Operations.DESTROY_CDK:
                 await destroyStacks(stage);
@@ -297,8 +291,6 @@ const main = async () => {
     if (argOperation && argStage) {
         if (argOperation === "deploy-frontend") {
             await deployFrontendStack(argStage);
-        } else if (argOperation === "hydrate-storage") {
-            await hydrateStorageStack(argStage);
         }
     } else {
         banner();

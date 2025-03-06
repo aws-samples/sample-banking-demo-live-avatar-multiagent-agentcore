@@ -13,6 +13,6 @@
 - An Amazon S3 bucket is used to store other demo assets like images, videos, synthetic data, etc.
 - Another Amazon S3 bucket is used as a Knowledge Base source, with a Knowledge Base construct simplifying GenAI infrastructure management.
 - A VPC stack provides optional Lambda integration and network security with Gateway and Interface endpoints.
-- A frontend build stack and storage hydrate stack are used to handle the deployment of frontend and backend assets.
+- A frontend deploy stack is used to deploy the React frontend.
 
 See our [design documentation](./design.md) to learn more about starter kit-specific constructs.

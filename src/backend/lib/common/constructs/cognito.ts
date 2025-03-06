@@ -14,7 +14,7 @@ import {
 } from "aws-cdk-lib/aws-cognito";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
-import { PresetStageType, projectConfig } from "../../../../config";
+import { PresetStageType, projectConfig } from "../../../../../config";
 
 function getMidwaySecretId(scope: Construct): string | undefined {
     return projectConfig?.midway

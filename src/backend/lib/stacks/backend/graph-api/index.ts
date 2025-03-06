@@ -1,7 +1,6 @@
 import { AmplifyData, AmplifyDataDefinition } from "@aws-amplify/data-construct";
 import {
     Duration,
-    StackProps,
     aws_appsync as appsync,
     aws_cognito as cognito,
     aws_ec2 as ec2,
@@ -11,21 +10,20 @@ import {
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import * as path from "path";
-import { LabsNodejsFunction } from "../../constructs/lambda";
-import { LabsStack } from "../../constructs/stack";
+import { LabsNodejsFunction } from "../../../common/constructs/lambda";
 
-interface GraphApiStackProps extends StackProps {
+interface LabsGraphApiProps {
     vpc?: ec2.Vpc;
     securityGroup?: ec2.SecurityGroup;
     userPool: cognito.UserPool;
     regionalWebAclArn: string;
 }
 
-export class GraphApiStack extends LabsStack {
+export class LabsGraphApi extends Construct {
     public readonly graphApi: AmplifyData;
 
-    constructor(scope: Construct, id: string, props: GraphApiStackProps) {
-        super(scope, id, props);
+    constructor(scope: Construct, id: string, props: LabsGraphApiProps) {
+        super(scope, id);
 
         const typescriptResolverFunction = new LabsNodejsFunction(
             this,

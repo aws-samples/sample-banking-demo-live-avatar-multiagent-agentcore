@@ -1,76 +1,25 @@
 import { Aspects, Stage, StageProps } from "aws-cdk-lib";
-import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import { AwsSolutionsChecks, NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
-import { LogsRetentionAspect } from "./aspects/logs";
-import { AuthStack } from "./stacks/auth";
-import { FrontendBuildStack, FrontendStack } from "./stacks/frontend";
-import { GraphApiStack } from "./stacks/graph-api";
-import { RestApiStack } from "./stacks/rest-api";
-import { StorageHydrateStack, StorageStack } from "./stacks/storage";
-import { VpcStack } from "./stacks/vpc";
+import { BackendStack } from "./stacks/backend";
+import { FrontendDeployStack, FrontendStack } from "./stacks/frontend";
 
 export class ApplicationStage extends Stage {
     constructor(scope: Construct, id: string, props: StageProps) {
         super(scope, id, props);
 
-        const vpcStack = new VpcStack(this, "vpc", {});
+        const frontendStack = new FrontendStack(this, "frontend");
 
-        const frontendStack = new FrontendStack(this, "frontend", {});
-
-        const authStack = new AuthStack(this, "auth", {
+        const backendStack = new BackendStack(this, "backend", {
             urls: frontendStack.urls,
         });
 
-        const stackSuppressions = [
-            {
-                id: "AwsSolutions-IAM4",
-                reason: "Lambda functions require managed policies to interface with the vpc.",
-            },
-        ];
-
-        const graphApiStack = new GraphApiStack(this, "graphApi", {
-            userPool: authStack.userPool,
-            regionalWebAclArn: authStack.regionalWebAclArn,
-            vpc: vpcStack.vpc,
-            securityGroup: vpcStack.securityGroup,
-        });
-        NagSuppressions.addStackSuppressions(graphApiStack, stackSuppressions);
-
-        const restApiStack = new RestApiStack(this, "restApi", {
-            urls: frontendStack.urls,
-            userPool: authStack.userPool,
-            regionalWebAclArn: authStack.regionalWebAclArn,
-            vpc: vpcStack.vpc,
-            securityGroup: vpcStack.securityGroup,
-        });
-        NagSuppressions.addStackSuppressions(restApiStack, stackSuppressions);
-
-        const storageStack = new StorageStack(this, "storage", {
-            urls: frontendStack.urls,
-        });
-        storageStack.storageBucket.grantReadWrite(authStack.authenticatedRole);
-
-        new StorageHydrateStack(this, "storageHydrate", {
-            storageBucket: storageStack.storageBucket,
-        });
-
-        // this stack must be named frontendBuild
-        new FrontendBuildStack(this, "frontendBuild", {
+        // this stack must be named frontendDeploy
+        new FrontendDeployStack(this, "frontendDeploy", {
             websiteBucket: frontendStack.websiteBucket,
-            urls: frontendStack.urls,
-            userPoolId: authStack.userPool.userPoolId,
-            userPoolDomainUrl: authStack.userPool.userPoolDomainUrl,
-            userPoolClientId: authStack.userPoolClient.userPoolClientId,
-            identityPoolId: authStack.identityPool.attrId,
-            graphApiUrl: graphApiStack.graphApi.graphqlUrl,
-            graphApiId: graphApiStack.graphApi.apiId,
-            restApiUrl: restApiStack.restApi.url,
-            storageBucketName: storageStack.storageBucket.bucketName,
             distribution: frontendStack.distribution,
+            environmentVariables: backendStack.environmentVariables,
         });
-
-        Aspects.of(this).add(new LogsRetentionAspect(RetentionDays.THREE_MONTHS));
 
         NagSuppressions.addResourceSuppressions(
             this,

@@ -1,21 +1,14 @@
-import {
-    Duration,
-    StackProps,
-    aws_cognito as cognito,
-    aws_iam as iam,
-    aws_wafv2 as waf,
-} from "aws-cdk-lib";
+import { Duration, aws_cognito as cognito, aws_iam as iam, aws_wafv2 as waf } from "aws-cdk-lib";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
-import { LabsUserPool, LabsUserPoolClient } from "../constructs/cognito";
-import { LabsStack } from "../constructs/stack";
-import { createManagedRules } from "../utilities/waf";
+import { LabsUserPool, LabsUserPoolClient } from "../../common/constructs/cognito";
+import { createManagedRules } from "../../common/utilities/rules";
 
-interface AuthStackProps extends StackProps {
+interface LabsAuthProps {
     urls: string[];
 }
 
-export class AuthStack extends LabsStack {
+export class LabsAuth extends Construct {
     public readonly userPool: LabsUserPool;
     public readonly userPoolClient: LabsUserPoolClient;
     public readonly identityPool: cognito.CfnIdentityPool;
@@ -23,8 +16,8 @@ export class AuthStack extends LabsStack {
     public readonly unauthenticatedRole: iam.Role;
     public readonly regionalWebAclArn: string;
 
-    constructor(scope: Construct, id: string, props: AuthStackProps) {
-        super(scope, id, props);
+    constructor(scope: Construct, id: string, props: LabsAuthProps) {
+        super(scope, id);
 
         this.userPool = new LabsUserPool(this, "userPool", {
             selfSignUpEnabled: false,
