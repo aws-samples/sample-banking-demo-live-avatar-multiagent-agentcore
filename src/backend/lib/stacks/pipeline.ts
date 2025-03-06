@@ -5,14 +5,13 @@ import {
     aws_codepipeline_actions as codepipeline_actions,
     aws_iam as iam,
     pipelines,
-    aws_s3 as s3,
     StackProps,
 } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { PresetStageType, projectConfig } from "../../../../config";
-import { LabsCodeBuildStep } from "../constructs/codebuild";
-import { LabsBucket } from "../constructs/s3";
-import { LabsStack } from "../constructs/stack";
+import { LabsCodeBuildStep } from "../common/constructs/codebuild";
+import { LabsBucket } from "../common/constructs/s3";
+import { LabsStack } from "../common/constructs/stack";
 import { ApplicationStage } from "../stage";
 
 export class PipelineStack extends LabsStack {
@@ -21,9 +20,7 @@ export class PipelineStack extends LabsStack {
 
         const sourceBucket = new LabsBucket(this, "sourceBucket", {
             bucketName: `${projectConfig.projectId}-source-bucket-${this.account}-${this.region}`,
-            serverAccessLogsBucket: new LabsBucket(this, "loggingBucket", {
-                objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_PREFERRED,
-            }),
+            serverAccessLogsBucket: new LabsBucket(this, "loggingBucket", {}),
             versioned: true, // requirement for triggering pipeline
         });
 

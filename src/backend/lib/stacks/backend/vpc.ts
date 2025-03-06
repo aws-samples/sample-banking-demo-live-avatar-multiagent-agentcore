@@ -1,13 +1,12 @@
-import { StackProps, aws_ec2 as ec2 } from "aws-cdk-lib";
+import { aws_ec2 as ec2 } from "aws-cdk-lib";
 import { Construct } from "constructs";
-import { LabsStack } from "../constructs/stack";
 
-export class VpcStack extends LabsStack {
+export class LabsVpc extends Construct {
     public vpc: ec2.Vpc;
     public securityGroup: ec2.SecurityGroup;
 
-    constructor(scope: Construct, id: string, props: StackProps) {
-        super(scope, id, props);
+    constructor(scope: Construct, id: string) {
+        super(scope, id);
 
         const prefix = scope.node.tryGetContext("stackPrefix");
         this.vpc = new ec2.Vpc(this, "vpc", {

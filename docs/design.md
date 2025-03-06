@@ -46,7 +46,7 @@ The **projectId** property must be less than 15 characters long and not use any 
 
 - Creating a prefix for stack names and generated resource names, supporting multiple demo deployments in the same account.
 - Tagging all CDK resources in the project.
-    - See the [stack construct](../src/backend/lib/constructs/stack.ts) for more context.
+    - See the [stack construct](../src/backend/lib/common/constructs/stack.ts) for more context.
 - Linking Midway profiles to the Amazon Cognito domain URL.
     - See the [Cognito construct](#cognito-construct) for more context.
 
@@ -125,11 +125,6 @@ See [develop.ts](../tools/cli/develop.ts) for more context.
 - This operation will validate your CDK code and check for [CDK NAG](https://github.com/cdklabs/cdk-nag) errors/warnings.
 - The CLI will transparently output the stack building process, Docker invocations, etc. to keep you informed.
 
-#### Deploy Frontend
-
-- This operation deploys the [frontend build stack](../src/backend/lib/stacks/frontend.ts) by itself using the `-e` flag for quicker deployment.
-- It first builds the frontend to ensure there are no errors.
-
 #### Deploy CDK Stack(s)
 
 - If you elect to not just deploy all stacks, the operation will allow you to select exactly which stacks you would like to deploy to the target account.
@@ -145,6 +140,32 @@ See [develop.ts](../tools/cli/develop.ts) for more context.
 
 - Stack dependencies will also be deployed alongside the selected stacks to ensure functionality.
 - The operation uses the `--concurrency` flag to deploy stacks in parallel for faster deployment.
+
+#### Hotswap CDK Stack(s)
+
+- This operation is similar to the [previous operation](#deploy-cdk-stacks), but it performs a faster, hotswap deployment if possible. See the [documentation](https://docs.aws.amazon.com/cdk/v2/guide/ref-cli-cmd-deploy.html#ref-cli-cmd-deploy-options) for more details.
+
+Many demos use synethetic data, such as as flat files (text/JSON/XML), images, and videos that need to be used in your application.
+
+![react-photos](./images/react-photos.png)
+
+- This operation can be used to speed up asset changes of Amazon S3 bucket deployments like that in the [storage construct](../src/backend/lib/stacks/backend/storage/index.ts).
+    - When you push data to the S3 bucket, folders in `src/backend/lib/stacks/backend/storage/assets` become prefixes that can be referenced after authenticating with Cognito.
+
+##### Static Files vs Hydration
+
+Sometimes, we just need static file serving through which files (images, icons, simple HTML/JS scripts, etc.) can be accessed globally with just a simple URL. There is an `assets` folder under `src/frontend/src` for this purpose.
+
+- Ex: `https://d1ohf10999rv0h.cloudfront.net/assets/arch-DS8hMkeH.png`
+    - Note the `assets` prefix. If you have nested folders, then they must be included in the URL path as well.
+        - Ex: `cloudfront.net/assets/folder/filename.png`.
+
+Keep in mind that `static` files/folders can simply be accessed without any authorization tokens by directly referencing their URL path. Only use small files that can be accessed without any protections such as icons, fonts, brand logos, etc.
+
+#### Deploy Frontend
+
+- This operation deploys the [frontend build stack](../src/backend/lib/stacks/frontend.ts) by itself using the `-e` flag for quicker deployment.
+- It first builds the frontend to ensure there are no errors.
 
 #### Refresh Local Environment
 
@@ -163,26 +184,6 @@ See [develop.ts](../tools/cli/develop.ts) for more context.
     - Assuming there are no breaking changes, you should be able to see your changes reflected in the terminal and browser immediately.
 
 - After you **press enter to continue**, the operation will kill the local server so future changes don't clutter the terminal.
-
-#### Hydrate Storage
-
-Many demos use synethetic data, such as as flat files (text/JSON/XML), images, and videos that need to be used in your application.
-
-![react-photos](./images/react-photos.png)
-
-- This operation updates the Amazon S3 bucket in the [storage hydrate stack](../src/backend/lib/stacks/storage/index.ts) with the latest files in `src/backend/lib/stacks/storage/assets`.
-    - When you push data to the S3 bucket, folders become prefixes that can be referenced after authenticating with Cognito.
-- The operation uses the `--hotswap` flag to update the S3 bucket directly instead of doing a standard CDK deployment.
-
-##### Static Files vs Hydration
-
-Sometimes, we just need static file serving through which files (images, icons, simple HTML/JS scripts, etc.) can be accessed globally with just a simple URL. There is an `assets` folder under `src/frontend/src` for this purpose.
-
-- Ex: `https://d1ohf10999rv0h.cloudfront.net/assets/arch-DS8hMkeH.png`
-    - Note the `assets` prefix. If you have nested folders, then they must be included in the URL path as well.
-        - Ex: `cloudfront.net/assets/folder/filename.png`.
-
-Keep in mind that `static` files/folders can simply be accessed without any authorization tokens by directly referencing their URL path. Only use small files that can be accessed without any protections such as icons, fonts, brand logos, etc.
 
 #### Destroy CDK Stack(s)
 
@@ -271,10 +272,10 @@ This custom construct sets the necessary properties for creating a Federate/Midw
 
 You can simply replace the standard `UserPool` construct with `LabsUserPool` and the standard `UserPoolClient` construct with `LabsUserPoolClient` to add Midway authorization.
 
-See [cognito.ts](../src/backend/lib/constructs/cognito.ts) for more context.
+See [cognito.ts](../src/backend/lib/common/constructs/cognito.ts) for more context.
 
 ### CodeBuild Construct
 
 This custom construct enables the use of [CodeArtifact (formerly Goshawk)](https://docs.hub.amazon.dev/codeartifact/user-guide/getting-started/) in both the [frontend build stack](../src/backend/lib/stacks/frontend.ts) and [pipeline stack](../src/backend/lib/stacks/pipeline.ts).
 
-See [codebuild.ts](../src/backend/lib/constructs/codebuild.ts) for more context.
+See [codebuild.ts](../src/backend/lib/common/constructs/codebuild.ts) for more context.

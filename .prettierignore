@@ -1,2 +1,2 @@
-**/src/graphql/**/*.ts
-**/src/API.ts
+**/graphql/**/*.ts
+**/API.ts

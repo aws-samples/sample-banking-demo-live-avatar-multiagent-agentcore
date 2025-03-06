@@ -2,7 +2,7 @@ import { BuildSpec, Project, ProjectProps } from "aws-cdk-lib/aws-codebuild";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { CodeBuildStep, CodeBuildStepProps } from "aws-cdk-lib/pipelines";
 import { Construct } from "constructs";
-import { projectConfig } from "../../../../config";
+import { projectConfig } from "../../../../../config";
 
 const codeArtifactPolicies = [
     new PolicyStatement({
