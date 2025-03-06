@@ -17,8 +17,8 @@ import {
 } from "react-router-dom";
 import Bar from "./components/Bar";
 import { FlashbarComponent, FlashbarProvider } from "./components/Notifications";
-import Dashboard from "./pages/dashboard/Dashboard";
-import Fleet from "./pages/Fleet";
+import Chat from "./pages/Chat";
+import Gallery from "./pages/Gallery";
 import Login from "./pages/Login";
 import { isLocalhost } from "./utilities";
 
@@ -86,13 +86,13 @@ Amplify.configure(
 const navigationConfig = [
     {
         path: "/",
-        text: "Dashboard",
-        element: <Dashboard />,
+        text: "Chat",
+        element: <Chat />,
     },
     {
-        path: "/fleet",
-        text: "Fleet",
-        element: <Fleet />,
+        path: "/gallery",
+        text: "Gallery",
+        element: <Gallery />,
     },
 ];
 

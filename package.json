@@ -1,7 +1,7 @@
 {
-    "name": "smart-machines",
-    "description": "An intelligent industrial maintenance solution that combines real-time IoT sensor data with generative AI to provide instant machine diagnostics and maintenance guidance. This AWS-powered demo showcases how industrial OEMs can leverage AI to reduce downtime, bridge the skills gap, and create new revenue streams through data-driven predictive maintenance and troubleshooting services.",
-    "version": "1.0.0",
+    "name": "PROJECT-IDENTIFIER",
+    "description": "project description",
+    "version": "2.0.0-beta",
     "author": "GenAI Labs Team",
     "license": "Apache License Version 2.0",
     "private": true,
