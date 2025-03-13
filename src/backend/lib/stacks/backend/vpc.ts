@@ -1,4 +1,5 @@
 import { aws_ec2 as ec2 } from "aws-cdk-lib";
+import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 
 export class LabsVpc extends Construct {
@@ -9,7 +10,7 @@ export class LabsVpc extends Construct {
         super(scope, id);
 
         const prefix = scope.node.tryGetContext("stackPrefix");
-        this.vpc = new ec2.Vpc(this, "vpc", {
+        const vpc = new ec2.Vpc(this, "vpc", {
             ipAddresses: ec2.IpAddresses.cidr("10.0.0.0/16"),
             natGateways: 1,
             maxAzs: 3,
@@ -46,26 +47,35 @@ export class LabsVpc extends Construct {
                 },
             },
         });
-        // this.vpc.addInterfaceEndpoint("ecrDockerInterfaceEndpoint", {
+        // vpc.addInterfaceEndpoint("ecrDockerInterfaceEndpoint", {
         //     service: ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER,
         // });
-        // this.vpc.addInterfaceEndpoint("appSyncInterfaceEndpoint", {
+        // vpc.addInterfaceEndpoint("appSyncInterfaceEndpoint", {
         //     service: ec2.InterfaceVpcEndpointAwsService.APP_SYNC,
         //     privateDnsEnabled: false,
         // });
-        // this.vpc.addInterfaceEndpoint("bedrockRuntimeInterfaceEndpoint", {
+        // vpc.addInterfaceEndpoint("bedrockRuntimeInterfaceEndpoint", {
         //     service: ec2.InterfaceVpcEndpointAwsService.BEDROCK_RUNTIME,
         // });
 
-        this.securityGroup = new ec2.SecurityGroup(this, "securityGroup", {
-            vpc: this.vpc,
+        const securityGroup = new ec2.SecurityGroup(this, "securityGroup", {
+            vpc: vpc,
             allowAllOutbound: true,
         });
 
-        this.securityGroup.addIngressRule(
-            ec2.Peer.ipv4(this.vpc.vpcCidrBlock),
+        securityGroup.addIngressRule(
+            ec2.Peer.ipv4(vpc.vpcCidrBlock),
             ec2.Port.tcp(443),
             "Allow access from client"
         );
+        NagSuppressions.addResourceSuppressions(securityGroup, [
+            {
+                id: "AwsSolutions-EC23",
+                reason: "Security group only allows HTTPS traffic from VPC CIDR block.",
+            },
+        ]);
+
+        this.vpc = vpc;
+        this.securityGroup = securityGroup;
     }
 }

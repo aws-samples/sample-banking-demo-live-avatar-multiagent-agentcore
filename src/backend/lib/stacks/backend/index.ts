@@ -54,8 +54,10 @@ export class BackendStack extends LabsStack {
             VITE_REGION: this.region!,
             VITE_CALLBACK_URL: props.urls[0],
             VITE_USER_POOL_ID: labsAuth.userPool.userPoolId,
-            ...(labsAuth.userPool.userPoolDomainUrl && {
-                VITE_USER_POOL_DOMAIN_URL: labsAuth.userPool.userPoolDomainUrl,
+            ...(labsAuth.userPoolDomain && {
+                VITE_USER_POOL_DOMAIN_URL: labsAuth.userPoolDomain
+                    .baseUrl()
+                    .replace("https://", ""),
             }),
             VITE_USER_POOL_CLIENT_ID: labsAuth.userPoolClient.userPoolClientId,
             VITE_IDENTITY_POOL_ID: labsAuth.identityPool.attrId,

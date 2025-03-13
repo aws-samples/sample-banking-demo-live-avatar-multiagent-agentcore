@@ -47,9 +47,7 @@ export class LabsRestApi extends Construct {
             }),
         });
 
-        this.restApi = new apigateway.LambdaRestApi(this, "restApi", {
-            handler: pythonProxyFunction,
-            proxy: true,
+        const restApi = new apigateway.RestApi(this, "restApi", {
             defaultMethodOptions: {
                 authorizationType: apigateway.AuthorizationType.COGNITO,
                 authorizer: new apigateway.CognitoUserPoolsAuthorizer(this, "authorizer", {
@@ -78,7 +76,7 @@ export class LabsRestApi extends Construct {
             cloudWatchRoleRemovalPolicy: RemovalPolicy.DESTROY,
         });
         NagSuppressions.addResourceSuppressions(
-            this.restApi,
+            restApi,
             [
                 {
                     id: "AwsSolutions-IAM4",
@@ -88,15 +86,21 @@ export class LabsRestApi extends Construct {
             true
         );
 
+        restApi.root.addProxy({
+            defaultIntegration: new apigateway.LambdaIntegration(pythonProxyFunction),
+        });
+
         new apigateway.RequestValidator(this, "requestValidator", {
-            restApi: this.restApi,
+            restApi: restApi,
             validateRequestBody: true,
             validateRequestParameters: true,
         });
 
         new waf.CfnWebACLAssociation(this, "restApiWebAclAssociation", {
-            resourceArn: this.restApi.deploymentStage.stageArn,
+            resourceArn: restApi.deploymentStage.stageArn,
             webAclArn: props.regionalWebAclArn,
         });
+
+        this.restApi = restApi;
     }
 }

@@ -16,13 +16,13 @@ export class LabsKnowledge extends Construct {
     constructor(scope: Construct, id: string, props: LabsKnowledgeProps) {
         super(scope, id);
 
-        this.knowledgeBase = new bedrock.VectorKnowledgeBase(this, "knowledgeBase", {
+        const knowledgeBase = new bedrock.VectorKnowledgeBase(this, "knowledgeBase", {
             embeddingsModel: bedrock.BedrockFoundationModel.TITAN_EMBED_TEXT_V2_1024,
         });
 
         const knowledgeSource = new bedrock.S3DataSource(this, "knowledgeSource", {
             bucket: props.storageBucket,
-            knowledgeBase: this.knowledgeBase,
+            knowledgeBase: knowledgeBase,
         });
 
         new events.Rule(this, "ingestionRule", {
@@ -39,11 +39,13 @@ export class LabsKnowledge extends Construct {
                     service: "bedrock-agent",
                     action: "startIngestionJob",
                     parameters: {
-                        knowledgeBaseId: this.knowledgeBase.knowledgeBaseId,
+                        knowledgeBaseId: knowledgeBase.knowledgeBaseId,
                         dataSourceId: knowledgeSource.dataSourceId,
                     },
                 }),
             ],
         });
+
+        this.knowledgeBase = knowledgeBase;
     }
 }

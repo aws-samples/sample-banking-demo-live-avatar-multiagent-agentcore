@@ -9,8 +9,9 @@ interface LabsAuthProps {
 }
 
 export class LabsAuth extends Construct {
-    public readonly userPool: LabsUserPool;
-    public readonly userPoolClient: LabsUserPoolClient;
+    public readonly userPool: cognito.UserPool;
+    public readonly userPoolDomain?: cognito.UserPoolDomain;
+    public readonly userPoolClient: cognito.UserPoolClient;
     public readonly identityPool: cognito.CfnIdentityPool;
     public readonly authenticatedRole: iam.Role;
     public readonly unauthenticatedRole: iam.Role;
@@ -19,7 +20,7 @@ export class LabsAuth extends Construct {
     constructor(scope: Construct, id: string, props: LabsAuthProps) {
         super(scope, id);
 
-        this.userPool = new LabsUserPool(this, "userPool", {
+        const userPool = new LabsUserPool(this, "userPool", {
             selfSignUpEnabled: false,
             signInAliases: {
                 phone: false,
@@ -44,7 +45,7 @@ export class LabsAuth extends Construct {
             accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
             featurePlan: cognito.FeaturePlan.ESSENTIALS,
         });
-        NagSuppressions.addResourceSuppressions(this.userPool, [
+        NagSuppressions.addResourceSuppressions(userPool, [
             {
                 id: "AwsSolutions-COG2",
                 reason: "Cognito user pool should not require MFA when using Midway.",
@@ -56,17 +57,17 @@ export class LabsAuth extends Construct {
         ]);
 
         new cognito.UserPoolGroup(this, "adminUserPoolGroup", {
-            userPool: this.userPool,
+            userPool: userPool,
             groupName: "Admin",
         });
 
         new cognito.UserPoolGroup(this, "usersUserPoolGroup", {
-            userPool: this.userPool,
+            userPool: userPool,
             groupName: "Users",
         });
 
-        this.userPoolClient = new LabsUserPoolClient(this, "userPoolClient", {
-            userPool: this.userPool,
+        const userPoolClient = new LabsUserPoolClient(this, "userPoolClient", {
+            userPool: userPool,
             generateSecret: false,
             refreshTokenValidity: Duration.minutes(60),
             accessTokenValidity: Duration.minutes(60),
@@ -74,25 +75,33 @@ export class LabsAuth extends Construct {
             readAttributes: new cognito.ClientAttributes().withStandardAttributes({
                 email: true,
             }),
-            callbackUrls: props.urls,
+            authFlows: {
+                adminUserPassword: true,
+                custom: true,
+                userSrp: true,
+            },
+            oAuth: {
+                callbackUrls: props.urls,
+                logoutUrls: props.urls,
+            },
         });
 
-        this.identityPool = new cognito.CfnIdentityPool(this, "identityPool", {
+        const identityPool = new cognito.CfnIdentityPool(this, "identityPool", {
             allowUnauthenticatedIdentities: false,
             cognitoIdentityProviders: [
                 {
-                    clientId: this.userPoolClient.userPoolClientId,
-                    providerName: this.userPool.userPoolProviderName,
+                    clientId: userPoolClient.userPoolClientId,
+                    providerName: userPool.userPoolProviderName,
                 },
             ],
         });
 
-        this.authenticatedRole = new iam.Role(this, `authenticatedRole`, {
+        const authenticatedRole = new iam.Role(this, `authenticatedRole`, {
             assumedBy: new iam.FederatedPrincipal(
                 "cognito-identity.amazonaws.com",
                 {
                     StringEquals: {
-                        "cognito-identity.amazonaws.com:aud": this.identityPool.ref,
+                        "cognito-identity.amazonaws.com:aud": identityPool.ref,
                     },
                     "ForAnyValue:StringLike": {
                         "cognito-identity.amazonaws.com:amr": "authenticated",
@@ -102,12 +111,12 @@ export class LabsAuth extends Construct {
             ),
         });
 
-        this.unauthenticatedRole = new iam.Role(this, `unauthenticatedRole`, {
+        const unauthenticatedRole = new iam.Role(this, `unauthenticatedRole`, {
             assumedBy: new iam.FederatedPrincipal(
                 "cognito-identity.amazonaws.com",
                 {
                     StringEquals: {
-                        "cognito-identity.amazonaws.com:aud": this.identityPool.ref,
+                        "cognito-identity.amazonaws.com:aud": identityPool.ref,
                     },
                     "ForAnyValue:StringLike": {
                         "cognito-identity.amazonaws.com:amr": "unauthenticated",
@@ -116,7 +125,7 @@ export class LabsAuth extends Construct {
                 "sts:AssumeRoleWithWebIdentity"
             ),
         });
-        this.unauthenticatedRole.addToPolicy(
+        unauthenticatedRole.addToPolicy(
             new iam.PolicyStatement({
                 effect: iam.Effect.DENY,
                 actions: ["*"],
@@ -125,10 +134,10 @@ export class LabsAuth extends Construct {
         );
 
         new cognito.CfnIdentityPoolRoleAttachment(this, `identityPoolRoleAttachment`, {
-            identityPoolId: this.identityPool.ref,
+            identityPoolId: identityPool.ref,
             roles: {
-                authenticated: this.authenticatedRole.roleArn,
-                unauthenticated: this.unauthenticatedRole.roleArn,
+                authenticated: authenticatedRole.roleArn,
+                unauthenticated: unauthenticatedRole.roleArn,
             },
         });
 
@@ -215,12 +224,19 @@ export class LabsAuth extends Construct {
                 ]),
             ],
         });
-
-        this.regionalWebAclArn = regionalWebAcl.attrArn;
+        const regionalWebAclArn = regionalWebAcl.attrArn;
 
         new waf.CfnWebACLAssociation(this, "userPoolWebAclAssociation", {
-            resourceArn: this.userPool.userPoolArn,
-            webAclArn: this.regionalWebAclArn,
+            resourceArn: userPool.userPoolArn,
+            webAclArn: regionalWebAclArn,
         });
+
+        this.userPool = userPool;
+        this.userPoolDomain = userPool.userPoolDomain;
+        this.userPoolClient = userPoolClient;
+        this.identityPool = identityPool;
+        this.authenticatedRole = authenticatedRole;
+        this.unauthenticatedRole = unauthenticatedRole;
+        this.regionalWebAclArn = regionalWebAclArn;
     }
 }
