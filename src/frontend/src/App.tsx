@@ -133,6 +133,21 @@ function NavigationComponent() {
     );
 }
 
+function LayoutComponent() {
+    const [navigationOpen, setNavigationOpen] = useState<boolean>(true);
+
+    return (
+        <AppLayout
+            navigation={<NavigationComponent />}
+            navigationOpen={navigationOpen}
+            onNavigationChange={({ detail }) => setNavigationOpen(detail.open)}
+            notifications={<FlashbarComponent />}
+            toolsHide={true}
+            content={<Outlet />}
+        />
+    );
+}
+
 export default function App() {
     const { route, authStatus } = useAuthenticator((context) => [
         context.route,
@@ -145,20 +160,9 @@ export default function App() {
         console.log("AuthStatus:", authStatus);
     }, [route, authStatus]);
 
-    const [navigationOpen, setNavigationOpen] = useState<boolean>(true);
-
     const router = createBrowserRouter([
         {
-            element: (
-                <AppLayout
-                    navigation={<NavigationComponent />}
-                    navigationOpen={navigationOpen}
-                    onNavigationChange={({ detail }) => setNavigationOpen(detail.open)}
-                    notifications={<FlashbarComponent />}
-                    toolsHide={true}
-                    content={<Outlet />}
-                />
-            ),
+            element: <LayoutComponent />,
             children: navigationConfig.map(({ path, element }) => ({
                 path,
                 element,

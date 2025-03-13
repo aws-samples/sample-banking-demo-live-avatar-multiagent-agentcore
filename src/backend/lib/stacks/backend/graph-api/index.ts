@@ -45,7 +45,7 @@ export class LabsGraphApi extends Construct {
             }
         );
 
-        this.graphApi = new AmplifyData(this, "graphApi", {
+        const graphApi = new AmplifyData(this, "graphApi", {
             definition: AmplifyDataDefinition.fromFiles(path.join(__dirname, "schema.graphql")),
             authorizationModes: {
                 defaultAuthorizationMode: "AMAZON_COGNITO_USER_POOLS",
@@ -66,7 +66,7 @@ export class LabsGraphApi extends Construct {
             },
         });
         NagSuppressions.addResourceSuppressions(
-            this.graphApi,
+            graphApi,
             [
                 {
                     id: "AwsSolutions-IAM4",
@@ -84,20 +84,22 @@ export class LabsGraphApi extends Construct {
             true
         );
 
-        typescriptResolverFunction.addEnvironment("GRAPH_API_URL", this.graphApi.graphqlUrl);
-        this.graphApi.resources.graphqlApi.grantMutation(typescriptResolverFunction);
-        this.graphApi.resources.graphqlApi.grantQuery(typescriptResolverFunction);
+        typescriptResolverFunction.addEnvironment("GRAPH_API_URL", graphApi.graphqlUrl);
+        graphApi.resources.graphqlApi.grantMutation(typescriptResolverFunction);
+        graphApi.resources.graphqlApi.grantQuery(typescriptResolverFunction);
 
-        this.graphApi.resources.cfnResources.cfnGraphqlApi.xrayEnabled = true;
-        Object.values(this.graphApi.resources.cfnResources.cfnTables).forEach((table) => {
+        graphApi.resources.cfnResources.cfnGraphqlApi.xrayEnabled = true;
+        Object.values(graphApi.resources.cfnResources.cfnTables).forEach((table) => {
             table.pointInTimeRecoverySpecification = {
                 pointInTimeRecoveryEnabled: true,
             };
         });
 
         new waf.CfnWebACLAssociation(this, "graphApiWebAclAssociation", {
-            resourceArn: this.graphApi.resources.graphqlApi.arn,
+            resourceArn: graphApi.resources.graphqlApi.arn,
             webAclArn: props.regionalWebAclArn,
         });
+
+        this.graphApi = graphApi;
     }
 }

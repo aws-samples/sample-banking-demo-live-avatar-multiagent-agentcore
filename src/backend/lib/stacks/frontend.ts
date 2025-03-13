@@ -29,7 +29,7 @@ export class FrontendStack extends LabsStack {
 
         const loggingBucket = new LabsBucket(this, "loggingBucket", {});
 
-        this.websiteBucket = new LabsBucket(this, "websiteBucket", {
+        const websiteBucket = new LabsBucket(this, "websiteBucket", {
             serverAccessLogsBucket: loggingBucket,
         });
 
@@ -50,12 +50,10 @@ export class FrontendStack extends LabsStack {
             ],
         });
 
-        this.distribution = new cloudfront.Distribution(this, "distribution", {
+        const distribution = new cloudfront.Distribution(this, "distribution", {
             defaultRootObject: "index.html",
             defaultBehavior: {
-                origin: cloudfront_origins.S3BucketOrigin.withOriginAccessControl(
-                    this.websiteBucket
-                ),
+                origin: cloudfront_origins.S3BucketOrigin.withOriginAccessControl(websiteBucket),
                 viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
                 originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
@@ -79,7 +77,7 @@ export class FrontendStack extends LabsStack {
             logIncludesCookies: true,
             logFilePrefix: "distribution",
         });
-        NagSuppressions.addResourceSuppressions(this.distribution, [
+        NagSuppressions.addResourceSuppressions(distribution, [
             {
                 id: "AwsSolutions-CFR1",
                 reason: "Distribution should be globally accessible.",
@@ -90,10 +88,9 @@ export class FrontendStack extends LabsStack {
             },
         ]);
 
-        this.urls = [
-            `https://${this.distribution.distributionDomainName}`,
-            "http://localhost:3000",
-        ];
+        this.websiteBucket = websiteBucket;
+        this.distribution = distribution;
+        this.urls = [`https://${distribution.distributionDomainName}`, "http://localhost:3000"];
     }
 }
 

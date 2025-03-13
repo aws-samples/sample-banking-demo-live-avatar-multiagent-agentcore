@@ -25,13 +25,8 @@ function getMidwaySecretId(scope: Construct): string | undefined {
 }
 
 export class LabsUserPool extends UserPool {
-    private readonly userPoolDomain: UserPoolDomain;
-    public readonly userPoolDomainUrl: string;
-    constructor(
-        scope: Construct,
-        id: string,
-        props: Omit<UserPoolProps, "removalPolicy" | "customAttributes">
-    ) {
+    public readonly userPoolDomain: UserPoolDomain;
+    constructor(scope: Construct, id: string, props: UserPoolProps) {
         super(scope, id, {
             ...props,
             removalPolicy: RemovalPolicy.DESTROY, // when using midway, we do not want to retain this user pool
@@ -44,25 +39,18 @@ export class LabsUserPool extends UserPool {
                           mutable: true,
                       }),
                   }
-                : undefined,
+                : props.customAttributes,
         });
         this.userPoolDomain = this.addDomain("userPoolDomain", {
             cognitoDomain: {
                 domainPrefix: `${projectConfig.projectId}-${Stack.of(scope).account}`,
             },
         });
-        this.userPoolDomainUrl = this.userPoolDomain.baseUrl().replace("https://", "");
     }
 }
 
 export class LabsUserPoolClient extends UserPoolClient {
-    constructor(
-        scope: Construct,
-        id: string,
-        props: Omit<UserPoolClientProps, "authFlows" | "oAuth" | "supportedIdentityProviders"> & {
-            callbackUrls: string[];
-        }
-    ) {
+    constructor(scope: Construct, id: string, props: UserPoolClientProps) {
         const midwaySecretId = getMidwaySecretId(scope);
         super(scope, id, {
             ...props,
@@ -71,11 +59,7 @@ export class LabsUserPoolClient extends UserPoolClient {
                       custom: true,
                       userSrp: true,
                   }
-                : {
-                      adminUserPassword: true,
-                      custom: true,
-                      userSrp: true,
-                  },
+                : props.authFlows,
             oAuth: midwaySecretId
                 ? {
                       flows: {
@@ -83,10 +67,10 @@ export class LabsUserPoolClient extends UserPoolClient {
                           implicitCodeGrant: false,
                       },
                       scopes: [OAuthScope.OPENID, OAuthScope.PROFILE],
-                      callbackUrls: props.callbackUrls,
-                      logoutUrls: props.callbackUrls,
+                      callbackUrls: props.oAuth?.callbackUrls,
+                      logoutUrls: props.oAuth?.logoutUrls,
                   }
-                : undefined,
+                : props.oAuth,
             supportedIdentityProviders: midwaySecretId
                 ? [
                       UserPoolClientIdentityProvider.custom(
@@ -118,7 +102,7 @@ export class LabsUserPoolClient extends UserPoolClient {
                           }).providerName
                       ),
                   ]
-                : undefined,
+                : props.supportedIdentityProviders,
         });
     }
 }

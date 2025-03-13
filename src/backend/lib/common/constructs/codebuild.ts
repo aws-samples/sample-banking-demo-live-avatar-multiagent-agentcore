@@ -36,8 +36,8 @@ export class LabsCodeBuildStep extends CodeBuildStep {
     constructor(id: string, props: CodeBuildStepProps) {
         super(id, {
             ...props,
-            installCommands: [...codeArtifactCommand, "npm run setup"],
-            rolePolicyStatements: [...(props.rolePolicyStatements || []), ...codeArtifactPolicies],
+            installCommands: [...codeArtifactCommand, ...(props.installCommands || [])],
+            rolePolicyStatements: [...codeArtifactPolicies, ...(props.rolePolicyStatements || [])],
         });
     }
 }

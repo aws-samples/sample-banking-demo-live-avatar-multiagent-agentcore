@@ -15,7 +15,7 @@ export class LabsStorage extends Construct {
 
         const loggingBucket = new LabsBucket(this, "loggingBucket", {});
 
-        this.storageBucket = new LabsStorageBucket(this, "storageBucket", {
+        const storageBucket = new LabsStorageBucket(this, "storageBucket", {
             allowedOrigins: props.urls,
             eventBridgeEnabled: true,
             serverAccessLogsBucket: loggingBucket,
@@ -23,8 +23,10 @@ export class LabsStorage extends Construct {
 
         new s3_deployment.BucketDeployment(this, "storageDeployment", {
             sources: [s3_deployment.Source.asset(path.join(__dirname, "assets"))],
-            destinationBucket: this.storageBucket,
+            destinationBucket: storageBucket,
             // prune: false,
         });
+
+        this.storageBucket = storageBucket;
     }
 }
