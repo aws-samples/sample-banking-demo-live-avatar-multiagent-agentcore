@@ -164,13 +164,13 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
 
 #### Deploy Frontend
 
-- This operation deploys the [frontend build stack](../src/backend/lib/stacks/frontend.ts) by itself using the `-e` flag for quicker deployment.
+- This operation deploys the [frontend build stack](../src/backend/lib/stacks/frontend/index.ts) by itself using the `-e` flag for quicker deployment.
 - It first builds the frontend to ensure there are no errors.
 
 #### Refresh Local Environment
 
 - This operation is invoked by the [next operation](#test-frontend-locally-) automatically, but it can also be run by itself if you just want to:
-    - Pull down the CfnOutputs from the [frontend build stack](../src/backend/lib/stacks/frontend.ts).
+    - Pull down the CfnOutputs from the [frontend build stack](../src/backend/lib/stacks/frontend/index.ts).
     - Update the .env file in the frontend source folder with those outputs.
     - If a Graph API ID is present, generate GraphQL files.
         - If you have not yet created a [.graphqlconfig.yaml] file you will be prompted to **Choose the type of app that you're building**. Select **javascript**, **react**, then **typescript** then hit enter two more times.
@@ -187,16 +187,14 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
 
 #### Destroy CDK Stack(s)
 
-- If you elect to not just destroy all stacks, the operation will allow you to select exactly which stacks you would like to destroy in the target account.
+- This operation will first use `cdk list` to list all available stacks for that target account.
+    - Note that stacks in the dev account will be prefixed with the pipeline stack name.
+        - Ex: `start-kit-test-pipeline/dev/start-kit-test-frontend`
+        - See [pipeline stack](#pipeline-stack) for more details.
 
-    - It will first use `cdk list` to list all available stacks for that target account.
-        - Note that stacks in the dev account will be prefixed with the pipeline stack name.
-            - Ex: `start-kit-test-pipeline/dev/start-kit-test-frontend`
-            - See [pipeline stack](#pipeline-stack) for more details.
+![cli-select-stacks.png](images/cli-select-stacks.png)
 
-    ![cli-select-stacks.png](images/cli-select-stacks.png)
-
-    - Using the arrow keys and spacebar, you select each and every stack you want to destroy then hit enter to confirm.
+- Using the arrow keys and spacebar, you select each and every stack you want to destroy then hit enter to confirm.
 
 - Use this operation with **_extreme caution_** as the CDK stacks destroyed with this operation cannot be recovered and may leave your application broken when using dependent stacks.
 - There are certain limitations with this operation due to how CDK is designed:
@@ -276,6 +274,6 @@ See [cognito.ts](../src/backend/lib/common/constructs/cognito.ts) for more conte
 
 ### CodeBuild Construct
 
-This custom construct enables the use of [CodeArtifact (formerly Goshawk)](https://docs.hub.amazon.dev/codeartifact/user-guide/getting-started/) in both the [frontend build stack](../src/backend/lib/stacks/frontend.ts) and [pipeline stack](../src/backend/lib/stacks/pipeline.ts).
+This custom construct enables the use of [CodeArtifact (formerly Goshawk)](https://docs.hub.amazon.dev/codeartifact/user-guide/getting-started/) in both the [frontend build stack](../src/backend/lib/stacks/frontend/index.ts) and [pipeline stack](../src/backend/lib/stacks/pipeline.ts).
 
 See [codebuild.ts](../src/backend/lib/common/constructs/codebuild.ts) for more context.

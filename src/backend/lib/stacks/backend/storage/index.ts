@@ -1,22 +1,24 @@
 import { aws_s3 as s3, aws_s3_deployment as s3_deployment } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as path from "path";
-import { LabsBucket, LabsStorageBucket } from "../../../common/constructs/s3";
+import { CommonBucket, CommonStorageBucket } from "../../../common/constructs/s3";
 
-interface LabsStorageProps {
+interface StorageProps {
     urls: string[];
 }
 
-export class LabsStorage extends Construct {
+export class Storage extends Construct {
     public readonly storageBucket: s3.Bucket;
 
-    constructor(scope: Construct, id: string, props: LabsStorageProps) {
+    constructor(scope: Construct, id: string, props: StorageProps) {
         super(scope, id);
 
-        const loggingBucket = new LabsBucket(this, "loggingBucket", {});
+        const { urls } = props;
 
-        const storageBucket = new LabsStorageBucket(this, "storageBucket", {
-            allowedOrigins: props.urls,
+        const loggingBucket = new CommonBucket(this, "loggingBucket", {});
+
+        const storageBucket = new CommonStorageBucket(this, "storageBucket", {
+            allowedOrigins: urls,
             eventBridgeEnabled: true,
             serverAccessLogsBucket: loggingBucket,
         });

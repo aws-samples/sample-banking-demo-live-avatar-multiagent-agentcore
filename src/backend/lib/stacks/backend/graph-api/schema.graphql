@@ -1,5 +1,5 @@
-type Chat @model @auth(rules: [{ allow: private }]) {
-    userId: ID! @index(name: "byUserId", queryField: "chatByUserId")
+type Chat @model @auth(rules: [{ allow: owner, ownerField: "userId", identityClaim: "sub" }]) {
+    userId: ID @index(name: "byUserId", queryField: "chatByUserId")
     email: AWSEmail!
     human: String
     assistant: String

@@ -3,7 +3,7 @@
 //  This file was automatically generated and should not be edited.
 
 export type CreateChatInput = {
-  userId: string,
+  userId?: string | null,
   email: string,
   human?: string | null,
   assistant?: string | null,
@@ -80,7 +80,7 @@ export type ModelStringInput = {
 
 export type Chat = {
   __typename: "Chat",
-  userId: string,
+  userId?: string | null,
   email: string,
   human?: string | null,
   assistant?: string | null,
@@ -127,7 +127,6 @@ export enum ModelSortDirection {
 
 
 export type ModelSubscriptionChatFilterInput = {
-  userId?: ModelSubscriptionIDInput | null,
   email?: ModelSubscriptionStringInput | null,
   human?: ModelSubscriptionStringInput | null,
   assistant?: ModelSubscriptionStringInput | null,
@@ -136,9 +135,10 @@ export type ModelSubscriptionChatFilterInput = {
   updatedAt?: ModelSubscriptionStringInput | null,
   and?: Array< ModelSubscriptionChatFilterInput | null > | null,
   or?: Array< ModelSubscriptionChatFilterInput | null > | null,
+  userId?: ModelStringInput | null,
 };
 
-export type ModelSubscriptionIDInput = {
+export type ModelSubscriptionStringInput = {
   ne?: string | null,
   eq?: string | null,
   le?: string | null,
@@ -153,7 +153,7 @@ export type ModelSubscriptionIDInput = {
   notIn?: Array< string | null > | null,
 };
 
-export type ModelSubscriptionStringInput = {
+export type ModelSubscriptionIDInput = {
   ne?: string | null,
   eq?: string | null,
   le?: string | null,
@@ -176,7 +176,7 @@ export type CreateChatMutationVariables = {
 export type CreateChatMutation = {
   createChat?:  {
     __typename: "Chat",
-    userId: string,
+    userId?: string | null,
     email: string,
     human?: string | null,
     assistant?: string | null,
@@ -194,7 +194,7 @@ export type UpdateChatMutationVariables = {
 export type UpdateChatMutation = {
   updateChat?:  {
     __typename: "Chat",
-    userId: string,
+    userId?: string | null,
     email: string,
     human?: string | null,
     assistant?: string | null,
@@ -212,7 +212,7 @@ export type DeleteChatMutationVariables = {
 export type DeleteChatMutation = {
   deleteChat?:  {
     __typename: "Chat",
-    userId: string,
+    userId?: string | null,
     email: string,
     human?: string | null,
     assistant?: string | null,
@@ -237,7 +237,7 @@ export type GetChatQueryVariables = {
 export type GetChatQuery = {
   getChat?:  {
     __typename: "Chat",
-    userId: string,
+    userId?: string | null,
     email: string,
     human?: string | null,
     assistant?: string | null,
@@ -258,7 +258,7 @@ export type ListChatsQuery = {
     __typename: "ModelChatConnection",
     items:  Array< {
       __typename: "Chat",
-      userId: string,
+      userId?: string | null,
       email: string,
       human?: string | null,
       assistant?: string | null,
@@ -283,7 +283,7 @@ export type ChatByUserIdQuery = {
     __typename: "ModelChatConnection",
     items:  Array< {
       __typename: "Chat",
-      userId: string,
+      userId?: string | null,
       email: string,
       human?: string | null,
       assistant?: string | null,
@@ -297,12 +297,13 @@ export type ChatByUserIdQuery = {
 
 export type OnCreateChatSubscriptionVariables = {
   filter?: ModelSubscriptionChatFilterInput | null,
+  userId?: string | null,
 };
 
 export type OnCreateChatSubscription = {
   onCreateChat?:  {
     __typename: "Chat",
-    userId: string,
+    userId?: string | null,
     email: string,
     human?: string | null,
     assistant?: string | null,
@@ -314,12 +315,13 @@ export type OnCreateChatSubscription = {
 
 export type OnUpdateChatSubscriptionVariables = {
   filter?: ModelSubscriptionChatFilterInput | null,
+  userId?: string | null,
 };
 
 export type OnUpdateChatSubscription = {
   onUpdateChat?:  {
     __typename: "Chat",
-    userId: string,
+    userId?: string | null,
     email: string,
     human?: string | null,
     assistant?: string | null,
@@ -331,12 +333,13 @@ export type OnUpdateChatSubscription = {
 
 export type OnDeleteChatSubscriptionVariables = {
   filter?: ModelSubscriptionChatFilterInput | null,
+  userId?: string | null,
 };
 
 export type OnDeleteChatSubscription = {
   onDeleteChat?:  {
     __typename: "Chat",
-    userId: string,
+    userId?: string | null,
     email: string,
     human?: string | null,
     assistant?: string | null,

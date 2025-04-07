@@ -1,13 +1,13 @@
-import { ThemeProvider, useAuthenticator } from "@aws-amplify/ui-react";
+import { Authenticator, Button, Divider, Flex, useAuthenticator } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
-import { AppLayout, Spinner } from "@cloudscape-design/components";
+import { AppLayout, Flashbar, Spinner } from "@cloudscape-design/components";
 import { I18nProvider } from "@cloudscape-design/components/i18n";
 import messages from "@cloudscape-design/components/i18n/messages/all.en";
 import SideNavigation from "@cloudscape-design/components/side-navigation";
 import "@cloudscape-design/global-styles/index.css";
 import { Amplify } from "aws-amplify";
-import { fetchAuthSession } from "aws-amplify/auth";
-import { useEffect, useState } from "react";
+import { fetchAuthSession, signInWithRedirect } from "aws-amplify/auth";
+import { useContext, useEffect, useState } from "react";
 import {
     createBrowserRouter,
     Outlet,
@@ -15,11 +15,11 @@ import {
     useLocation,
     useNavigate,
 } from "react-router-dom";
+import Amazicon from "./assets/amazicon.svg";
 import Bar from "./components/Bar";
-import { FlashbarComponent, FlashbarProvider } from "./components/Notifications";
+import { FlashbarContext, FlashbarProvider } from "./contexts/Flashbar";
 import Chat from "./pages/Chat";
 import Gallery from "./pages/Gallery";
-import Login from "./pages/Login";
 import { isLocalhost } from "./utilities";
 
 const LOCALE = "en";
@@ -31,14 +31,13 @@ const apiConfig = {
         };
     },
 };
-
 Amplify.configure(
     {
         Auth: {
             Cognito: {
                 userPoolId: import.meta.env.VITE_USER_POOL_ID,
                 userPoolClientId: import.meta.env.VITE_USER_POOL_CLIENT_ID,
-                identityPoolId: import.meta.env.VITE_IDENTITY_POOL_ID, // REQUIRED only for Federated Authentication
+                identityPoolId: import.meta.env.VITE_IDENTITY_POOL_ID, // REQUIRED only for Federated Authentication.
                 allowGuestAccess: false,
                 // OPTIONAL - Set to true to use your identity pool's unauthenticated role for unauthenticated users.
                 loginWith: {
@@ -70,8 +69,13 @@ Amplify.configure(
         },
         Storage: {
             S3: {
-                bucket: import.meta.env.VITE_STORAGE_BUCKET_NAME,
                 region: import.meta.env.VITE_REGION,
+                buckets: {
+                    storageBucket: {
+                        region: import.meta.env.VITE_REGION,
+                        bucketName: import.meta.env.VITE_STORAGE_BUCKET_NAME,
+                    },
+                },
             },
         },
     },
@@ -96,7 +100,7 @@ const navigationConfig = [
     },
 ];
 
-function NavigationComponent() {
+function Navigation() {
     const location = useLocation();
     const [activeHref, setActiveHref] = useState(location.pathname);
     const navigate = useNavigate();
@@ -133,15 +137,28 @@ function NavigationComponent() {
     );
 }
 
-function LayoutComponent() {
+function Layout() {
     const [navigationOpen, setNavigationOpen] = useState<boolean>(true);
+    const { flashbarItems, removeFlashbarItem } = useContext(FlashbarContext);
 
     return (
         <AppLayout
-            navigation={<NavigationComponent />}
+            navigation={<Navigation />}
             navigationOpen={navigationOpen}
             onNavigationChange={({ detail }) => setNavigationOpen(detail.open)}
-            notifications={<FlashbarComponent />}
+            notifications={
+                <Flashbar
+                    items={flashbarItems.map((item, index) => ({
+                        type: item.type,
+                        dismissible: true,
+                        dismissLabel: "Dismiss",
+                        onDismiss: () => removeFlashbarItem(index),
+                        content: item.content,
+                    }))}
+                    // stackItems
+                />
+            }
+            stickyNotifications
             toolsHide={true}
             content={<Outlet />}
         />
@@ -162,7 +179,7 @@ export default function App() {
 
     const router = createBrowserRouter([
         {
-            element: <LayoutComponent />,
+            element: <Layout />,
             children: navigationConfig.map(({ path, element }) => ({
                 path,
                 element,
@@ -173,16 +190,43 @@ export default function App() {
     return (
         <div>
             {authStatus === "configuring" && <Spinner />}
-            {authStatus === "unauthenticated" && <Login />}
+            {authStatus === "unauthenticated" && (
+                <Authenticator
+                    hideSignUp={true}
+                    variation="modal"
+                    // socialProviders={["amazon"]}
+                    components={{
+                        SignIn: {
+                            Header: () => {
+                                return (
+                                    <Flex direction="column" padding="2rem 2rem 0">
+                                        <Button
+                                            onClick={() => signInWithRedirect()}
+                                            gap="1rem"
+                                            isFullWidth
+                                        >
+                                            <img
+                                                src={Amazicon}
+                                                alt="Amazon icon"
+                                                style={{ width: "15px" }}
+                                            />
+                                            Sign in with Midway
+                                        </Button>
+                                        <Divider label="or" size="small" />
+                                    </Flex>
+                                );
+                            },
+                        },
+                    }}
+                />
+            )}
             {authStatus === "authenticated" && (
                 <>
                     <I18nProvider locale={LOCALE} messages={[messages]}>
                         <Bar />
-                        <ThemeProvider>
-                            <FlashbarProvider>
-                                <RouterProvider router={router} />
-                            </FlashbarProvider>
-                        </ThemeProvider>
+                        <FlashbarProvider>
+                            <RouterProvider router={router} />
+                        </FlashbarProvider>
                     </I18nProvider>
                 </>
             )}

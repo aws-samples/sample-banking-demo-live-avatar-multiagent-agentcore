@@ -1,14 +1,21 @@
-import { Duration, aws_cognito as cognito, aws_iam as iam, aws_wafv2 as waf } from "aws-cdk-lib";
+import {
+    Duration,
+    aws_cognito as cognito,
+    aws_iam as iam,
+    aws_lambda as lambda,
+    aws_wafv2 as waf,
+} from "aws-cdk-lib";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import { LabsUserPool, LabsUserPoolClient } from "../../common/constructs/cognito";
 import { createManagedRules } from "../../common/utilities/rules";
 
-interface LabsAuthProps {
+interface AuthProps {
     urls: string[];
+    hydrationFunction?: lambda.Function;
 }
 
-export class LabsAuth extends Construct {
+export class Auth extends Construct {
     public readonly userPool: cognito.UserPool;
     public readonly userPoolDomain?: cognito.UserPoolDomain;
     public readonly userPoolClient: cognito.UserPoolClient;
@@ -17,8 +24,10 @@ export class LabsAuth extends Construct {
     public readonly unauthenticatedRole: iam.Role;
     public readonly regionalWebAclArn: string;
 
-    constructor(scope: Construct, id: string, props: LabsAuthProps) {
+    constructor(scope: Construct, id: string, props: AuthProps) {
         super(scope, id);
+
+        const { urls, hydrationFunction } = props;
 
         const userPool = new LabsUserPool(this, "userPool", {
             selfSignUpEnabled: false,
@@ -44,6 +53,9 @@ export class LabsAuth extends Construct {
             },
             accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
             featurePlan: cognito.FeaturePlan.ESSENTIALS,
+            lambdaTriggers: {
+                postConfirmation: hydrationFunction,
+            },
         });
         NagSuppressions.addResourceSuppressions(userPool, [
             {
@@ -81,8 +93,8 @@ export class LabsAuth extends Construct {
                 userSrp: true,
             },
             oAuth: {
-                callbackUrls: props.urls,
-                logoutUrls: props.urls,
+                callbackUrls: urls,
+                logoutUrls: urls,
             },
         });
 

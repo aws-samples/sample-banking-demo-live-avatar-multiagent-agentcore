@@ -7,10 +7,10 @@ import {
     Spinner,
 } from "@cloudscape-design/components";
 import { useEffect, useState } from "react";
-import { getPhotos } from "../services/storage";
+import { getObjects } from "../services/storage";
 
 interface Photo {
-    path: string;
+    name: string;
     url: string;
 }
 
@@ -19,22 +19,13 @@ const Gallery = () => {
 
     useEffect(() => {
         const loadPhotos = async () => {
-            setPhotos(await getPhotos());
+            setPhotos(await getObjects());
         };
         loadPhotos();
     }, []);
 
     return (
-        <ContentLayout
-            header={
-                <Header
-                    variant="h2"
-                    description="Someone please build me a better gallery UI for this page."
-                >
-                    Gallery
-                </Header>
-            }
-        >
+        <ContentLayout header={<Header variant="h2">Gallery</Header>}>
             {photos.length === 0 ? (
                 <Box textAlign="center" padding="l">
                     <Spinner size="large" />
@@ -44,13 +35,13 @@ const Gallery = () => {
                     <Cards
                         items={photos}
                         cardDefinition={{
-                            header: (item) => item.path,
+                            header: (item) => item.name,
                             sections: [
                                 {
                                     content: (item) => (
                                         <img
                                             src={item.url}
-                                            alt={item.path}
+                                            alt={item.name}
                                             style={{
                                                 width: "100%",
                                                 height: "400px",

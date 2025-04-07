@@ -4,6 +4,11 @@ import os
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
 from aws_lambda_powertools.event_handler.api_gateway import CORSConfig
+from aws_lambda_powertools.event_handler.exceptions import (
+    BadRequestError,
+    # NotFoundError,
+    # ServiceError,
+)
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 logger = Logger()
@@ -20,6 +25,9 @@ app = APIGatewayRestResolver(
 def post_message():
     email = app.current_event.request_context.authorizer.claims.get("email")
     data = app.current_event.json_body
+    if not data:
+        raise BadRequestError("Missing message")
+
     return {"content": f'{email} said "{data}".', "type": "success"}
 
 

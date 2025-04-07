@@ -8,7 +8,7 @@ The frontend application is designed using [Vite React](https://vite.dev/guide/)
 
 The AWS CDK-created resources are linked to the frontend using Amplify Libraries (not the Amplify CLI) via [Amplify.configure](../src/frontend/src/App.tsx).
 
-Many of the properties for this configuration are pulled from environment variables (which must be prefixed with `VITE_`). In the cloud, these environment variables are provided through the [frontend build stack](../src/backend/lib/stacks/frontend.ts). For local development, the development CLI can pull down the outputs from that same frontend build stack to create a local .env file. See [here](./design.md#refresh-local-environment) for more details.
+Many of the properties for this configuration are pulled from environment variables (which must be prefixed with `VITE_`). In the cloud, these environment variables are provided through the [frontend build stack](../src/backend/lib/stacks/frontend/index.ts). For local development, the development CLI can pull down the outputs from that same frontend build stack to create a local .env file. See [here](./design.md#refresh-local-environment) for more details.
 
 ## User Creation
 
@@ -41,7 +41,7 @@ The chat demo simplify posts a message using the [AWS Amplify POST request](http
 
 ### Gallery
 
-The gallery demo gets the URLs if the images in the [storage bucket](../src/backend/lib/stacks/backend/storage.ts) using [Amplify Storage](https://docs.amplify.aws/react/build-a-backend/storage/) then displays them with Cloudscape.
+The gallery demo gets the URLs if the images in the [storage bucket](../src/backend/lib/stacks/backend/storage/index.ts) using [Amplify Storage](https://docs.amplify.aws/react/build-a-backend/storage/) then displays them with Cloudscape.
 
 ## Expanding the ESLint configuration
 
