@@ -50,7 +50,7 @@ export class LabsReactProject extends Project {
                 version: "0.2",
                 phases: {
                     install: {
-                        runtimeVersions: {
+                        "runtime-versions": {
                             nodejs: "22",
                         },
                         commands: [...codeArtifactCommand, "npm install"],

@@ -1,7 +1,7 @@
 import { CfnElement, CfnOutput, CfnResource, Stack, StackProps, Tags } from "aws-cdk-lib";
 import { Construct } from "constructs";
 
-export class LabsStack extends Stack {
+export class CommonStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
         const prefix = scope.node.tryGetContext("stackPrefix");
         const prefixedId = prefix ? `${prefix}-${id}` : id;

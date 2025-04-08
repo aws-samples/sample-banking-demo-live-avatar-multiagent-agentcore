@@ -8,29 +8,20 @@ import {
     SpaceBetween,
 } from "@cloudscape-design/components";
 import { useContext, useState } from "react";
-import { FlashbarContext, FlashbarItem } from "../components/Notifications";
+import { FlashbarContext, FlashbarItem } from "../contexts/Flashbar";
 import { postMessage } from "../services/rest-api";
 
 const Chat = () => {
-    const { updateFlashbar } = useContext(FlashbarContext);
+    const { addFlashbarItem } = useContext(FlashbarContext);
     const [message, setMessage] = useState("");
 
     const submitMessageForm = async () => {
         const response = (await postMessage(message)) as unknown as FlashbarItem;
-        updateFlashbar(response.type, response.content);
+        addFlashbarItem(response.type, response.content);
     };
 
     return (
-        <ContentLayout
-            header={
-                <Header
-                    variant="h2"
-                    description="Someone please build me a better chat UI for this page."
-                >
-                    Chat
-                </Header>
-            }
-        >
+        <ContentLayout header={<Header variant="h2">Chat</Header>}>
             <form
                 id="messageForm"
                 onSubmit={(e) => {

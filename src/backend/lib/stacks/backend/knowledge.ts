@@ -6,22 +6,24 @@ import {
 } from "aws-cdk-lib";
 import { Construct } from "constructs";
 
-export interface LabsKnowledgeProps {
+interface KnowledgeProps {
     storageBucket: s3.Bucket;
 }
 
-export class LabsKnowledge extends Construct {
+export class Knowledge extends Construct {
     public readonly knowledgeBase: bedrock.VectorKnowledgeBase;
 
-    constructor(scope: Construct, id: string, props: LabsKnowledgeProps) {
+    constructor(scope: Construct, id: string, props: KnowledgeProps) {
         super(scope, id);
+
+        const { storageBucket } = props;
 
         const knowledgeBase = new bedrock.VectorKnowledgeBase(this, "knowledgeBase", {
             embeddingsModel: bedrock.BedrockFoundationModel.TITAN_EMBED_TEXT_V2_1024,
         });
 
         const knowledgeSource = new bedrock.S3DataSource(this, "knowledgeSource", {
-            bucket: props.storageBucket,
+            bucket: storageBucket,
             knowledgeBase: knowledgeBase,
         });
 
@@ -30,7 +32,7 @@ export class LabsKnowledge extends Construct {
                 source: ["aws.s3"],
                 detail: {
                     bucket: {
-                        name: [props.storageBucket.bucketName],
+                        name: [storageBucket.bucketName],
                     },
                 },
             },

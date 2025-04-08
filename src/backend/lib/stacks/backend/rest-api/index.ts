@@ -10,9 +10,9 @@ import {
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import * as path from "path";
-import { LabsPythonFunction, LabsPythonLayerVersion } from "../../../common/constructs/lambda";
+import { CommonPythonFunction } from "../../../common/constructs/lambda";
 
-interface LabsRestApiProps {
+interface RestApiProps {
     urls: string[];
     vpc?: ec2.Vpc;
     securityGroup?: ec2.SecurityGroup;
@@ -20,30 +20,27 @@ interface LabsRestApiProps {
     regionalWebAclArn: string;
 }
 
-export class LabsRestApi extends Construct {
+export class RestApi extends Construct {
     public readonly restApi: apigateway.LambdaRestApi;
 
-    constructor(scope: Construct, id: string, props: LabsRestApiProps) {
+    constructor(scope: Construct, id: string, props: RestApiProps) {
         super(scope, id);
 
-        const powertoolsLayer = new LabsPythonLayerVersion(this, "powertoolsLayer", {
-            entry: path.join(__dirname, "..", "..", "..", "common", "layers", "powertools"),
-        });
+        const { urls, vpc, securityGroup, userPool, regionalWebAclArn } = props;
 
-        const pythonProxyFunction = new LabsPythonFunction(this, "pythonProxyFunction", {
+        const proxyFunction = new CommonPythonFunction(this, "proxyFunction", {
             entry: path.join(__dirname, "proxy-function"),
-            layers: [powertoolsLayer],
             environment: {
-                ALLOWED_ORIGINS: JSON.stringify(props.urls),
+                ALLOWED_ORIGINS: JSON.stringify(urls),
             },
             memorySize: 1024,
             timeout: Duration.minutes(2),
-            ...(props.vpc && {
-                vpc: props.vpc,
+            ...(vpc && {
+                vpc: vpc,
                 vpcSubnets: {
                     subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
                 },
-                securityGroups: [props.securityGroup!],
+                securityGroups: [securityGroup!],
             }),
         });
 
@@ -51,13 +48,13 @@ export class LabsRestApi extends Construct {
             defaultMethodOptions: {
                 authorizationType: apigateway.AuthorizationType.COGNITO,
                 authorizer: new apigateway.CognitoUserPoolsAuthorizer(this, "authorizer", {
-                    cognitoUserPools: [props.userPool],
+                    cognitoUserPools: [userPool],
                     identitySource: "method.request.header.Authorization",
                 }),
             },
             defaultCorsPreflightOptions: {
                 allowCredentials: true,
-                allowOrigins: props.urls,
+                allowOrigins: urls,
                 allowMethods: apigateway.Cors.ALL_METHODS,
                 allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
             },
@@ -87,7 +84,7 @@ export class LabsRestApi extends Construct {
         );
 
         restApi.root.addProxy({
-            defaultIntegration: new apigateway.LambdaIntegration(pythonProxyFunction),
+            defaultIntegration: new apigateway.LambdaIntegration(proxyFunction),
         });
 
         new apigateway.RequestValidator(this, "requestValidator", {
@@ -98,7 +95,7 @@ export class LabsRestApi extends Construct {
 
         new waf.CfnWebACLAssociation(this, "restApiWebAclAssociation", {
             resourceArn: restApi.deploymentStage.stageArn,
-            webAclArn: props.regionalWebAclArn,
+            webAclArn: regionalWebAclArn,
         });
 
         this.restApi = restApi;

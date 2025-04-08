@@ -8,13 +8,13 @@ import {
 } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
-type LabsBucketProps = Omit<
+type CommonBucketProps = Omit<
     BucketProps,
     "blockPublicAccess" | "enforceSSL" | "serverAccessLogsPrefix"
 >;
 
-export class LabsBucket extends Bucket {
-    constructor(scope: Construct, id: string, props: LabsBucketProps) {
+export class CommonBucket extends Bucket {
+    constructor(scope: Construct, id: string, props: CommonBucketProps) {
         super(scope, id, {
             autoDeleteObjects: true,
             removalPolicy: RemovalPolicy.DESTROY,
@@ -29,12 +29,12 @@ export class LabsBucket extends Bucket {
     }
 }
 
-interface LabsStorageBucketProps extends Omit<LabsBucketProps, "cors"> {
+interface CommonStorageBucketProps extends Omit<CommonBucketProps, "cors"> {
     allowedOrigins: string[];
 }
 
-export class LabsStorageBucket extends LabsBucket {
-    constructor(scope: Construct, id: string, props: LabsStorageBucketProps) {
+export class CommonStorageBucket extends CommonBucket {
+    constructor(scope: Construct, id: string, props: CommonStorageBucketProps) {
         super(scope, id, {
             cors: [
                 {

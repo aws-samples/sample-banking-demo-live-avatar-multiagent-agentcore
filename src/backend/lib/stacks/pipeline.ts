@@ -10,17 +10,17 @@ import {
 import { Construct } from "constructs";
 import { PresetStageType, projectConfig } from "../../../../config";
 import { LabsCodeBuildStep } from "../common/constructs/codebuild";
-import { LabsBucket } from "../common/constructs/s3";
-import { LabsStack } from "../common/constructs/stack";
+import { CommonBucket } from "../common/constructs/s3";
+import { CommonStack } from "../common/constructs/stack";
 import { ApplicationStage } from "../stage";
 
-export class PipelineStack extends LabsStack {
+export class PipelineStack extends CommonStack {
     constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
 
-        const sourceBucket = new LabsBucket(this, "sourceBucket", {
+        const sourceBucket = new CommonBucket(this, "sourceBucket", {
             bucketName: `${projectConfig.projectId}-source-bucket-${this.account}-${this.region}`,
-            serverAccessLogsBucket: new LabsBucket(this, "loggingBucket", {}),
+            serverAccessLogsBucket: new CommonBucket(this, "loggingBucket", {}),
             versioned: true, // requirement for triggering pipeline
         });
 

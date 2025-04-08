@@ -2,23 +2,23 @@ import { Aspects, Stage, StageProps } from "aws-cdk-lib";
 import { AwsSolutionsChecks, NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import { BackendStack } from "./stacks/backend";
-import { FrontendDeployStack, FrontendStack } from "./stacks/frontend";
+import { FrontendDeploymentStack, FrontendStack } from "./stacks/frontend";
 
 export class ApplicationStage extends Stage {
     constructor(scope: Construct, id: string, props: StageProps) {
         super(scope, id, props);
 
-        const frontendStack = new FrontendStack(this, "frontend");
+        const frontend = new FrontendStack(this, "frontend");
 
-        const backendStack = new BackendStack(this, "backend", {
-            urls: frontendStack.urls,
+        const backend = new BackendStack(this, "backend", {
+            urls: frontend.urls,
         });
 
-        // this stack must be named frontendDeploy
-        new FrontendDeployStack(this, "frontendDeploy", {
-            websiteBucket: frontendStack.websiteBucket,
-            distribution: frontendStack.distribution,
-            environmentVariables: backendStack.environmentVariables,
+        // this stack must be named frontendDeployment
+        new FrontendDeploymentStack(this, "frontendDeployment", {
+            websiteBucket: frontend.websiteBucket,
+            distribution: frontend.distribution,
+            environmentVariables: backend.environmentVariables,
         });
 
         NagSuppressions.addResourceSuppressions(

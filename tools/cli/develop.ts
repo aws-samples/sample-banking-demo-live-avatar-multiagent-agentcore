@@ -36,8 +36,6 @@ enum Operations {
     EXIT = "Exit 👋",
 }
 
-const prodMessage = redBright("\n🛑 Changes to prod must propagate through the dev pipeline.");
-
 const synthesizeStacks = async (stage: string): Promise<void> => {
     await executeCommand(
         `npm run -w backend cdk synth -- --profile ${getProfileName(stage)} -c stage=${stage}`
@@ -48,7 +46,15 @@ const selectStacks = async (
     stage: string,
     action: "deploy" | "hotswap" | "destroy"
 ): Promise<string | undefined> => {
-    if (await promptConfirm(`Would you like to just ${action} all ${stage} stacks?`)) {
+    if (stage === "prod") {
+        if (!(await promptConfirm(`Are you sure you want to ${action} prod stacks?`))) {
+            return;
+        }
+    }
+    if (
+        action !== "destroy" &&
+        (await promptConfirm(`Would you like to just ${action} all ${stage} stacks?`))
+    ) {
         return `${getStackPrefix(stage)}*`;
     }
 
@@ -80,10 +86,6 @@ const selectStacks = async (
 };
 
 const deployStacks = async (stage: string, action: "deploy" | "hotswap"): Promise<void> => {
-    if (stage === "prod") {
-        console.log(prodMessage);
-        return;
-    }
     const stacks = await selectStacks(stage, action);
     if (stacks) {
         if (action === "deploy") {
@@ -100,12 +102,13 @@ const deployStacks = async (stage: string, action: "deploy" | "hotswap"): Promis
 
 const deployFrontendStack = async (stage: string): Promise<void> => {
     if (stage === "prod") {
-        console.log(prodMessage);
-        return;
+        if (!(await promptConfirm(`Are you sure you want to deploy prod frontend?`))) {
+            return;
+        }
     }
     if (await createLocalBuild()) {
         await executeCommand(
-            `npm run -w backend cdk deploy -- -e ${getStackPrefix(stage)}-frontendDeploy --profile ${getProfileName(
+            `npm run -w backend cdk deploy -- -e ${getStackPrefix(stage)}-frontendDeployment --profile ${getProfileName(
                 stage
             )} -c stage=${stage}`
         );
@@ -135,14 +138,14 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
             region,
         });
         const command = new DescribeStacksCommand({
-            StackName: `${stage}-${projectConfig.projectId}-frontendDeploy`,
+            StackName: `${stage}-${projectConfig.projectId}-frontendDeployment`,
         });
         const response = await cfClient.send(command);
         stackOutputs = response.Stacks?.[0].Outputs ?? [];
     } catch (error) {
         console.error(
             redBright(
-                "\n🛑 Failed to get stack outputs. Make sure the frontendDeploy stack is deployed."
+                "\n🛑 Failed to get stack outputs. Make sure the frontendDeployment stack is deployed."
             )
         );
         console.error("\n", error);
@@ -162,7 +165,6 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
         })
         .join("\n");
     try {
-        await freePort(3000);
         writeFileSync(path.join(frontendPath, ".env"), environmentVariables);
         console.log(greenBright("\nCreated environment file!"));
     } catch {
@@ -207,6 +209,7 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
 };
 
 const createLocalServer = async (stage: string): Promise<void> => {
+    await freePort(3000);
     if (!(await createLocalEnvironment(stage))) {
         return;
     }
@@ -226,11 +229,6 @@ const createLocalServer = async (stage: string): Promise<void> => {
 };
 
 const destroyStacks = async (stage: string): Promise<void> => {
-    if (stage === "prod") {
-        if (!(await promptConfirm("Are you sure you want to destroy prod stacks?"))) {
-            return;
-        }
-    }
     const stacks = await selectStacks(stage, "destroy");
     if (stacks) {
         await executeCommand(

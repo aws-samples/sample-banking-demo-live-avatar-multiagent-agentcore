@@ -10,47 +10,42 @@ import {
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import * as path from "path";
-import { LabsNodejsFunction } from "../../../common/constructs/lambda";
+import { CommonNodejsFunction } from "../../../common/constructs/lambda";
 
-interface LabsGraphApiProps {
+interface GraphApiProps {
     vpc?: ec2.Vpc;
     securityGroup?: ec2.SecurityGroup;
     userPool: cognito.UserPool;
     regionalWebAclArn: string;
 }
 
-export class LabsGraphApi extends Construct {
+export class GraphApi extends Construct {
     public readonly graphApi: AmplifyData;
 
-    constructor(scope: Construct, id: string, props: LabsGraphApiProps) {
+    constructor(scope: Construct, id: string, props: GraphApiProps) {
         super(scope, id);
 
-        const typescriptResolverFunction = new LabsNodejsFunction(
-            this,
-            "typescriptResolverFunction",
-            {
-                entry: path.join(__dirname, "resolver-function", "index.ts"),
-                bundling: {
-                    externalModules: ["aws-sdk"],
+        const { vpc, securityGroup, userPool, regionalWebAclArn } = props;
+
+        const resolverFunction = new CommonNodejsFunction(this, "resolverFunction", {
+            entry: path.join(__dirname, "resolver-function", "index.ts"),
+            memorySize: 1024,
+            timeout: Duration.minutes(2),
+            ...(vpc && {
+                vpc: vpc,
+                vpcSubnets: {
+                    subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
                 },
-                memorySize: 1024,
-                timeout: Duration.minutes(2),
-                ...(props.vpc && {
-                    vpc: props.vpc,
-                    vpcSubnets: {
-                        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-                    },
-                    securityGroups: [props.securityGroup!],
-                }),
-            }
-        );
+                securityGroups: [securityGroup!],
+            }),
+        });
 
         const graphApi = new AmplifyData(this, "graphApi", {
             definition: AmplifyDataDefinition.fromFiles(path.join(__dirname, "schema.graphql")),
             authorizationModes: {
                 defaultAuthorizationMode: "AMAZON_COGNITO_USER_POOLS",
                 userPoolConfig: {
-                    userPool: props.userPool,
+                    userPool: userPool,
                 },
                 iamConfig: {
                     enableIamAuthorizationMode: true,
@@ -62,7 +57,7 @@ export class LabsGraphApi extends Construct {
                 excludeVerboseContent: false,
             },
             functionNameMap: {
-                resolverLambda: typescriptResolverFunction,
+                resolverLambda: resolverFunction,
             },
         });
         NagSuppressions.addResourceSuppressions(
@@ -84,9 +79,9 @@ export class LabsGraphApi extends Construct {
             true
         );
 
-        typescriptResolverFunction.addEnvironment("GRAPH_API_URL", graphApi.graphqlUrl);
-        graphApi.resources.graphqlApi.grantMutation(typescriptResolverFunction);
-        graphApi.resources.graphqlApi.grantQuery(typescriptResolverFunction);
+        resolverFunction.addEnvironment("GRAPH_API_URL", graphApi.graphqlUrl);
+        graphApi.resources.graphqlApi.grantMutation(resolverFunction);
+        graphApi.resources.graphqlApi.grantQuery(resolverFunction);
 
         graphApi.resources.cfnResources.cfnGraphqlApi.xrayEnabled = true;
         Object.values(graphApi.resources.cfnResources.cfnTables).forEach((table) => {
@@ -97,7 +92,7 @@ export class LabsGraphApi extends Construct {
 
         new waf.CfnWebACLAssociation(this, "graphApiWebAclAssociation", {
             resourceArn: graphApi.resources.graphqlApi.arn,
-            webAclArn: props.regionalWebAclArn,
+            webAclArn: regionalWebAclArn,
         });
 
         this.graphApi = graphApi;

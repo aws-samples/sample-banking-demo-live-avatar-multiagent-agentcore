@@ -195,24 +195,34 @@ const initializeStage = async (stage: string) => {
         bye();
     }
 
-    await createAdaProfile(account.number, getProfileName(stage));
+    try {
+        await createAdaProfile(account.number, getProfileName(stage));
 
-    await bootstrapAccount(account, stage);
+        await bootstrapAccount(account, stage);
 
-    if (projectConfig.midway) {
-        await createMidwaySecret(account, stage);
+        if (projectConfig.midway) {
+            await createMidwaySecret(account, stage);
+        }
+
+        console.log(greenBright(bold(`\nInitialized ${stage} account!`)));
+    } catch {
+        console.warn(redBright(`\nFailed to initialize ${stage} account.`));
     }
-
-    console.log(greenBright(bold(`\nInitialized ${stage} account!`)));
 };
 
 const main = async () => {
     banner();
 
     if (
-        !(await promptConfirm(
-            `To start, confirm the project identifier: ${projectConfig.projectId}`
-        ))
+        await (async () => {
+            try {
+                return !(await promptConfirm(
+                    `To start, confirm the project identifier: ${projectConfig.projectId}`
+                ));
+            } catch {
+                return true;
+            }
+        })()
     ) {
         bye(0);
     }

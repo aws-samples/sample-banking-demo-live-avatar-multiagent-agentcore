@@ -1,15 +1,15 @@
-import { aws_ec2 as ec2 } from "aws-cdk-lib";
+import { aws_ec2 as ec2, Stack } from "aws-cdk-lib";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 
-export class LabsVpc extends Construct {
+export class Vpc extends Construct {
     public vpc: ec2.Vpc;
     public securityGroup: ec2.SecurityGroup;
 
     constructor(scope: Construct, id: string) {
         super(scope, id);
 
-        const prefix = scope.node.tryGetContext("stackPrefix");
+        const subnetPrefix = Stack.of(this).stackName;
         const vpc = new ec2.Vpc(this, "vpc", {
             ipAddresses: ec2.IpAddresses.cidr("10.0.0.0/16"),
             natGateways: 1,
@@ -18,17 +18,17 @@ export class LabsVpc extends Construct {
             enableDnsSupport: true,
             subnetConfiguration: [
                 {
-                    name: `${prefix}-public-subnet`,
+                    name: `${subnetPrefix}-public`,
                     subnetType: ec2.SubnetType.PUBLIC,
                     cidrMask: 24,
                 },
                 {
-                    name: `${prefix}-private-isolated`,
+                    name: `${subnetPrefix}-privateIsolated`,
                     subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
                     cidrMask: 28,
                 },
                 {
-                    name: `${prefix}-private-with-egress`,
+                    name: `${subnetPrefix}-privateWithEgress`,
                     subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
                     cidrMask: 24,
                 },

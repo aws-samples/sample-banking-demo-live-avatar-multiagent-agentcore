@@ -8,13 +8,14 @@ import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction, NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
+import * as path from "path";
 
 const commonFunctionProps = {
     architecture: Architecture.ARM_64,
     logRetention: RetentionDays.THREE_MONTHS,
 };
 
-export class LabsNodejsFunction extends NodejsFunction {
+export class CommonNodejsFunction extends NodejsFunction {
     constructor(
         scope: Construct,
         id: string,
@@ -30,21 +31,7 @@ export class LabsNodejsFunction extends NodejsFunction {
 
 const pythonRuntime = Runtime.PYTHON_3_12;
 
-export class LabsPythonFunction extends PythonFunction {
-    constructor(
-        scope: Construct,
-        id: string,
-        props: Omit<PythonFunctionProps, "architecture" | "runtime" | "logRetention">
-    ) {
-        super(scope, id, {
-            ...commonFunctionProps,
-            runtime: pythonRuntime,
-            ...props,
-        });
-    }
-}
-
-export class LabsPythonLayerVersion extends PythonLayerVersion {
+export class CommonPythonLayerVersion extends PythonLayerVersion {
     constructor(
         scope: Construct,
         id: string,
@@ -54,6 +41,24 @@ export class LabsPythonLayerVersion extends PythonLayerVersion {
             compatibleArchitectures: [commonFunctionProps.architecture],
             compatibleRuntimes: [pythonRuntime],
             ...props,
+        });
+    }
+}
+
+export class CommonPythonFunction extends PythonFunction {
+    constructor(
+        scope: Construct,
+        id: string,
+        props: Omit<PythonFunctionProps, "architecture" | "runtime" | "logRetention">
+    ) {
+        const powertoolsLayer = new CommonPythonLayerVersion(scope, `${id}PowertoolsLayer`, {
+            entry: path.join(__dirname, "..", "layers", "powertools"),
+        });
+        super(scope, id, {
+            ...commonFunctionProps,
+            runtime: pythonRuntime,
+            ...props,
+            layers: [powertoolsLayer, ...(props.layers || [])],
         });
     }
 }

@@ -1,4 +1,3 @@
-import { StartBuildCommandInput } from "@aws-sdk/client-codebuild";
 import { CloudfrontWebAcl } from "@aws/pdk/static-website";
 import {
     CfnOutput,
@@ -6,20 +5,25 @@ import {
     aws_cloudfront_origins as cloudfront_origins,
     aws_codebuild as codebuild,
     custom_resources,
+    CustomResource,
+    Duration,
     aws_iam as iam,
+    aws_logs as logs,
     aws_s3 as s3,
     aws_s3_assets as s3_assets,
     Stack,
     StackProps,
+    aws_stepfunctions as stepfunctions,
 } from "aws-cdk-lib";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import * as path from "path";
-import { LabsReactProject } from "../common/constructs/codebuild";
-import { LabsBucket } from "../common/constructs/s3";
-import { LabsStack } from "../common/constructs/stack";
+import { LabsReactProject } from "../../common/constructs/codebuild";
+import { CommonNodejsFunction } from "../../common/constructs/lambda";
+import { CommonBucket } from "../../common/constructs/s3";
+import { CommonStack } from "../../common/constructs/stack";
 
-export class FrontendStack extends LabsStack {
+export class FrontendStack extends CommonStack {
     public readonly websiteBucket: s3.Bucket;
     public readonly distribution: cloudfront.Distribution;
     public readonly urls: string[];
@@ -27,9 +31,9 @@ export class FrontendStack extends LabsStack {
     constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
 
-        const loggingBucket = new LabsBucket(this, "loggingBucket", {});
+        const loggingBucket = new CommonBucket(this, "loggingBucket", {});
 
-        const websiteBucket = new LabsBucket(this, "websiteBucket", {
+        this.websiteBucket = new CommonBucket(this, "websiteBucket", {
             serverAccessLogsBucket: loggingBucket,
         });
 
@@ -50,10 +54,12 @@ export class FrontendStack extends LabsStack {
             ],
         });
 
-        const distribution = new cloudfront.Distribution(this, "distribution", {
+        this.distribution = new cloudfront.Distribution(this, "distribution", {
             defaultRootObject: "index.html",
             defaultBehavior: {
-                origin: cloudfront_origins.S3BucketOrigin.withOriginAccessControl(websiteBucket),
+                origin: cloudfront_origins.S3BucketOrigin.withOriginAccessControl(
+                    this.websiteBucket
+                ),
                 viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
                 originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
@@ -77,7 +83,7 @@ export class FrontendStack extends LabsStack {
             logIncludesCookies: true,
             logFilePrefix: "distribution",
         });
-        NagSuppressions.addResourceSuppressions(distribution, [
+        NagSuppressions.addResourceSuppressions(this.distribution, [
             {
                 id: "AwsSolutions-CFR1",
                 reason: "Distribution should be globally accessible.",
@@ -88,24 +94,25 @@ export class FrontendStack extends LabsStack {
             },
         ]);
 
-        this.websiteBucket = websiteBucket;
-        this.distribution = distribution;
-        this.urls = [`https://${distribution.distributionDomainName}`, "http://localhost:3000"];
+        this.urls = [
+            `https://${this.distribution.distributionDomainName}`,
+            "http://localhost:3000",
+        ];
     }
 }
 
-export interface FrontendDeployStackProps extends StackProps {
+interface FrontendDeploymentStackProps extends StackProps {
     websiteBucket: s3.Bucket;
     distribution: cloudfront.Distribution;
     environmentVariables: Record<string, string>;
 }
 
-export class FrontendDeployStack extends LabsStack {
-    constructor(scope: Construct, id: string, props: FrontendDeployStackProps) {
+export class FrontendDeploymentStack extends CommonStack {
+    constructor(scope: Construct, id: string, props: FrontendDeploymentStackProps) {
         super(scope, id, props);
 
         const websiteAssets = new s3_assets.Asset(this, "websiteAssets", {
-            path: path.join(__dirname, "..", "..", "..", "frontend"),
+            path: path.join(__dirname, "..", "..", "..", "..", "frontend"),
             exclude: ["node_modules", "dist"],
         });
 
@@ -114,7 +121,7 @@ export class FrontendDeployStack extends LabsStack {
                 Object.entries(props.environmentVariables).map(([key, value]) => [key, { value }])
             );
 
-        const project = new LabsReactProject(this, "reactProject", {
+        const reactProject = new LabsReactProject(this, "reactProject", {
             source: codebuild.Source.s3({
                 bucket: websiteAssets.bucket,
                 path: websiteAssets.s3ObjectKey,
@@ -140,7 +147,7 @@ export class FrontendDeployStack extends LabsStack {
                 version: "0.2",
                 phases: {
                     install: {
-                        runtimeVersions: {
+                        "runtime-versions": {
                             nodejs: "22",
                         },
                         commands: ["npm install"],
@@ -160,34 +167,65 @@ export class FrontendDeployStack extends LabsStack {
                 },
             }),
         });
-        project.addToRolePolicy(
+        reactProject.addToRolePolicy(
             new iam.PolicyStatement({
                 actions: ["cloudfront:CreateInvalidation"],
                 resources: [props.distribution.distributionArn],
             })
         );
-        NagSuppressions.addResourceSuppressions(project, [
+        NagSuppressions.addResourceSuppressions(reactProject, [
             {
                 id: "AwsSolutions-CB4",
                 reason: "CodeBuild project does not need a KMS key for encryption.",
             },
         ]);
 
-        const startBuildCall: custom_resources.AwsSdkCall = {
-            service: "CodeBuild",
-            action: "startBuild",
-            parameters: {
-                projectName: project.projectName,
-            } as StartBuildCommandInput,
-            physicalResourceId: custom_resources.PhysicalResourceId.of(websiteAssets.assetHash),
-            outputPaths: ["build.id", "build.buildNumber"],
-        };
-        new custom_resources.AwsCustomResource(this, "buildCustomResource", {
-            onCreate: startBuildCall,
-            onUpdate: startBuildCall,
-            policy: custom_resources.AwsCustomResourcePolicy.fromSdkCalls({
-                resources: [project.projectArn],
+        const providerFunctionEntry = path.join(__dirname, "provider-function", "index.ts");
+        const reactProvider = new custom_resources.Provider(this, "reactProvider", {
+            onEventHandler: new CommonNodejsFunction(this, "reactOnEventHandler", {
+                entry: providerFunctionEntry,
+                handler: "onEventHandler",
+                initialPolicy: [
+                    new iam.PolicyStatement({
+                        actions: ["codebuild:StartBuild"],
+                        resources: [reactProject.projectArn],
+                    }),
+                ],
             }),
+            isCompleteHandler: new CommonNodejsFunction(this, "reactIsCompleteHandler", {
+                entry: providerFunctionEntry,
+                handler: "isCompleteHandler",
+                initialPolicy: [
+                    new iam.PolicyStatement({
+                        actions: ["codebuild:BatchGetBuilds"],
+                        resources: [reactProject.projectArn],
+                    }),
+                ],
+            }),
+            logRetention: logs.RetentionDays.THREE_MONTHS,
+            queryInterval: Duration.seconds(15),
+            totalTimeout: Duration.minutes(15),
+            waiterStateMachineLogOptions: {
+                level: stepfunctions.LogLevel.ALL,
+            },
+        });
+        NagSuppressions.addResourceSuppressions(
+            reactProvider,
+            [
+                {
+                    id: "AwsSolutions-SF2",
+                    reason: "X-Ray tracing is not configurable.",
+                },
+            ],
+            true
+        );
+
+        new CustomResource(this, "reactCustomResource", {
+            serviceToken: reactProvider.serviceToken,
+            properties: {
+                projectName: reactProject.projectName,
+                assetHash: websiteAssets.assetHash,
+            },
         });
 
         const outputPrefix = Stack.of(this).stackName;

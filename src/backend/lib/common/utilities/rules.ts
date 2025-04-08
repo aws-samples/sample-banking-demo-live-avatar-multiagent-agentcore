@@ -1,6 +1,6 @@
 import { CfnWebACL } from "aws-cdk-lib/aws-wafv2";
 
-interface LabsManagedRuleProperty {
+interface CommonManagedRuleProperty {
     name: string;
     overrideAction?: CfnWebACL.OverrideActionProperty;
     ruleActionOverrides?: CfnWebACL.RuleActionOverrideProperty[];
@@ -9,7 +9,7 @@ interface LabsManagedRuleProperty {
 export function createManagedRules(
     prefix: string,
     startingPriority: number,
-    rules: LabsManagedRuleProperty[]
+    rules: CommonManagedRuleProperty[]
 ): CfnWebACL.RuleProperty[] {
     return rules.map((rule, index) => {
         const ruleName = `${prefix}-${rule.name}`;
