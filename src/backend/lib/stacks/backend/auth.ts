@@ -78,12 +78,13 @@ export class Auth extends Construct {
             groupName: "Users",
         });
 
+        const tokenValidity = Duration.hours(8);
         const userPoolClient = new LabsUserPoolClient(this, "userPoolClient", {
             userPool: userPool,
             generateSecret: false,
-            refreshTokenValidity: Duration.minutes(60),
-            accessTokenValidity: Duration.minutes(60),
-            idTokenValidity: Duration.minutes(60),
+            refreshTokenValidity: tokenValidity,
+            accessTokenValidity: tokenValidity,
+            idTokenValidity: tokenValidity,
             readAttributes: new cognito.ClientAttributes().withStandardAttributes({
                 email: true,
             }),

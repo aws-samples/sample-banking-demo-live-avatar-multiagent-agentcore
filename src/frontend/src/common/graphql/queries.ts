@@ -2,36 +2,35 @@
 /* eslint-disable */
 // this is an auto generated file. This will be overwritten
 
-import * as APITypes from "../API";
+import * as APITypes from "./types";
 type GeneratedQuery<InputType, OutputType> = string & {
   __generatedQueryInput: InputType;
   __generatedQueryOutput: OutputType;
 };
 
-export const getChat = /* GraphQL */ `query GetChat($id: ID!) {
-  getChat(id: $id) {
+export const getMessages = /* GraphQL */ `query GetMessages($id: ID!) {
+  getMessages(id: $id) {
     userId
-    email
-    human
-    assistant
+    message
     id
     createdAt
     updatedAt
     __typename
   }
 }
-` as GeneratedQuery<APITypes.GetChatQueryVariables, APITypes.GetChatQuery>;
-export const listChats = /* GraphQL */ `query ListChats(
-  $filter: ModelChatFilterInput
+` as GeneratedQuery<
+  APITypes.GetMessagesQueryVariables,
+  APITypes.GetMessagesQuery
+>;
+export const listMessages = /* GraphQL */ `query ListMessages(
+  $filter: ModelMessagesFilterInput
   $limit: Int
   $nextToken: String
 ) {
-  listChats(filter: $filter, limit: $limit, nextToken: $nextToken) {
+  listMessages(filter: $filter, limit: $limit, nextToken: $nextToken) {
     items {
       userId
-      email
-      human
-      assistant
+      message
       id
       createdAt
       updatedAt
@@ -41,11 +40,14 @@ export const listChats = /* GraphQL */ `query ListChats(
     __typename
   }
 }
-` as GeneratedQuery<APITypes.ListChatsQueryVariables, APITypes.ListChatsQuery>;
+` as GeneratedQuery<
+  APITypes.ListMessagesQueryVariables,
+  APITypes.ListMessagesQuery
+>;
 export const chatByUserId = /* GraphQL */ `query ChatByUserId(
   $userId: ID!
   $sortDirection: ModelSortDirection
-  $filter: ModelChatFilterInput
+  $filter: ModelMessagesFilterInput
   $limit: Int
   $nextToken: String
 ) {
@@ -58,9 +60,7 @@ export const chatByUserId = /* GraphQL */ `query ChatByUserId(
   ) {
     items {
       userId
-      email
-      human
-      assistant
+      message
       id
       createdAt
       updatedAt

@@ -8,7 +8,6 @@ import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction, NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
-import * as path from "path";
 
 const commonFunctionProps = {
     architecture: Architecture.ARM_64,
@@ -51,14 +50,10 @@ export class CommonPythonFunction extends PythonFunction {
         id: string,
         props: Omit<PythonFunctionProps, "architecture" | "runtime" | "logRetention">
     ) {
-        const powertoolsLayer = new CommonPythonLayerVersion(scope, `${id}PowertoolsLayer`, {
-            entry: path.join(__dirname, "..", "layers", "powertools"),
-        });
         super(scope, id, {
             ...commonFunctionProps,
             runtime: pythonRuntime,
             ...props,
-            layers: [powertoolsLayer, ...(props.layers || [])],
         });
     }
 }

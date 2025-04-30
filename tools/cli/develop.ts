@@ -7,7 +7,7 @@ import {
 } from "@aws-sdk/client-cloudformation";
 import { blueBright, bold, greenBright, redBright } from "chalk";
 import enquirer from "enquirer";
-import { readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import * as path from "path";
 import * as yaml from "yaml";
 import { projectConfig } from "../../config";
@@ -131,7 +131,7 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
 
     const region = projectConfig.accounts[stage].region;
 
-    // Get stack outputs
+    // get stack outputs
     let stackOutputs: Output[] = [];
     try {
         const cfClient = new CloudFormationClient({
@@ -154,7 +154,7 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
 
     const frontendPath = path.join(__dirname, "..", "..", "src", "frontend");
 
-    // Create environment file
+    // create environment file
     const environmentVariables = stackOutputs
         .filter((output) => output.ExportName?.includes("vite-"))
         .map((output) => {
@@ -172,31 +172,46 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
         return false;
     }
 
-    // Update GraphQL config yaml
+    // create/update GraphQL config yaml
     const graphApiId = stackOutputs.find((output) =>
         output.ExportName?.endsWith("codegen-graph-api-id")
     )?.OutputValue;
     if (graphApiId) {
         const configPath = path.join(frontendPath, ".graphqlconfig.yml");
+        let graphqlConfig = {
+            projects: {
+                "Codegen Project": {
+                    schemaPath: "schema.json",
+                    includes: ["src/common/graphql/**/*.ts"],
+                    extensions: {
+                        amplify: {
+                            codeGenTarget: "typescript",
+                            generatedFileName: "src/common/graphql/types.ts",
+                            docsFilePath: "src/common/graphql",
+                            region: region,
+                            apiId: graphApiId,
+                            frontend: "javascript",
+                            framework: "react",
+                            maxDepth: 2,
+                        },
+                    },
+                },
+            },
+        };
+        let successMessage = greenBright("\nCreated GraphQL config file!");
         try {
-            const graphqlConfig = yaml.parse(readFileSync(configPath, "utf-8"));
-
-            graphqlConfig.projects["Codegen Project"].extensions.amplify.apiId = graphApiId;
-            graphqlConfig.projects["Codegen Project"].extensions.amplify.region = region;
+            if (existsSync(configPath)) {
+                graphqlConfig = yaml.parse(readFileSync(configPath, "utf-8"));
+                graphqlConfig.projects["Codegen Project"].extensions.amplify.apiId = graphApiId;
+                graphqlConfig.projects["Codegen Project"].extensions.amplify.region = region;
+                successMessage = greenBright("\nUpdated GraphQL config file!");
+            }
 
             writeFileSync(configPath, yaml.stringify(graphqlConfig));
-            console.log(greenBright("\nUpdated GraphQL config file!"));
-
+            console.log(successMessage);
             await executeCommand("npm run -w frontend generate");
         } catch {
-            try {
-                console.log(blueBright("\nCreating new GraphQL config file..."));
-                await executeCommand(
-                    `npx -w frontend @aws-amplify/cli add codegen --apiId ${graphApiId} --region ${region}`
-                );
-            } catch {
-                console.error(redBright("\nFailed to generate GraphQL files."));
-            }
+            console.error(redBright("\nFailed to generate GraphQL files."));
         }
     }
 

@@ -20,7 +20,7 @@ interface GraphApiProps {
 }
 
 export class GraphApi extends Construct {
-    public readonly graphApi: AmplifyData;
+    public readonly amplifiedGraphApi: AmplifyData;
 
     constructor(scope: Construct, id: string, props: GraphApiProps) {
         super(scope, id);
@@ -40,7 +40,7 @@ export class GraphApi extends Construct {
             }),
         });
 
-        const graphApi = new AmplifyData(this, "graphApi", {
+        const amplifiedGraphApi = new AmplifyData(this, "amplifiedGraphApi", {
             definition: AmplifyDataDefinition.fromFiles(path.join(__dirname, "schema.graphql")),
             authorizationModes: {
                 defaultAuthorizationMode: "AMAZON_COGNITO_USER_POOLS",
@@ -57,11 +57,11 @@ export class GraphApi extends Construct {
                 excludeVerboseContent: false,
             },
             functionNameMap: {
-                resolverLambda: resolverFunction,
+                resolverFunction,
             },
         });
         NagSuppressions.addResourceSuppressions(
-            graphApi,
+            amplifiedGraphApi,
             [
                 {
                     id: "AwsSolutions-IAM4",
@@ -79,22 +79,18 @@ export class GraphApi extends Construct {
             true
         );
 
-        resolverFunction.addEnvironment("GRAPH_API_URL", graphApi.graphqlUrl);
-        graphApi.resources.graphqlApi.grantMutation(resolverFunction);
-        graphApi.resources.graphqlApi.grantQuery(resolverFunction);
-
-        graphApi.resources.cfnResources.cfnGraphqlApi.xrayEnabled = true;
-        Object.values(graphApi.resources.cfnResources.cfnTables).forEach((table) => {
+        amplifiedGraphApi.resources.cfnResources.cfnGraphqlApi.xrayEnabled = true;
+        Object.values(amplifiedGraphApi.resources.cfnResources.cfnTables).forEach((table) => {
             table.pointInTimeRecoverySpecification = {
                 pointInTimeRecoveryEnabled: true,
             };
         });
 
         new waf.CfnWebACLAssociation(this, "graphApiWebAclAssociation", {
-            resourceArn: graphApi.resources.graphqlApi.arn,
+            resourceArn: amplifiedGraphApi.resources.graphqlApi.arn,
             webAclArn: regionalWebAclArn,
         });
 
-        this.graphApi = graphApi;
+        this.amplifiedGraphApi = amplifiedGraphApi;
     }
 }
