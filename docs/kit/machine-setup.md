@@ -144,4 +144,5 @@ Docker is known to consume a lot of disk space and doesn't auto remove older ima
 
 ## Amazon Q Developer
 
-25. Follow these [instructions](https://docs.hub.amazon.dev/qdeveloper/user-guide/getting-started/) to set up Amazon Q Developer internally.
+25. Follow these [instructions](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html) to install Amazon Q for command line.
+26. Follow these [instructions](https://docs.hub.amazon.dev/qdeveloper/user-guide/getting-started/) to set up Amazon Q Developer internally.

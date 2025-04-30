@@ -3,7 +3,7 @@ import { TopNavigation } from "@cloudscape-design/components";
 import { applyMode, Mode } from "@cloudscape-design/global-styles";
 import { getCurrentUser } from "aws-amplify/auth";
 import { useEffect, useState } from "react";
-import Favicon from "../assets/favicon.png";
+import Favicon from "./favicon.png";
 
 const APP_NAME = "Demo Starter Kit";
 
@@ -12,7 +12,7 @@ interface AuthedUser {
     userID: string;
 }
 
-const Bar = () => {
+const TopBar = () => {
     const [theme, setTheme] = useState<Mode>(() => {
         const savedTheme = localStorage.getItem("theme");
         return savedTheme === "dark" ? Mode.Dark : Mode.Light;
@@ -135,4 +135,4 @@ const Bar = () => {
     );
 };
 
-export default Bar;
+export default TopBar;

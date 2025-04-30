@@ -164,16 +164,15 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
 
 #### Deploy Frontend
 
-- This operation deploys the [frontend build stack](../src/backend/lib/stacks/frontend/index.ts) by itself using the `-e` flag for quicker deployment.
+- This operation deploys the [frontend deployment stack](../src/backend/lib/stacks/frontend/index.ts) by itself using the `-e` flag for quicker deployment.
 - It first builds the frontend to ensure there are no errors.
 
 #### Refresh Local Environment
 
 - This operation is invoked by the [next operation](#test-frontend-locally-) automatically, but it can also be run by itself if you just want to:
-    - Pull down the CfnOutputs from the [frontend build stack](../src/backend/lib/stacks/frontend/index.ts).
+    - Pull down the CfnOutputs from the [frontend deployment stack](../src/backend/lib/stacks/frontend/index.ts).
     - Update the .env file in the frontend source folder with those outputs.
     - If a Graph API ID is present, generate GraphQL files.
-        - If you have not yet created a [.graphqlconfig.yaml] file you will be prompted to **Choose the type of app that you're building**. Select **javascript**, **react**, then **typescript** then hit enter two more times.
 
 #### Test Frontend Locally
 
@@ -243,7 +242,7 @@ See [bin/demo.ts](../src/backend/bin/demo.ts) for more context.
 
 ### Pipeline Stack
 
-![arch-pipeline](./images/arch-pipeline.png)
+![arch-pipeline](./images/arch-pipeline.drawio.png)
 
 This stack is only deployed to the `dev` account via the [configuration CLI](#configuration) when the **codePipeline** property is set to `true` in the project configuration file.
 
@@ -274,6 +273,6 @@ See [cognito.ts](../src/backend/lib/common/constructs/cognito.ts) for more conte
 
 ### CodeBuild Construct
 
-This custom construct enables the use of [CodeArtifact (formerly Goshawk)](https://docs.hub.amazon.dev/codeartifact/user-guide/getting-started/) in both the [frontend build stack](../src/backend/lib/stacks/frontend/index.ts) and [pipeline stack](../src/backend/lib/stacks/pipeline.ts).
+This custom construct enables the use of [CodeArtifact (formerly Goshawk)](https://docs.hub.amazon.dev/codeartifact/user-guide/getting-started/) in both the [frontend deployment stack](../src/backend/lib/stacks/frontend/index.ts) and [pipeline stack](../src/backend/lib/stacks/pipeline.ts).
 
 See [codebuild.ts](../src/backend/lib/common/constructs/codebuild.ts) for more context.

@@ -1,6 +1,6 @@
 # GenAI Labs Demo Starter Kit
 
-![cli-welcome](./docs/images/cli-welcome.png)
+![cli-welcome](./docs/kit/images/cli-welcome.png)
 
 This starter kit includes ready-to-deploy, compliant and secure CDK and React app components with Midway integration. It also includes customizable CLI tooling for easier demo configuration and management. While we offer this set of components and tools, you retain the freedom to customize any and all aspects of the starter kit to fit your use case (even if it has nothing to do with GenAI).
 

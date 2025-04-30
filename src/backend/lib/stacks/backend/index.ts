@@ -59,8 +59,8 @@ export class BackendStack extends CommonStack {
             }),
             VITE_USER_POOL_CLIENT_ID: auth.userPoolClient.userPoolClientId,
             VITE_IDENTITY_POOL_ID: auth.identityPool.attrId,
-            CODEGEN_GRAPH_API_ID: graphApi.graphApi.apiId,
-            VITE_GRAPH_API_URL: graphApi.graphApi.graphqlUrl,
+            CODEGEN_GRAPH_API_ID: graphApi.amplifiedGraphApi.apiId,
+            VITE_GRAPH_API_URL: graphApi.amplifiedGraphApi.graphqlUrl,
             VITE_REST_API_URL: restApi.restApi.url,
             VITE_STORAGE_BUCKET_NAME: storage.storageBucket.bucketName,
         };

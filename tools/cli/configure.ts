@@ -33,12 +33,9 @@ const createAdaProfile = async (accountNumber: string, profileName: string) => {
                 greenBright(`\nCreated ADA profile "${profileName}" for account ${accountNumber}!`)
             );
         } catch {
-            console.error(
-                redBright(
-                    `\n🛑 Failed to create ADA profile "${profileName}" for account ${accountNumber}.`
-                )
+            throw new Error(
+                `\nFailed to create ADA profile "${profileName}" for account ${accountNumber}.`
             );
-            bye();
         }
     }
 };
@@ -80,8 +77,7 @@ const bootstrapAccount = async (account: AccountConfig, stage: string) => {
         }
         console.log(greenBright(`\nBootstrapped ${stage} account ${account.number}!`));
     } catch {
-        console.error(redBright(`\n🛑 Failed to bootstrap ${stage} account ${account.number}.`));
-        bye();
+        throw new Error(`\nFailed to bootstrap ${stage} account ${account.number}.`);
     }
 };
 
@@ -156,12 +152,9 @@ const createMidwaySecret = async (account: AccountConfig, stage: string) => {
                 greenBright(`\nCreated Midway secret for ${stage} account ${account.number}!`)
             );
         } catch {
-            console.error(
-                redBright(
-                    `\n🛑 Failed to create Midway secret for ${stage} account ${account.number}.`
-                )
+            throw new Error(
+                `\nFailed to create Midway secret for ${stage} account ${account.number}.`
             );
-            bye();
         }
     }
 
@@ -177,12 +170,9 @@ const createMidwaySecret = async (account: AccountConfig, stage: string) => {
             )
         );
     } catch {
-        console.error(
-            redBright(
-                `\n🛑 Failed to update Midway secret in config file for ${stage} account ${account.number}.`
-            )
+        throw new Error(
+            `\nFailed to update Midway secret in config file for ${stage} account ${account.number}.`
         );
-        bye();
     }
 };
 
@@ -205,8 +195,9 @@ const initializeStage = async (stage: string) => {
         }
 
         console.log(greenBright(bold(`\nInitialized ${stage} account!`)));
-    } catch {
-        console.warn(redBright(`\nFailed to initialize ${stage} account.`));
+    } catch (error) {
+        console.warn(redBright(error.message));
+        console.warn(redBright(bold(`\nFailed to initialize ${stage} account.`)));
     }
 };
 
