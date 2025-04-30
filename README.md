@@ -10,23 +10,23 @@ Let's get started...
 
 ## Developer Machine Setup
 
-To ensure your Mac, Windows, or Cloud Desktop machine is properly set up for use with the starter kit, start [here](./docs/machine-setup.md).
+To ensure your Mac, Windows, or Cloud Desktop machine is properly set up for use with the starter kit, start [here](./docs/kit/machine-setup.md).
 
 ## Demo Creation
 
 If your demo has already been created and you are looking to set up the project, skip to the [next section](#demo-setup).
 
-If your developer machine has been properly set up and you are creating a brand new demo, start [here](./docs/demo-creation.md).
+If your developer machine has been properly set up and you are creating a brand new demo, start [here](./docs/kit/demo-creation.md).
 
 - This is a one-time process when creating a brand new demo.
 
 ## Demo Setup
 
-If your developer machine has been properly set up, your demo has already been created, and you are looking to set up the project, start [here](./docs/demo-setup.md).
+If your developer machine has been properly set up, your demo has already been created, and you are looking to set up the project, start [here](./docs/kit/demo-setup.md).
 
 ## Documentation
 
-See the [design documentation](./docs/design.md) to learn more about the Demo Starter Kit.
+See the [design documentation](./docs/kit/design.md) to learn more about the Demo Starter Kit.
 
 ## License
 
