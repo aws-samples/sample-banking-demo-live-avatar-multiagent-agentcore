@@ -1,26 +1,15 @@
 {
-    "projectId": "PROJECT-IDENTIFIER",
+    "projectId": "rock-all-up",
     "gitlabGroup": "genai-labs/demo-assets",
-    "gitlabProject": "GITLAB-PROJECT-NAME",
+    "gitlabProject": "Feature - Bedrock All Up",
     "codeArtifact": false,
     "codePipeline": true,
     "midway": true,
     "accounts": {
         "dev": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
-        },
-        "prod": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
-        },
-        "ALIAS_1": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
-        },
-        "ALIAS_2": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
+            "number": "652058538806",
+            "region": "us-west-2",
+            "midwaySecretId": "HSZwal"
         }
     }
 }
