@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 
 import {
-    CloudFormationClient,
-    DescribeStacksCommand,
-    Output,
-} from "@aws-sdk/client-cloudformation";
+    AdminCreateUserCommand,
+    AdminDeleteUserCommand,
+    CognitoIdentityProviderClient,
+    ListUsersCommand,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { blueBright, bold, greenBright, redBright } from "chalk";
 import enquirer from "enquirer";
 import { existsSync, readFileSync, writeFileSync } from "fs";
+import emailValidator from "node-email-verifier";
 import * as path from "path";
 import * as yaml from "yaml";
 import { projectConfig } from "../../config";
@@ -16,11 +18,15 @@ import {
     bye,
     executeCommand,
     freePort,
+    getProfileCredentials,
     getProfileName,
+    getProfileRegion,
+    getStackOutputs,
     getStackPrefix,
     promptConfirm,
     promptMultiSelect,
     promptSelect,
+    promptValue,
     refreshCredentials,
 } from "./utils";
 
@@ -32,8 +38,16 @@ enum Operations {
     DEPLOY_FRONTEND = "Deploy Frontend 🖥️",
     REFRESH_ENV = "Refresh Local Environment 📦",
     TEST_FRONTEND = "Test Frontend Locally 💻",
+    USER_MANAGEMENT = "Cognito User Management 👤",
+    // EJECT = "Eject ⏏️",
     DESTROY_CDK = "Destroy CDK Stack(s) 🗑️",
     EXIT = "Exit 👋",
+}
+
+enum UserManagementOperations {
+    CREATE_KIOSK_USER = "Create Kiosk User",
+    CREATE_USER = "Create User",
+    DELETE_USER = "Delete User",
 }
 
 const synthesizeStacks = async (stage: string): Promise<void> => {
@@ -129,26 +143,8 @@ const createLocalBuild = async (): Promise<boolean> => {
 const createLocalEnvironment = async (stage: string): Promise<boolean> => {
     console.log(blueBright(bold("\nCreating local environment...")));
 
-    const region = projectConfig.accounts[stage].region;
-
-    // get stack outputs
-    let stackOutputs: Output[] = [];
-    try {
-        const cfClient = new CloudFormationClient({
-            region,
-        });
-        const command = new DescribeStacksCommand({
-            StackName: `${stage}-${projectConfig.projectId}-frontendDeployment`,
-        });
-        const response = await cfClient.send(command);
-        stackOutputs = response.Stacks?.[0].Outputs ?? [];
-    } catch (error) {
-        console.error(
-            redBright(
-                "\n🛑 Failed to get stack outputs. Make sure the frontendDeployment stack is deployed."
-            )
-        );
-        console.error("\n", error);
+    const stackOutputs = await getStackOutputs(stage);
+    if (!stackOutputs) {
         return false;
     }
 
@@ -172,6 +168,7 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
         return false;
     }
 
+    const region = getProfileRegion(stage);
     // create/update GraphQL config yaml
     const graphApiId = stackOutputs.find((output) =>
         output.ExportName?.endsWith("codegen-graph-api-id")
@@ -252,6 +249,120 @@ const destroyStacks = async (stage: string): Promise<void> => {
     }
 };
 
+const createCognitoUser = async (
+    client: CognitoIdentityProviderClient,
+    userPoolId: string,
+    username: string,
+    password?: string,
+    isKiosk = false
+): Promise<boolean> => {
+    try {
+        await client.send(
+            new AdminCreateUserCommand({
+                UserPoolId: userPoolId,
+                Username: username,
+                TemporaryPassword: password,
+                UserAttributes: [
+                    { Name: "email", Value: username },
+                    { Name: "email_verified", Value: "true" },
+                ],
+            })
+        );
+        console.log(
+            greenBright(bold(`\nCreated ${isKiosk ? "kiosk " : ""}user!`)),
+            greenBright(
+                password
+                    ? `\nUsername: ${username}\nTemporary Password: ${password}`
+                    : `\nEmailed temporary password to ${username}.`
+            )
+        );
+        return true;
+    } catch (error) {
+        console.log(redBright(`\n🛑 Failed to create ${isKiosk ? "kiosk " : ""}user.`));
+        console.error("\n", error);
+        return false;
+    }
+};
+
+const userManagement = async (stage: string) => {
+    const stackOutputs = await getStackOutputs(stage);
+    const userPoolId = stackOutputs?.find((output) =>
+        output.ExportName?.includes("vite-user-pool-id")
+    )?.OutputValue;
+    if (!userPoolId) {
+        console.log(redBright(`\n🛑 Default user pool not found.`));
+        return;
+    }
+    console.log(greenBright(`\nFound default user pool!`));
+
+    const client = new CognitoIdentityProviderClient({
+        region: getProfileRegion(stage),
+        credentials: getProfileCredentials(stage),
+    });
+
+    const userManagementOperation = await promptSelect(
+        "operation",
+        Object.values(UserManagementOperations)
+    );
+    switch (userManagementOperation) {
+        case UserManagementOperations.CREATE_KIOSK_USER: {
+            console.log(blueBright("\nCreating kiosk user..."));
+            await createCognitoUser(client, userPoolId, "kiosk@amazon.com", "Kiosk@123", true);
+            break;
+        }
+        case UserManagementOperations.CREATE_USER: {
+            console.log(blueBright("\nCreating new user..."));
+            const email = await promptValue(`Enter an email address:`, false);
+            if (await emailValidator(email, { checkMx: false })) {
+                await createCognitoUser(client, userPoolId, email, undefined);
+            } else {
+                console.log(redBright(`\n🛑 Invalid email address.`));
+            }
+            break;
+        }
+        case UserManagementOperations.DELETE_USER: {
+            console.log(blueBright("\nListing users..."));
+            try {
+                const listResponse = await client.send(
+                    new ListUsersCommand({
+                        UserPoolId: userPoolId,
+                    })
+                );
+                const userList =
+                    listResponse.Users?.filter((u) => !u.Username?.includes("AmazonFederate")) ||
+                    [];
+                if (userList.length === 0) {
+                    console.log(redBright(`\n🛑 No users found.`));
+                    return;
+                }
+                const user = await promptSelect(
+                    "user",
+                    userList.map((i) => i.Username || "")
+                );
+                if (!(await promptConfirm(`Are you sure you want to delete user ${user}?`))) {
+                    return;
+                }
+                try {
+                    await client.send(
+                        new AdminDeleteUserCommand({
+                            UserPoolId: userPoolId,
+                            Username: user,
+                        })
+                    );
+                    console.log(greenBright(bold(`\nDeleted user ${user}.`)));
+                } catch (error) {
+                    console.log(redBright(`\n🛑 Failed to delete user.`));
+                    console.error("\n", error);
+                }
+            } catch (error) {
+                console.log(redBright(`\n🛑 Failed to list users.`));
+                console.error("\n", error);
+            }
+            break;
+        }
+    }
+};
+
 const operations = async () => {
     let selection = "";
     try {
@@ -287,6 +398,9 @@ const operations = async () => {
                 break;
             case Operations.TEST_FRONTEND:
                 await createLocalServer(stage);
+                break;
+            case Operations.USER_MANAGEMENT:
+                await userManagement(stage);
                 break;
             case Operations.DESTROY_CDK:
                 await destroyStacks(stage);

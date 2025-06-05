@@ -9,7 +9,7 @@ import {
     executeCommand,
     getProfileName,
     promptConfirm,
-    promptSecret,
+    promptValue,
     refreshCredentials,
 } from "./utils";
 
@@ -111,8 +111,9 @@ const createMidwaySecret = async (account: AccountConfig, stage: string) => {
                             )
                         );
                     }
-                    secret = await promptSecret(
-                        `Paste Midway secret token for ${stage} account ${account.number}:`
+                    secret = await promptValue(
+                        `Paste Midway secret token for ${stage} account ${account.number}:`,
+                        true
                     );
                 } while (secret.length < 40);
             } else {

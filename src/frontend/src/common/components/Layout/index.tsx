@@ -31,6 +31,7 @@ const Layout = (props: AppLayoutProps) => {
                 }
                 stickyNotifications
                 toolsHide={true}
+                contentType="cards"
                 {...props}
             />
         </>

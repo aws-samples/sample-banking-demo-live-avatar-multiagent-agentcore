@@ -1,3 +1,5 @@
+import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+import { fromIni } from "@aws-sdk/credential-providers";
 import { blueBright, bold, greenBright, magentaBright, redBright } from "chalk";
 import { spawn } from "child_process";
 import enquirer from "enquirer";
@@ -33,15 +35,15 @@ export const promptConfirm = async (message: string): Promise<boolean> => {
     ).confirm;
 };
 
-export const promptSecret = async (message: string): Promise<string> => {
+export const promptValue = async (message: string, secret: boolean): Promise<string> => {
     console.log("");
     return (
         (await enquirer.prompt({
-            type: "password",
-            name: "secret",
+            type: secret ? "password" : "input",
+            name: "value",
             message: message,
-        })) as { secret: string }
-    ).secret;
+        })) as { value: string }
+    ).value;
 };
 
 export const promptSelect = async (item: string, choices: string[]): Promise<string> => {
@@ -140,7 +142,7 @@ export const refreshCredentials = async (stage: string) => {
         console.log(greenBright(`\nRefreshed ${stage} credentials!`));
     } catch {
         console.error(redBright(`\n🛑 Failed to refresh ${stage} credentials.`));
-        bye();
+        return;
     }
 
     // try getting CodeArtifact login with dev account
@@ -178,10 +180,41 @@ export const getProfileName = (stage: string): string => {
     return `${projectConfig.projectId}-${stage}`;
 };
 
+export const getProfileCredentials = (stage: string) => {
+    return fromIni({ profile: getProfileName(stage) });
+};
+
+export const getProfileRegion = (stage: string): string => {
+    return projectConfig.accounts[stage].region;
+};
+
 export const getStackPrefix = (stage: string): string => {
     let stackPrefix = `${stage}/${projectConfig.projectId}`;
     if (projectConfig.codePipeline && stage === PresetStageType.Dev) {
         stackPrefix = `${projectConfig.projectId}-pipeline/${stackPrefix}`;
     }
     return stackPrefix;
+};
+
+export const getStackOutputs = async (stage: string) => {
+    try {
+        const cfClient = new CloudFormationClient({
+            region: getProfileRegion(stage),
+            credentials: getProfileCredentials(stage),
+        });
+        const response = await cfClient.send(
+            new DescribeStacksCommand({
+                StackName: `${stage}-${projectConfig.projectId}-frontendDeployment`,
+            })
+        );
+        return response.Stacks?.[0].Outputs ?? [];
+    } catch (error) {
+        console.error(
+            redBright(
+                "\n🛑 Failed to get stack outputs. Make sure the frontendDeployment stack is deployed."
+            )
+        );
+        console.error("\n", error);
+        return;
+    }
 };
