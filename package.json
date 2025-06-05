@@ -15,8 +15,9 @@
         "format": "prettier --write . && ruff format .",
         "lint": "eslint . && ruff check .",
         "develop": "npx tsx tools/cli/develop.ts",
-        "stage": "git add -A",
-        "commit": "npx cz"
+        "stage": "npx generate-changelog && git add -A",
+        "commit": "npx cz",
+        "clean": "npx npkill -nu -D -y"
     },
     "lint-staged": {
         "*.{js,jsx,ts,tsx}": [
@@ -62,8 +63,11 @@
     },
     "dependencies": {
         "@aws-sdk/client-cloudformation": "^3.772.0",
+        "@aws-sdk/client-cognito-identity-provider": "^3.772.0",
+        "@aws-sdk/credential-providers": "^3.772.0",
         "chalk": "4.1.0",
         "enquirer": "^2.4.1",
+        "node-email-verifier": "^2.0.0",
         "yaml": "^2.7.0",
         "zod": "^3.24.1"
     }

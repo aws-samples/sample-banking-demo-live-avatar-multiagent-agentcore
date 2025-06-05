@@ -25,7 +25,7 @@ You can use existing Isengard accounts provided you have access to an **Admin** 
 2. Enter a **Project name** using the following format `[SEGMENT]-[DEMO-NAME]` and ensure the **Project slug** updates accordingly.
     - Ex: `retail-marketing-email-generator`
 3. Under **Project URL**, **select a namespace**.
-    - GenAI Labs builders should select `genai-labs/demo-assets`.
+    - If you are on the core GenAI Labs team, select `genai-labs/demo-assets`. Otherwise, you may use your alias or another namespace.
     - This is a **_very important step and non-reversible_**.
 4. Enter a **Project description**.
 5. Under **Branches to include**, select **Only the default branch `main`**.
@@ -76,24 +76,6 @@ The starter kit uses a file named `project-config.json` in the config folder to 
 <br>\* This property is optional if **codePipeline** is false.<br />
 \*\* This property can be toggled later, even after setting up the demo.
 
-## GitLab CI/CD
-
-We need to create environment variables in GitLab so the Runner can find the dev account number and region details then write to Amazon S3 and trigger its pipeline.
-
-> [Can I just use the GitLab runner?](./faq.md#can-i-just-use-the-gitlab-runner)
-
-20. Navigate to your GitLab repository page.
-21. Click **Settings** then **CI/CD**.
-22. Expand **Variables** then click **Add variable**.
-23. Enter `AWS_ACCOUNT_NUMBER` for the **Key** and the dev account number used in your [project configuration file](../config/project-config.json) for the **Value** then click **Add variable**.
-24. Repeat the configuration for the `AWS_ACCOUNT_REGION` and the `PROJECT_ID`.
-
-    - You will need to check **Protect variable** after creating the first variable.
-
-    ![git-cicd-variables](images/git-cicd-variables.png)
-
-> [Can I use a different Git repository like GitHub?](./faq.md#can-i-use-a-different-git-repository-like-github)
-
 ## Federate/Midway Profile(s)
 
 [Federate](https://ep.federate.a2z.com/help/FAQ#what-is-amazon-federate) has an [Integration](https://integ.ep.federate.a2z.com/profiles) and [Production](https://ep.federate.a2z.com/profiles) environment where service profiles are managed separately. If your demo has both dev and prod stages, you must create two separate profiles in those respective environments. Sandbox accounts will use the dev/Integration profile for providing access to the demo.
@@ -102,22 +84,22 @@ We need to create environment variables in GitLab so the Runner can find the dev
 
 We have simplified Integration profile creation by creating a dummy profile for you to clone then update.
 
-25. Navigate to <https://integ.ep.federate.a2z.com/profiles>.
-26. Search for then select the profile named `demo-starter-tester`.
-27. After selecting the profile, click the **Actions** dropdown then click **Clone Service Profile**.
+20. Navigate to <https://integ.ep.federate.a2z.com/profiles>.
+21. Search for then select the profile named `demo-starter-tester`.
+22. After selecting the profile, click the **Actions** dropdown then click **Clone Service Profile**.
 
     ![federate-clone-profile](images/federate-clone-profile.png)
 
-28. Enter a **Service Name** using the following format `genai-labs-[PROJECT-IDENTIFIER]`.
+23. Enter a **Service Name** using the following format `genai-labs-[PROJECT-IDENTIFIER]`.
     - The project identifier should exactly match the **projectId** in your [project configuration file](../config/project-config.json).
     - Ex: `genai-labs-email-generator`
-29. Check the box titled **Unfabric guidelines**.
-30. Check the box titled **Integ Environment restrictions**.
-31. Leave all other options to their defaults and click **Next**.
-32. Enter a **Client ID** that exactly matches the **projectId** in your [project configuration file](../config/project-config.json).
+24. Check the box titled **Unfabric guidelines**.
+25. Check the box titled **Integ Environment restrictions**.
+26. Leave all other options to their defaults and click **Next**.
+27. Enter a **Client ID** that exactly matches the **projectId** in your [project configuration file](../config/project-config.json).
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
-33. Enter **Redirect URIs** using the following format `https://[PROJECT-IDENTIFIER]-[ACCOUNT_NUMBER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+28. Enter **Redirect URIs** using the following format `https://[PROJECT-IDENTIFIER]-[ACCOUNT_NUMBER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
 
     - The project identifier, account numbers, and regions should reflect your [project configuration file](../config/project-config.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
@@ -129,28 +111,28 @@ We have simplified Integration profile creation by creating a dummy profile for 
     https://email-generator-212075525600.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
     ```
 
-34. Turn the **Client Secret** switch on.
+29. Turn the **Client Secret** switch on.
 
     ![federate-oidc-details](images/federate-oidc-details.png)
 
-35. Click **Next**.
-36. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
-37. On the **Service Profile Overview** page, click **Submit**.
-38. Copy the generated Midway client secret key. **_Keep it safe_**.
+30. Click **Next**.
+31. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
+32. On the **Service Profile Overview** page, click **Submit**.
+33. Copy the generated Midway client secret key. **_Keep it safe_**.
     > [I forgot to copy the Midway client secret key. Now what?](./faq.md#i-forgot-to-copy-the-midway-client-secret-key-now-what)
-39. The Integration profile expires after 30 days. Set a recurring calendar invite to renew it.
+34. The Integration profile expires after 30 days. Set a recurring calendar invite to renew it.
 
 ### Prod Profile
 
 If you created a prod account in the [project configuration file](../config/project-config.json), please continue. Otherwise you may skip to the [next section](#configuration-scripts).
 
-40. Navigate to the [Production](https://ep.federate.a2z.com/drafts) drafts.
-41. Click **Import from Integ**.
-42. Enter the **client ID** you provided in [step 32](#dev-profile).
-43. Verify the **Service Name** matches the one you provided in [step 28](#dev-profile).
-44. Check the box titled **Unfabric guidelines** then click **Next**.
-45. Verify the **Client ID** is matches the one you previously provided.
-46. Update the **Redirect URI** for the prod account using the following format `https://[PROJECT-IDENTIFIER]-[PROD_ACCOUNT_NUMBER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+35. Navigate to the [Production](https://ep.federate.a2z.com/drafts) drafts.
+36. Click **Import from Integ**.
+37. Enter the **client ID** you provided in [step 34](#dev-profile).
+38. Verify the **Service Name** matches the one you provided in [step 30](#dev-profile).
+39. Check the box titled **Unfabric guidelines** then click **Next**.
+40. Verify the **Client ID** is matches the one you previously provided.
+41. Update the **Redirect URI** for the prod account using the following format `https://[PROJECT-IDENTIFIER]-[PROD_ACCOUNT_NUMBER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
 
     - The project identifier, account number, and region should reflect the prod account in your [project configuration file](../config/project-config.json).
     - Ex:
@@ -159,24 +141,24 @@ If you created a prod account in the [project configuration file](../config/proj
     https://email-generator-123409357812.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     ```
 
-47. Turn the **Client Secret** switch on then click **Next**.
-48. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
-49. On the **Service Profile Overview** page, click **Submit** then copy the generated Midway client secret key. **_Keep it safe_**.
+42. Turn the **Client Secret** switch on then click **Next**.
+43. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
+44. On the **Service Profile Overview** page, click **Submit** then copy the generated Midway client secret key. **_Keep it safe_**.
     > [I forgot to copy the Midway client secret key. Now what?](./faq.md#i-forgot-to-copy-the-midway-client-secret-key-now-what)
 
 ## Configuration Scripts
 
-50. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm run setup`.
+45. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm run setup`.
     - This will install the [NPM](https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager) dependencies and [Python dev requirements](../requirements-dev.txt). It may take a couple minutes to complete. Great time for a ☕!
-51. To run the configuration CLI, run the command `npm run configure`.
+46. To run the configuration CLI, run the command `npm run configure`.
 
     - You **_must_** run this command each time you update the [project configuration file](../config/project-config.json) file.
 
     ![cli-configure-start](images/cli-configure-start.png)
 
-52. When prompted to **confirm the project identifier**, select **yes** to start.
+47. When prompted to **confirm the project identifier**, select **yes** to start.
 
-53. Assuming they have not already been provided, the CLI will ask for the dev and prod Midway client secret keys from the [previous section](#create-federatemidway-profiles). Enter them.
+48. Assuming they have not already been provided, the CLI will ask for the dev and prod Midway client secret keys from the [previous section](#create-federatemidway-profiles). Enter them.
 
     - The tool will automatically exit after it has finished the configuration.
 
@@ -188,15 +170,15 @@ If you created a prod account in the [project configuration file](../config/proj
 
 In order commit changes, we must first install [Code Defender](https://w.amazon.com/bin/view/AWS/Teams/GlobalServicesSecurity/Engineering/CodeDefender/UserHelp/#5).
 
-54. Install Code Defender from [here](https://codedefender.proserve.aws.dev/).
-55. From the project's root directory, run the command `git defender --setup` followed by `git-defender --mw-register`.
+49. Install Code Defender from [here](https://codedefender.proserve.aws.dev/).
+50. From the project's root directory, run the command `git defender --setup` followed by `git-defender --mw-register`.
     - You should see a message saying **Successfully registered**.
 
 ## Code Check-In
 
 Lets make some changes in the package before we commit our code.
 
-56. Open the `package.json` and edit the following
+51. Open the `package.json` and edit the following
 
     **name**: Enter the project identifier you provided in your [project configuration file](../config/project-config.json).
 
@@ -204,27 +186,27 @@ Lets make some changes in the package before we commit our code.
 
 Now we are all set to make our first code check in! The starter kit comes pre-built with a commit CLI to improve the quality of Git commits.
 
-57. From the root directory, run the command `git add -A && npm run commit`.
-58. For **Select the type of change that you're committing**, select **chore**.
-59. For **What is the scope of this change**, enter `app`.
-60. For **Write a short, imperative tense description of the change**, enter `initial code commit`.
-61. For **Provide a longer description of the change**, press **Enter** to skip.
-62. For **Are there any breaking changes?** press **Enter** to indicate **N**.
+52. From the root directory, run the command `git add -A && npm run commit`.
+53. For **Select the type of change that you're committing**, select **chore**.
+54. For **What is the scope of this change**, enter `app`.
+55. For **Write a short, imperative tense description of the change**, enter `initial code commit`.
+56. For **Provide a longer description of the change**, press **Enter** to skip.
+57. For **Are there any breaking changes?** press **Enter** to indicate **N**.
 
-63. If the commit hooks powered by Husky fail, you will need to repeat steps 2-7.
+58. If the commit hooks powered by Husky fail, you will need to repeat steps 59-64.
     - See the [design documentation](./design.md#commit) to learn more about the commit hooks.
-64. If the commit hooks succeed, you can push the committed files to your repository with the command `git push origin main`.
+59. If the commit hooks succeed, you can push the committed files to your repository with the command `git push origin main`.
     - Pushing to main will trigger a pipeline execution.
 
 From now on, **_do not_** work and push changes on the `main` branch. Always work on a feature branch then submit a merge request via GitLab to merge changes to `main`.
 
-65. From the root directory, run `git checkout -B feat/[ALIAS]` to create a new dev branch for yourself with your alias.
+60. From the root directory, run `git checkout -B feat/[ALIAS]` to create a new dev branch for yourself with your alias.
     - Ex: `git checkout -B feat/tamjay`
 
 ## Verify Pipelines
 
-66. Navigate back to your demo's GitLab page.
-67. Check the status of your GitLab pipeline by by clicking **Build** then **Pipelines** from the side menu.
+61. Navigate back to your demo's GitLab page.
+62. Check the status of your GitLab pipeline by by clicking **Build** then **Pipelines** from the side menu.
 
     ![git-cicd-pipelines](images/git-cicd-pipelines.png)
 
@@ -233,9 +215,9 @@ From now on, **_do not_** work and push changes on the `main` branch. Always wor
             - Find your project here and notice how the static code analysis has been automated using the GitLab runner.
         2. Deploy: this stage will compress the code base into a zip format, get cross-account credentials via AWS Credential Vendor, then upload the zip file to Amazon S3, kicking of the CodePipeline.
 
-68. Once the **zip-deploy** stage succeeds, navigate to the dev account's [AWS Management Console](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/) to verify that the pipeline is in-progress.
-69. Once the pipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendDeployment**.
-70. Click the **Outputs** tab then the **callbackUrl** to visit your new frontend React app.
+63. Once the **zip-deploy** stage succeeds, navigate to the dev account's [AWS Management Console](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/) to verify that the pipeline is in-progress.
+64. Once the pipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendDeployment**.
+65. Click the **Outputs** tab then the **callbackUrl** to visit your new frontend React app.
 
     ![react-login](images/react-login.png)
 
