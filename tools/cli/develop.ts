@@ -38,14 +38,13 @@ enum Operations {
     DEPLOY_FRONTEND = "Deploy Frontend 🖥️",
     REFRESH_ENV = "Refresh Local Environment 📦",
     TEST_FRONTEND = "Test Frontend Locally 💻",
-    USER_MANAGEMENT = "Cognito User Management 👤",
+    MANAGE_USERS = "Manage Cognito Users 👤",
     // EJECT = "Eject ⏏️",
     DESTROY_CDK = "Destroy CDK Stack(s) 🗑️",
     EXIT = "Exit 👋",
 }
 
 enum UserManagementOperations {
-    CREATE_KIOSK_USER = "Create Kiosk User",
     CREATE_USER = "Create User",
     DELETE_USER = "Delete User",
 }
@@ -249,41 +248,6 @@ const destroyStacks = async (stage: string): Promise<void> => {
     }
 };
 
-const createCognitoUser = async (
-    client: CognitoIdentityProviderClient,
-    userPoolId: string,
-    username: string,
-    password?: string,
-    isKiosk = false
-): Promise<boolean> => {
-    try {
-        await client.send(
-            new AdminCreateUserCommand({
-                UserPoolId: userPoolId,
-                Username: username,
-                TemporaryPassword: password,
-                UserAttributes: [
-                    { Name: "email", Value: username },
-                    { Name: "email_verified", Value: "true" },
-                ],
-            })
-        );
-        console.log(
-            greenBright(bold(`\nCreated ${isKiosk ? "kiosk " : ""}user!`)),
-            greenBright(
-                password
-                    ? `\nUsername: ${username}\nTemporary Password: ${password}`
-                    : `\nEmailed temporary password to ${username}.`
-            )
-        );
-        return true;
-    } catch (error) {
-        console.log(redBright(`\n🛑 Failed to create ${isKiosk ? "kiosk " : ""}user.`));
-        console.error("\n", error);
-        return false;
-    }
-};
-
 const userManagement = async (stage: string) => {
     const stackOutputs = await getStackOutputs(stage);
     const userPoolId = stackOutputs?.find((output) =>
@@ -305,16 +269,28 @@ const userManagement = async (stage: string) => {
         Object.values(UserManagementOperations)
     );
     switch (userManagementOperation) {
-        case UserManagementOperations.CREATE_KIOSK_USER: {
-            console.log(blueBright("\nCreating kiosk user..."));
-            await createCognitoUser(client, userPoolId, "kiosk@amazon.com", "Kiosk@123", true);
-            break;
-        }
         case UserManagementOperations.CREATE_USER: {
-            console.log(blueBright("\nCreating new user..."));
             const email = await promptValue(`Enter an email address:`, false);
             if (await emailValidator(email, { checkMx: false })) {
-                await createCognitoUser(client, userPoolId, email, undefined);
+                try {
+                    await client.send(
+                        new AdminCreateUserCommand({
+                            UserPoolId: userPoolId,
+                            Username: email,
+                            UserAttributes: [
+                                { Name: "email", Value: email },
+                                { Name: "email_verified", Value: "true" },
+                            ],
+                        })
+                    );
+                    console.log(
+                        greenBright(bold(`\nCreated user!`)),
+                        greenBright(`\nEmailed temporary password to ${email}.`)
+                    );
+                } catch (error) {
+                    console.log(redBright(`\n🛑 Failed to create user.`));
+                    console.error("\n", error);
+                }
             } else {
                 console.log(redBright(`\n🛑 Invalid email address.`));
             }
@@ -399,7 +375,7 @@ const operations = async () => {
             case Operations.TEST_FRONTEND:
                 await createLocalServer(stage);
                 break;
-            case Operations.USER_MANAGEMENT:
+            case Operations.MANAGE_USERS:
                 await userManagement(stage);
                 break;
             case Operations.DESTROY_CDK:

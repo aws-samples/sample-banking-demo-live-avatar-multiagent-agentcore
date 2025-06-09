@@ -6,7 +6,7 @@ This documentation will walk you through how the Demo Starter Kit works in depth
 
 ## Configuration File
 
-The starter kit uses a file named [project-config.json](../config/project-config.json) in the config folder to centrally track and manage project configurations.
+The starter kit uses a file named [project-config.json](../../config/project-config.json) in the config folder to centrally track and manage project configurations.
 
 ```json
 {
@@ -38,7 +38,7 @@ The starter kit uses a file named [project-config.json](../config/project-config
 }
 ```
 
-[index.ts](../config/index.ts) will throw an error if a dev account is not found or if the configuration is incorrect to prevent downstream errors in the CLIs or CDK constructs.
+[index.ts](../../config/index.ts) will throw an error if a dev account is not found or if the configuration is incorrect to prevent downstream errors in the CLIs or CDK constructs.
 
 ### Project Identifier
 
@@ -46,7 +46,7 @@ The **projectId** property must be less than 15 characters long and not use any 
 
 - Creating a prefix for stack names and generated resource names, supporting multiple demo deployments in the same account.
 - Tagging all CDK resources in the project.
-    - See the [stack construct](../src/backend/lib/common/constructs/stack.ts) for more context.
+    - See the [stack construct](../../src/backend/lib/common/constructs/stack.ts) for more context.
 - Linking Midway profiles to the Amazon Cognito domain URL.
     - See the [Cognito construct](#cognito-construct) for more context.
 
@@ -100,7 +100,7 @@ The configuration CLI will automatically exit after it has finished the configur
 
 You **_must_** run this command each time you update the project configuration file.
 
-See [configure.ts](../tools/cli/configure.ts) for more context.
+See [configure.ts](../../tools/cli/configure.ts) for more context.
 
 ### Development
 
@@ -112,7 +112,7 @@ The development CLI provides a set of options to help facilitate local developme
 
 ![cli-welcome](images/cli-welcome.png)
 
-See [develop.ts](../tools/cli/develop.ts) for more context.
+See [develop.ts](../../tools/cli/develop.ts) for more context.
 
 #### Refresh Credentials
 
@@ -149,7 +149,7 @@ Many demos use synethetic data, such as as flat files (text/JSON/XML), images, a
 
 ![react-photos](./images/react-photos.png)
 
-- This operation can be used to speed up asset changes of Amazon S3 bucket deployments like that in the [storage construct](../src/backend/lib/stacks/backend/storage/index.ts).
+- This operation can be used to speed up asset changes of Amazon S3 bucket deployments like that in the [storage construct](../../src/backend/lib/stacks/backend/storage/index.ts).
     - When you push data to the S3 bucket, folders in `src/backend/lib/stacks/backend/storage/assets` become prefixes that can be referenced after authenticating with Cognito.
 
 ##### Static Files vs Hydration
@@ -164,13 +164,13 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
 
 #### Deploy Frontend
 
-- This operation deploys the [frontend deployment stack](../src/backend/lib/stacks/frontend/index.ts) by itself using the `-e` flag for quicker deployment.
+- This operation deploys the [frontend deployment stack](../../src/backend/lib/stacks/frontend/index.ts) by itself using the `-e` flag for quicker deployment.
 - It first builds the frontend to ensure there are no errors.
 
 #### Refresh Local Environment
 
 - This operation is invoked by the [next operation](#test-frontend-locally-) automatically, but it can also be run by itself if you just want to:
-    - Pull down the CfnOutputs from the [frontend deployment stack](../src/backend/lib/stacks/frontend/index.ts).
+    - Pull down the CfnOutputs from the [frontend deployment stack](../../src/backend/lib/stacks/frontend/index.ts).
     - Update the .env file in the frontend source folder with those outputs.
     - If a Graph API ID is present, generate GraphQL files.
 
@@ -183,6 +183,12 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
     - Assuming there are no breaking changes, you should be able to see your changes reflected in the terminal and browser immediately.
 
 - After you **press enter to continue**, the operation will kill the local server so future changes don't clutter the terminal.
+
+#### Manage Cognito Users
+
+- This operation will get the user pool ID from the CfnOutputs then give you the option to create or delete a Cognito user in that user pool.
+    - When creating a user, you will be asked to enter an email address. A temporary password will be emailed to this address, enabling you to log in to the frontend application.
+    - Note that you cannot delete Amazon Federate (Midway) users.
 
 #### Destroy CDK Stack(s)
 
@@ -198,7 +204,7 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
 - Use this operation with **_extreme caution_** as the CDK stacks destroyed with this operation cannot be recovered and may leave your application broken when using dependent stacks.
 - There are certain limitations with this operation due to how CDK is designed:
     - Stacks that are destroyed are still listed because the CDK uses the local `cdk.out` manifest, unlike [Terraform](https://www.hashicorp.com/products/terraform) and [Pulumi](https://github.com/pulumi/pulumi) which retain a cloud referenced stack list.
-    - We recommend that you delete the stacks in accordance with their dependencies in [stage.ts](../src/backend/lib/stage.ts).
+    - We recommend that you delete the stacks in accordance with their dependencies in [stage.ts](../../src/backend/lib/stage.ts).
     - This operation may not destroy certain cloud resource such as AWS WAF (Global & Regional), AWS Buckets, VPC configurations, Secrets Manager, etc. Manually delete these resources in the AWS Management Console.
 
 #### Headless Mode
@@ -224,9 +230,9 @@ The starter kit also includes two commit hooks, powered by [Husky](https://typic
 - The pre-commit hook will run code formatting and quality checks, stopping you from committing bad code that might block the pipeline.
     - [lint-staged](https://github.com/lint-staged/lint-staged) will format and lint staged files.
         - Formatting and linting will be handled by [Prettier](https://prettier.io/) and [ESLint](https://eslint.org/) for TypeScript and [Ruff](https://docs.astral.sh/ruff/) for Python.
-    - See [pre-commit](../.husky/pre-commit), [package.json](../package.json), [eslint.config.ts](../eslint.config.ts), and [.prettierrc](../.prettierrc) for more context.
+    - See [pre-commit](../../.husky/pre-commit), [package.json](../../package.json), [eslint.config.ts](../../eslint.config.ts), and [.prettierrc](../../.prettierrc) for more context.
 - The commit-msg hook will validate the commit message and ensure it follows the [Git Conventional Commits Standard](https://www.conventionalcommits.org/en/v1.0.0/).
-    - See [commit-msg](../.husky/commit-msg) for more context.
+    - See [commit-msg](../../.husky/commit-msg) for more context.
 
 ## CDK Constructs
 
@@ -234,11 +240,11 @@ Some aspects of the starter kit infrastructure are specific to internal Amazon a
 
 ### App
 
-`bin/demo.ts` is the CDK entrypoint as configured in [cdk.json](../cdk.json).
+`bin/demo.ts` is the CDK entrypoint as configured in [cdk.json](../../src/backend/cdk.json).
 
 The stack prefix and stage for the app are determined by a context variable passed by the [development CLI](#development). The account details are determined by the project configuration file itself.
 
-See [bin/demo.ts](../src/backend/bin/demo.ts) for more context.
+See [bin/demo.ts](../../src/backend/bin/demo.ts) for more context.
 
 ### Pipeline Stack
 
@@ -252,10 +258,10 @@ It sets up all the necessary resources and permissions for the GitLab runner to 
 - An Amazon CloudTrail trial that tracks write events in the source bucket to trigger the pipleine.
 - An AWS IAM role that will be assumed by the [GitCI Credential vendor](https://gitlab.pages.aws.dev/docs/Platform/aws-credential-vendor.html), allowing it access to the source bucket.
 - An AWS pipeline construct for synthesizing the infrastructure then deploying it to each stage.
-    - A dev stage that deploys the [application stage](../src/backend/lib/stage.ts) to the dev account in the [project configuration file](../config/project-config.json).
+    - A dev stage that deploys the [application stage](../../src/backend/lib/stage.ts) to the dev account in the [project configuration file](../../config/project-config.json).
     - If configured, a prod stage that deploys the application stage to the prod account in the project configuration file.
 
-See [pipeline.ts](../src/backend/lib/stacks/pipeline.ts) and [.gitlab-ci.yml](../.gitlab-ci.yml) for more context.
+See [pipeline.ts](../../src/backend/lib/stacks/pipeline.ts) and [.gitlab-ci.yml](../../.gitlab-ci.yml) for more context.
 
 > [Can I just use the GitLab runner?](./faq.md#can-i-just-use-the-gitlab-runner)
 
@@ -269,10 +275,10 @@ This custom construct sets the necessary properties for creating a Federate/Midw
 
 You can simply replace the standard `UserPool` construct with `LabsUserPool` and the standard `UserPoolClient` construct with `LabsUserPoolClient` to add Midway authorization.
 
-See [cognito.ts](../src/backend/lib/common/constructs/cognito.ts) for more context.
+See [cognito.ts](../../src/backend/lib/common/constructs/cognito.ts) for more context.
 
 ### CodeBuild Construct
 
-This custom construct enables the use of [CodeArtifact (formerly Goshawk)](https://docs.hub.amazon.dev/codeartifact/user-guide/getting-started/) in both the [frontend deployment stack](../src/backend/lib/stacks/frontend/index.ts) and [pipeline stack](../src/backend/lib/stacks/pipeline.ts).
+This custom construct enables the use of [CodeArtifact (formerly Goshawk)](https://docs.hub.amazon.dev/codeartifact/user-guide/getting-started/) in both the [frontend deployment stack](../../src/backend/lib/stacks/frontend/index.ts) and [pipeline stack](../../src/backend/lib/stacks/pipeline.ts).
 
-See [codebuild.ts](../src/backend/lib/common/constructs/codebuild.ts) for more context.
+See [codebuild.ts](../../src/backend/lib/common/constructs/codebuild.ts) for more context.

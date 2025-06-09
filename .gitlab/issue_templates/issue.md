@@ -13,6 +13,6 @@
 
 ## Please tell us about your environment.
 
-Version: 2.1.0-beta
+Version:
 Browser:
 Language:

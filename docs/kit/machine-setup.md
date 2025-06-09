@@ -40,7 +40,7 @@ NPM packages can contain security vulnerabilities and require frequent auditing.
 
     - You may also use Node Version Manager (NVM).
 
-    - Make sure you install the same version of Node specified in the [package.json](../package.json).
+    - Make sure you install the same version of Node specified in the [package.json](../../package.json).
 
         ```json
         "engines": {
@@ -66,7 +66,7 @@ We highly recommend setting up a Python version manager so you can seamlessly sw
 ### Install
 
 12. After installing `pyenv` or `pyenv-win`, run the command `pyenv install 3.12.5` to install Python.
-    - Make sure you install the same version of Python specified in [.python-version](../.python-version).
+    - Make sure you install the same version of Python specified in [.python-version](../../.python-version).
     - We have included this `.python-version` file so the starter kit uses the same version of Python across its users.
 13. If you have a global Python version configured via `pyenv`, then we recommend that you match the global version to the starter kit's version. Read more on setting global and local versions [here](https://realpython.com/intro-to-pyenv/#specifying-your-python-version).
 
@@ -93,15 +93,11 @@ git config --global user.email "[YOUR_ALIAS]@amazon.com" && git config --global 
 git config credential.helper store
 ```
 
-## Visual Studio Code
-
-19. Optionally, install Visual Studio Code from Amazon Self Service.
-
 ## Docker
 
 ### Docker Desktop
 
-20. If you are a Mac or Windows user, install the Docker Desktop application from [here](https://www.docker.com/).
+19. If you are a Mac or Windows user, install the Docker Desktop application from [here](https://www.docker.com/).
     - The Docker CLI is pre-installed for Cloud Desktop users.
 
 - **_Do not sign in/up in Docker Desktop_** or ACME will automatically uninstall it. Read more [here](https://docs.hub.amazon.dev/containers/docker/#docker-desktop).
@@ -110,9 +106,9 @@ git config credential.helper store
 
 Docker is known to consume a lot of disk space and doesn't auto remove older images & accrues a lot of logs by default. Mac and Windows users can use the below configuration to save precious disk space.
 
-21. If you are a Mac or Windows user, open Docker Desktop.
-22. Click on the gear icon ⚙️ in top right corner.
-23. Select **Docker Engine** on the left side then copy & paste the following configuration:
+20. If you are a Mac or Windows user, open Docker Desktop.
+21. Click on the gear icon ⚙️ in top right corner.
+22. Select **Docker Engine** on the left side then copy & paste the following configuration:
 
     ```json
     {
@@ -140,7 +136,11 @@ Docker is known to consume a lot of disk space and doesn't auto remove older ima
     }
     ```
 
-24. Click **Apply & restart**
+23. Click **Apply & restart**
+
+## Visual Studio Code
+
+24. Optionally, install Visual Studio Code from Amazon Self Service.
 
 ## Amazon Q Developer
 
