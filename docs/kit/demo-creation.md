@@ -53,7 +53,7 @@ The starter kit uses a file named `project-config.json` in the config folder to 
 
 - See the [design documentation](./design.md#configuration-file) for more details.
 
-11. Open the project folder in your IDE of choice (we prefer Visual Studio Code) then open [project-config.json](../config/project-config.json).
+11. Open the project folder in your IDE of choice then open [project-config.json](../../config/project-config.json).
 12. Update **projectId** with a unique identifier less than 15 characters that best reflects your project name.
     - Use a shorthand name separated by a `-`. Do not use any other special characters such as `! , & * @ # < > ?`.
     - Ex: `email-generator`
@@ -91,17 +91,17 @@ We have simplified Integration profile creation by creating a dummy profile for 
     ![federate-clone-profile](images/federate-clone-profile.png)
 
 23. Enter a **Service Name** using the following format `genai-labs-[PROJECT-IDENTIFIER]`.
-    - The project identifier should exactly match the **projectId** in your [project configuration file](../config/project-config.json).
+    - The project identifier should exactly match the **projectId** in your [project configuration file](../../config/project-config.json).
     - Ex: `genai-labs-email-generator`
 24. Check the box titled **Unfabric guidelines**.
 25. Check the box titled **Integ Environment restrictions**.
 26. Leave all other options to their defaults and click **Next**.
-27. Enter a **Client ID** that exactly matches the **projectId** in your [project configuration file](../config/project-config.json).
+27. Enter a **Client ID** that exactly matches the **projectId** in your [project configuration file](../../config/project-config.json).
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
 28. Enter **Redirect URIs** using the following format `https://[PROJECT-IDENTIFIER]-[ACCOUNT_NUMBER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
 
-    - The project identifier, account numbers, and regions should reflect your [project configuration file](../config/project-config.json).
+    - The project identifier, account numbers, and regions should reflect your [project configuration file](../../config/project-config.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
     - Ex:
 
@@ -124,7 +124,7 @@ We have simplified Integration profile creation by creating a dummy profile for 
 
 ### Prod Profile
 
-If you created a prod account in the [project configuration file](../config/project-config.json), please continue. Otherwise you may skip to the [next section](#configuration-scripts).
+If you created a prod account in the [project configuration file](../../config/project-config.json), please continue. Otherwise you may skip to the [next section](#configuration-scripts).
 
 35. Navigate to the [Production](https://ep.federate.a2z.com/drafts) drafts.
 36. Click **Import from Integ**.
@@ -134,7 +134,7 @@ If you created a prod account in the [project configuration file](../config/proj
 40. Verify the **Client ID** is matches the one you previously provided.
 41. Update the **Redirect URI** for the prod account using the following format `https://[PROJECT-IDENTIFIER]-[PROD_ACCOUNT_NUMBER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
 
-    - The project identifier, account number, and region should reflect the prod account in your [project configuration file](../config/project-config.json).
+    - The project identifier, account number, and region should reflect the prod account in your [project configuration file](../../config/project-config.json).
     - Ex:
 
     ```
@@ -149,10 +149,10 @@ If you created a prod account in the [project configuration file](../config/proj
 ## Configuration Scripts
 
 45. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm run setup`.
-    - This will install the [NPM](https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager) dependencies and [Python dev requirements](../requirements-dev.txt). It may take a couple minutes to complete. Great time for a ☕!
+    - This will install the [NPM](https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager) dependencies and [Python dev requirements](../../requirements-dev.txt). It may take a couple minutes to complete. Great time for a ☕!
 46. To run the configuration CLI, run the command `npm run configure`.
 
-    - You **_must_** run this command each time you update the [project configuration file](../config/project-config.json) file.
+    - You **_must_** run this command each time you update the [project configuration file](../../config/project-config.json) file.
 
     ![cli-configure-start](images/cli-configure-start.png)
 
@@ -180,7 +180,7 @@ Lets make some changes in the package before we commit our code.
 
 51. Open the `package.json` and edit the following
 
-    **name**: Enter the project identifier you provided in your [project configuration file](../config/project-config.json).
+    **name**: Enter the project identifier you provided in your [project configuration file](../../config/project-config.json).
 
     **description**: Enter the description you provided in [step 4](#fork-it).
 
@@ -208,12 +208,13 @@ From now on, **_do not_** work and push changes on the `main` branch. Always wor
 61. Navigate back to your demo's GitLab page.
 62. Check the status of your GitLab pipeline by by clicking **Build** then **Pipelines** from the side menu.
 
-    ![git-cicd-pipelines](images/git-cicd-pipelines.png)
+    ![git-cicd-pipeline](images/git-cicd-pipeline.png)
 
-    - There are two stages of the GitLab pipeline:
-        1. SAST scanning: this stage will publish your code's SAST scan reports to the [Probe dashboard](https://probe.aws.dev/).
+    - There are three stages of the GitLab pipeline:
+        1. Scan: this stage will publish your code's SAST scan reports to the [Probe dashboard](https://probe.aws.dev/).
             - Find your project here and notice how the static code analysis has been automated using the GitLab runner.
-        2. Deploy: this stage will compress the code base into a zip format, get cross-account credentials via AWS Credential Vendor, then upload the zip file to Amazon S3, kicking of the CodePipeline.
+        2. Prepare: this stage will create environment variables using your [project configuration file](../../config/project-config.json).
+        3. Deploy: this stage will compress the code base into a zip format, get cross-account credentials via AWS Credential Vendor, then upload the zip file to Amazon S3, kicking of the CodePipeline.
 
 63. Once the **zip-deploy** stage succeeds, navigate to the dev account's [AWS Management Console](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/) to verify that the pipeline is in-progress.
 64. Once the pipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendDeployment**.

@@ -19,7 +19,7 @@ Source: Error: Not all members in account [ACCOUNT_NUMBER] are in source-code.
 So...you didn't keep the key(s) safe? Don't worry, we got you!
 
 1. Navigate to the Midway [Integration](https://integ.ep.federate.a2z.com/profiles) or [Production](https://ep.federate.a2z.com/profiles) environment for which you are trying to recover the secret key.
-2. Under **Service Profiles**, search for then select the **Client ID** with name as your **projectId** in the [project configuration file](../config/project-config.json).
+2. Under **Service Profiles**, search for then select the **Client ID** with name as your **projectId** in the [project configuration file](../../config/project-config.json).
 3. Click on the profile **Name** link.
 4. Click **Client Secrets** on the side menu.
 5. Click **Create New Secret** then copy the secret key. **_Keep it safe_**.
@@ -30,8 +30,8 @@ So...you didn't keep the key(s) safe? Don't worry, we got you!
 
 Yes! You can use a different Git repository, like GitHub.
 
-1. Open [project-config.json](../config/project-config.json) then set **codePipeline** to `false`.
-2. Optionally, edit the [pipeline stack](../src/backend/lib/stacks/pipeline.ts) to use your desired source.
+1. Open [project-config.json](../../config/project-config.json) then set **codePipeline** to `false`.
+2. Optionally, edit the [pipeline stack](../../src/backend/lib/stacks/pipeline.ts) to use your desired source.
 
 ## Can I just use the GitLab runner?
 
@@ -39,6 +39,6 @@ Due to GitLab limitations with [Docker in Docker support](https://gitlab.pages.a
 
 However, you can just use GitLab Runner as your primary CI/CD engine if you are not bound by these limitations.
 
-1. Open [project-config.json](../config/project-config.json) the set **codePipeline** to `false`.
+1. Open [project-config.json](../../config/project-config.json) the set **codePipeline** to `false`.
 2. From the project's root directory, run `npm run configure`.
-3. Replace the existing [.gitlab-ci.yml](../.gitlab-ci.yml) with your own implementation to deploy the code to your target accounts.
+3. Replace the existing [.gitlab-ci.yml](../../.gitlab-ci.yml) with your own implementation to deploy the code to your target accounts.

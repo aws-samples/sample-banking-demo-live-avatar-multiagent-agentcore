@@ -26,7 +26,7 @@ The starter kit uses a file named `project-config.json` in the config folder to 
 
 - See the [design documentation](./design.md#configuration-file) for more details.
 
-5. Open the project folder in your IDE of choice (we prefer Visual Studio Code) then open [project-config.json](../config/project-config.json).
+5. Open the project folder in your IDE of choice then open [project-config.json](../../config/project-config.json).
 6. If you have a personal sandbox account, but it has not been added to the project configuration file, please update it, including the account **number** and **region** for your sandbox account.
     - We **_strongly recommend_** using `us-west-2` for GenAI demos given service availability.
     - Do not worry about the **midwaySecretId** which will be set up by the configuration CLI.
@@ -37,13 +37,13 @@ The starter kit uses a file named `project-config.json` in the config folder to 
 After the sandbox account has been added to the project configuration, we need to add it to the dev accounts's [Federate](https://ep.federate.a2z.com/help/FAQ#what-is-amazon-federate) profile for Midway integration automation through the configuration CLI.
 
 8. Navigate to <https://integ.ep.federate.a2z.com/profiles>.
-9. Under **Service Profiles**, search for then select the **Client ID** matching your **projectId** in the [project configuration file](../config/project-config.json).
+9. Under **Service Profiles**, search for then select the **Client ID** matching your **projectId** in the [project configuration file](../../config/project-config.json).
 10. Click on the profile **Name** link.
 11. Click **Edit** in the top right corner then click **Ok** after reading the dialogue.
 12. On the **Service Profile Configuration** page, leave all options to their defaults then click **Next** at the bottom of the page.
 13. Add a **Redirect URI** on a new line using the following format `https://[PROJECT-IDENTIFIER]-[SANDBOX_ACCOUNT_NUMBER].auth.[SANDBOX_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
 
-    - The project identifier, account number, and region should reflect the sandbox account you added to the [project configuration file](../config/project-config.json).
+    - The project identifier, account number, and region should reflect the sandbox account you added to the [project configuration file](../../config/project-config.json).
     - Ex:
 
     ```
@@ -61,10 +61,10 @@ After the sandbox account has been added to the project configuration, we need t
 ## Configuration Scripts
 
 17. To install the project depedencies, open a terminal at the root directory then run the command `npm run setup`.
-    - This will install the [NPM](https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager) dependencies and [Python dev requirements](../requirements-dev.txt). It may take a couple minutes to complete. Great time for a ☕!
+    - This will install the [NPM](https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager) dependencies and [Python dev requirements](../../requirements-dev.txt). It may take a couple minutes to complete. Great time for a ☕!
 18. To run the configuration CLI, run the command `npm run configure`.
 
-    - You **_must_** run this command each time you update the [project configuration file](../config/project-config.json) file.
+    - You **_must_** run this command each time you update the [project configuration file](../../config/project-config.json) file.
 
     ![cli-configure-start](images/cli-configure-start.png)
 
