@@ -1,26 +1,25 @@
 {
-    "projectId": "PROJECT-IDENTIFIER",
+    "projectId": "agent-primitive",
     "gitlabGroup": "genai-labs/demo-assets",
-    "gitlabProject": "GITLAB-PROJECT-NAME",
+    "gitlabProject": "agent-primitive",
     "codeArtifact": false,
     "codePipeline": true,
     "midway": true,
     "accounts": {
         "dev": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
+            "number": "315761230293",
+            "region": "us-west-2",
+            "midwaySecretId": "0AXXTV"
         },
         "prod": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
+            "number": "652238464767",
+            "region": "us-west-2",
+            "midwaySecretId": "7Jlrt6"
         },
-        "ALIAS_1": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
-        },
-        "ALIAS_2": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
+        "burkleaa": {
+            "number": "143095308897",
+            "region": "us-west-2",
+            "midwaySecretId": "fRPuV2"
         }
     }
 }
