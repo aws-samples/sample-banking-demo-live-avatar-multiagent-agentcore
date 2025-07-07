@@ -34,6 +34,11 @@ const SideBar = () => {
                     text: "Gallery",
                     href: "/gallery",
                 },
+                {
+                    type: "link" as const,
+                    text: "Flow",
+                    href: "/flow",
+                },
                 { type: "divider" as const },
                 {
                     type: "link" as const,

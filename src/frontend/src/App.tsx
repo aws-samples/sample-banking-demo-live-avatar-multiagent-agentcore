@@ -8,11 +8,13 @@ import { Amplify } from "aws-amplify";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { FlashbarProvider } from "./common/contexts/Flashbar";
-import Chat from "./pages/Chat";
 import Error from "./pages/Error";
-import Gallery from "./pages/Gallery";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import TaskPortal from "./pages/TaskPortal";
+import TaskView from "./pages/TaskView";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { CacheSettings } from "./common/components/CacheSettings.tsx";
 
 const LOCALE = "en";
 
@@ -83,6 +85,8 @@ Amplify.configure(
 
 export default function App() {
     const { authStatus } = useAuthenticator((context) => [context.authStatus]);
+    // Create a client
+    const queryClient = new QueryClient();
 
     const router = createBrowserRouter([
         {
@@ -91,29 +95,43 @@ export default function App() {
         },
         {
             path: "/",
-            element: <Chat />,
+            element: <TaskPortal />,
             errorElement: <Error />,
         },
         {
-            path: "/gallery",
-            element: <Gallery />,
+            path: "/tasks",
+            element: <TaskPortal />,
+            errorElement: <Error />,
+        },
+        {
+            path: "/task/:taskId",
+            element: <TaskView />,
+            errorElement: <Error />,
+        },
+        {
+            path: "/config",
+            element: (
+                <CacheSettings
+                    visible={false}
+                />
+            ),
             errorElement: <Error />,
         },
     ]);
 
     return (
-        <div>
+        <>
             {authStatus === "configuring" && <Spinner />}
             {authStatus === "unauthenticated" && <Login />}
             {authStatus === "authenticated" && (
-                <>
-                    <I18nProvider locale={LOCALE} messages={[messages]}>
-                        <FlashbarProvider>
+                <I18nProvider locale={LOCALE} messages={[messages]}>
+                    <FlashbarProvider>
+                        <QueryClientProvider client={queryClient}>
                             <RouterProvider router={router} />
-                        </FlashbarProvider>
-                    </I18nProvider>
-                </>
+                        </QueryClientProvider>
+                    </FlashbarProvider>
+                </I18nProvider>
             )}
-        </div>
+        </>
     );
 }
