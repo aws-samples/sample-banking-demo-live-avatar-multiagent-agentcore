@@ -187,7 +187,12 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
 #### Manage Cognito Users
 
 - This operation will get the user pool ID from the CfnOutputs then give you the option to create or delete a Cognito user in that user pool.
+
     - When creating a user, you will be asked to enter an email address. A temporary password will be emailed to this address, enabling you to log in to the frontend application.
+
+        ![react-login](./images/react-login.png)
+
+    - You can use the **Reset Password** option to set a new password for the user if needed.
     - Note that you cannot delete Amazon Federate (Midway) users.
 
 #### Destroy CDK Stack(s)
