@@ -110,7 +110,7 @@ For more details, visit the [AWS Pricing Calculator](https://calculator.aws/#/).
 
 - Open a terminal and set the working directory to the location where you want to clone this repository. Clone the repository using the command `git clone [url]`.
 - From the root directory, run the command `npm run setup` to install the [CDK](https://docs.aws.amazon.com/cdk/v2/guide/work-with-cdk-typescript.html#work-with-cdk-typescript-dependencies) and React dependencies.
-- [Deploy the CDK application](https://docs.aws.amazon.com/cdk/v2/guide/deploy.html#deploy-how-deploy) using a command like `npm run -w backend cdk deploy --all`.
+- [Deploy the CDK application](https://docs.aws.amazon.com/cdk/v2/guide/deploy.html#deploy-how-deploy) using a command like `npm run -w backend cdk deploy -- --all`.
 
 ## Clean-up
 

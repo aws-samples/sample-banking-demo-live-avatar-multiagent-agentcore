@@ -5,7 +5,10 @@ export class CommonStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
         const prefix = scope.node.tryGetContext("stackPrefix");
         const prefixedId = prefix ? `${prefix}-${id}` : id;
-        super(scope, prefixedId, props);
+        super(scope, prefixedId, {
+            ...props,
+            description: `aws-labs-${prefixedId}`,
+        });
         if (prefix) {
             Tags.of(this).add("projectId", prefix);
         }
