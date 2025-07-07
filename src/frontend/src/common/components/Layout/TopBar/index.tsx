@@ -4,8 +4,9 @@ import { applyMode, Mode } from "@cloudscape-design/global-styles";
 import { getCurrentUser } from "aws-amplify/auth";
 import { useEffect, useState } from "react";
 import Favicon from "./favicon.png";
+import { CacheSettings, useCacheSettingsModal } from "../../CacheSettings";
 
-const APP_NAME = "Demo Starter Kit";
+const APP_NAME = "Nova Act Tasks";
 
 interface AuthedUser {
     userName: string;
@@ -20,6 +21,7 @@ const TopBar = () => {
 
     const { user, authStatus, signOut } = useAuthenticator((context) => [context.user]);
     const [authedUser, setAuthedUser] = useState<AuthedUser | null>(null);
+    const cacheModal = useCacheSettingsModal();
 
     useEffect(() => {
         localStorage.setItem("theme", theme);
@@ -84,12 +86,19 @@ const TopBar = () => {
                             if (detail.id === "switch-theme") {
                                 setTheme(theme === Mode.Light ? Mode.Dark : Mode.Light);
                             }
+                            if (detail.id === "cache-settings") {
+                                cacheModal.open();
+                            }
                         },
                         items: [
                             {
                                 id: "switch-theme",
                                 text: theme === Mode.Light ? "🌑  Dark Theme" : "☀️ Light Theme",
                             },
+                            {
+                                id: "cache-settings",
+                                text: 'Cache settings'
+                            }
                         ],
                     },
                     {
@@ -131,6 +140,7 @@ const TopBar = () => {
                     },
                 ]}
             />
+            <CacheSettings visible={cacheModal.visible} onDismiss={cacheModal.close} />
         </div>
     );
 };

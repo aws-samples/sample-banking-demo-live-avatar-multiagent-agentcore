@@ -22,6 +22,7 @@ export default tseslint.config(
             "no-empty": ["error", { allowEmptyCatch: true }],
             "prettier/prettier": "warn",
             "@typescript-eslint/no-unused-vars": "warn",
+            "@typescript-eslint/no-explicit-any": "warn",
         },
     }
 );

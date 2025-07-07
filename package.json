@@ -1,6 +1,6 @@
 {
-    "name": "PROJECT-IDENTIFIER",
-    "description": "project description",
+    "name": "nova-act-demos",
+    "description": "Demos showcasing Nova Act",
     "version": "3.0.1",
     "author": "GenAI Labs Team",
     "license": "Apache License Version 2.0",
