@@ -1,25 +1,26 @@
 {
-    "projectId": "nova-act-demos",
+    "projectId": "PROJECT-IDENTIFIER",
     "gitlabGroup": "genai-labs/demo-assets",
-    "gitlabProject": "nova-act-demos",
+    "gitlabProject": "GITLAB-PROJECT-NAME",
     "codeArtifact": false,
     "codePipeline": true,
     "midway": true,
     "accounts": {
         "dev": {
-            "number": "873046390824",
-            "region": "us-west-2",
-            "midwaySecretId": "z4k2aZ"
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
         },
         "prod": {
-            "number": "263336852939",
-            "region": "us-west-2",
-            "midwaySecretId": "ZK6Yv1"
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
         },
-        "gillianq": {
-            "number": "109660393533",
-            "region": "us-west-2",
-            "midwaySecretId": "cruuLU"
+        "ALIAS_1": {
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
+        },
+        "ALIAS_2": {
+            "number": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION"
         }
     }
 }

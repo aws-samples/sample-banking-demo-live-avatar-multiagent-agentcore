@@ -18,8 +18,6 @@
         "@cloudscape-design/components": "^3.0.895",
         "@cloudscape-design/design-tokens": "^3.0.51",
         "@cloudscape-design/global-styles": "^1.0.36",
-        "@tanstack/react-query": "^5.81.2",
-        "@xyflow/react": "^12.7.0",
         "aws-amplify": "^6.12.3",
         "aws-rum-web": "^1.19.0",
         "motion": "^12.4.2",

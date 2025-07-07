@@ -7,7 +7,7 @@ import SideBar from "./SideBar";
 import TopBar from "./TopBar";
 
 const Layout = (props: AppLayoutProps) => {
-    const [navigationOpen, setNavigationOpen] = useState<boolean>(false);
+    const [navigationOpen, setNavigationOpen] = useState<boolean>(true);
     const { flashbarItems, removeFlashbarItem } = useContext(FlashbarContext);
 
     return (
