@@ -105,12 +105,18 @@ See [configure.ts](../../tools/cli/configure.ts) for more context.
 ### Development
 
 ```bash
-npm run commit
+npm run develop
 ```
 
 The development CLI provides a set of options to help facilitate local development.
 
 ![cli-welcome](images/cli-welcome.png)
+
+The development CLI can be also used in headless mode by directly providing the operation, stage, and, if applicable, `--all` flag as command line arguments.
+
+```bash
+npm run develop -- deploy dev --all
+```
 
 See [develop.ts](../../tools/cli/develop.ts) for more context.
 
@@ -122,26 +128,36 @@ See [develop.ts](../../tools/cli/develop.ts) for more context.
 
 #### Synthesize CDK Stacks
 
+```bash
+npm run develop -- synth <stage>
+```
+
 - This operation will validate your CDK code and check for [CDK NAG](https://github.com/cdklabs/cdk-nag) errors/warnings.
 - The CLI will transparently output the stack building process, Docker invocations, etc. to keep you informed.
 
 #### Deploy CDK Stack(s)
 
-- If you elect to not just deploy all stacks, the operation will allow you to select exactly which stacks you would like to deploy to the target account.
+```bash
+npm run develop -- deploy <stage> [flag]
+```
 
+- If you elect to not just deploy all stacks, the operation will allow you to select exactly which stacks you would like to deploy to the target account.
     - It will first use `cdk list` to list all available stacks for that target account.
         - Note that stacks in the dev account will be prefixed with the pipeline stack name.
             - Ex: `start-kit-test-pipeline/dev/start-kit-test-frontend`
             - See [pipeline stack](#pipeline-stack) for more details.
 
     ![cli-select-stacks.png](images/cli-select-stacks.png)
-
     - Using the arrow keys and spacebar, you select each and every stack you want to deploy then hit enter to confirm.
 
 - Stack dependencies will also be deployed alongside the selected stacks to ensure functionality.
 - The operation uses the `--concurrency` flag to deploy stacks in parallel for faster deployment.
 
 #### Hotswap CDK Stack(s)
+
+```bash
+npm run develop -- hotswap <stage> [flag]
+```
 
 - This operation is similar to the [previous operation](#deploy-cdk-stacks), but it performs a faster, hotswap deployment if possible. See the [documentation](https://docs.aws.amazon.com/cdk/v2/guide/ref-cli-cmd-deploy.html#ref-cli-cmd-deploy-options) for more details.
 
@@ -164,10 +180,18 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
 
 #### Deploy Frontend
 
+```bash
+npm run develop -- deploy-frontend <stage>
+```
+
 - This operation deploys the [frontend deployment stack](../../src/backend/lib/stacks/frontend/index.ts) by itself using the `-e` flag for quicker deployment.
 - It first builds the frontend to ensure there are no errors.
 
 #### Refresh Local Environment
+
+```bash
+npm run develop -- refresh-env <stage>
+```
 
 - This operation is invoked by the [next operation](#test-frontend-locally-) automatically, but it can also be run by itself if you just want to:
     - Pull down the CfnOutputs from the [frontend deployment stack](../../src/backend/lib/stacks/frontend/index.ts).
@@ -179,7 +203,6 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
 - This operation will [refresh the local environment](#refresh-local-environment-) then output a link to a [local server](http://localhost:3000/) for testing changes to your frontend React app.
 
     ![cli-local-env](images/cli-local-env.png)
-
     - Assuming there are no breaking changes, you should be able to see your changes reflected in the terminal and browser immediately.
 
 - After you **press enter to continue**, the operation will kill the local server so future changes don't clutter the terminal.
@@ -187,7 +210,6 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
 #### Manage Cognito Users
 
 - This operation will get the user pool ID from the CfnOutputs then give you the option to create or delete a Cognito user in that user pool.
-
     - When creating a user, you will be asked to enter an email address. A temporary password will be emailed to this address, enabling you to log in to the frontend application.
 
         ![react-login](./images/react-login.png)
@@ -211,14 +233,6 @@ Keep in mind that `static` files/folders can simply be accessed without any auth
     - Stacks that are destroyed are still listed because the CDK uses the local `cdk.out` manifest, unlike [Terraform](https://www.hashicorp.com/products/terraform) and [Pulumi](https://github.com/pulumi/pulumi) which retain a cloud referenced stack list.
     - We recommend that you delete the stacks in accordance with their dependencies in [stage.ts](../../src/backend/lib/stage.ts).
     - This operation may not destroy certain cloud resource such as AWS WAF (Global & Regional), AWS Buckets, VPC configurations, Secrets Manager, etc. Manually delete these resources in the AWS Management Console.
-
-#### Headless Mode
-
-The development CLI can be also used in headless mode by directly providing the operation and stage as command line arguments.
-
-- Ex: `npm run develop deploy-frontend dev`
-
-You can expand on this feature to build your own functionality and extend the abilities of CLI to suit your demo specific requirements.
 
 ### Commit
 

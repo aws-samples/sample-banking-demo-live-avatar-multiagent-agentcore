@@ -8,7 +8,7 @@ import {
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import { LabsUserPool, LabsUserPoolClient } from "../../common/constructs/cognito";
-import { createManagedRules } from "../../common/utilities/rules";
+import { createManagedRules } from "../../common/utilities";
 
 interface AuthProps {
     urls: string[];

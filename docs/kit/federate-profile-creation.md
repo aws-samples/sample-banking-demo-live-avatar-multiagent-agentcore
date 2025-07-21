@@ -16,7 +16,6 @@
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
 11. Enter **Redirect URIs** using the following format `https://[PROJECT-IDENTIFIER]-[ACCOUNT_NUMBER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
-
     - The project identifier, account numbers, and regions should reflect your [project configuration file](../../config/project-config.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
     - Ex:

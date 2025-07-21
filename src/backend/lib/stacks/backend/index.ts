@@ -24,6 +24,11 @@ export class BackendStack extends CommonStack {
             urls: props.urls,
         });
 
+        const storage = new Storage(this, "storage", {
+            urls: props.urls,
+        });
+        storage.storageBucket.grantReadWrite(auth.authenticatedRole);
+
         const graphApi = new GraphApi(this, "graphApi", {
             userPool: auth.userPool,
             regionalWebAclArn: auth.regionalWebAclArn,
@@ -44,11 +49,6 @@ export class BackendStack extends CommonStack {
                 reason: "Lambda functions require managed policies to interface with the vpc.",
             },
         ]);
-
-        const storage = new Storage(this, "storage", {
-            urls: props.urls,
-        });
-        storage.storageBucket.grantReadWrite(auth.authenticatedRole);
 
         this.environmentVariables = {
             VITE_REGION: this.region!,

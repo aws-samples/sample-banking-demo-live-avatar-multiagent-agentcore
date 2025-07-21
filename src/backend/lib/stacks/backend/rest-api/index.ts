@@ -10,7 +10,7 @@ import {
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import * as path from "path";
-import { CommonPythonFunction, CommonPythonLayerVersion } from "../../../common/constructs/lambda";
+import { CommonPythonPowertoolsFunction } from "../../../common/constructs/lambda";
 
 interface RestApiProps {
     urls: string[];
@@ -28,13 +28,8 @@ export class RestApi extends Construct {
 
         const { urls, vpc, securityGroup, userPool, regionalWebAclArn } = props;
 
-        const powertoolsLayer = new CommonPythonLayerVersion(scope, "powertoolsLayer", {
-            entry: path.join(__dirname, "..", "..", "..", "common", "layers", "powertools"),
-        });
-
-        const proxyFunction = new CommonPythonFunction(this, "proxyFunction", {
+        const proxyFunction = new CommonPythonPowertoolsFunction(this, "proxyFunction", {
             entry: path.join(__dirname, "proxy-function"),
-            layers: [powertoolsLayer],
             environment: {
                 ALLOWED_ORIGINS: JSON.stringify(urls),
             },
@@ -70,9 +65,9 @@ export class RestApi extends Construct {
                         retention: logs.RetentionDays.THREE_MONTHS,
                     })
                 ),
-                loggingLevel: apigateway.MethodLoggingLevel.INFO,
+                loggingLevel: apigateway.MethodLoggingLevel.ERROR,
                 metricsEnabled: true,
-                dataTraceEnabled: true,
+                dataTraceEnabled: false,
             },
             cloudWatchRole: true,
             cloudWatchRoleRemovalPolicy: RemovalPolicy.DESTROY,

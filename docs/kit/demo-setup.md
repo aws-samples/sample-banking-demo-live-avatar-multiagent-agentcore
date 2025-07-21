@@ -42,7 +42,6 @@ After the sandbox account has been added to the project configuration, we need t
 11. Click **Edit** in the top right corner then click **Ok** after reading the dialogue.
 12. On the **Service Profile Configuration** page, leave all options to their defaults then click **Next** at the bottom of the page.
 13. Add a **Redirect URI** on a new line using the following format `https://[PROJECT-IDENTIFIER]-[SANDBOX_ACCOUNT_NUMBER].auth.[SANDBOX_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
-
     - The project identifier, account number, and region should reflect the sandbox account you added to the [project configuration file](../../config/project-config.json).
     - Ex:
 
@@ -63,13 +62,11 @@ After the sandbox account has been added to the project configuration, we need t
 17. To install the project depedencies, open a terminal at the root directory then run the command `npm run setup`.
     - This will install the [NPM](https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager) dependencies and [Python dev requirements](../../requirements-dev.txt). It may take a couple minutes to complete. Great time for a ☕!
 18. To run the configuration CLI, run the command `npm run configure`.
-
     - You **_must_** run this command each time you update the [project configuration file](../../config/project-config.json) file.
 
     ![cli-configure-start](images/cli-configure-start.png)
 
 19. When prompted to **confirm the project identifier**, select **yes** to start.
-
     - The tool will automatically exit after it has finished the configuration.
 
     ![cli-configure-finish](images/cli-configure-finish.png)

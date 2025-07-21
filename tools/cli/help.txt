@@ -1,0 +1,23 @@
+Development CLI - Operations
+
+Usage: npm run develop <operation> <stage> [flag]
+       npx tsx tools/cli/develop.ts <operation> <stage> [flag]
+
+Operations:
+  synth                - Synthesize CDK stacks
+  deploy               - Deploy CDK stacks
+  hotswap              - Hotswap CDK stacks
+  deploy-frontend      - Deploy frontend
+  refresh-env          - Refresh local environment
+
+Stages:
+  dev, prod, etc. (from config file)
+
+Flags:
+  Accept all prompts: --all
+
+Examples:
+  npm run develop -- synth dev
+  npm run develop -- deploy dev
+  npm run develop -- deploy dev --all
+  npm run develop -- deploy-frontend dev

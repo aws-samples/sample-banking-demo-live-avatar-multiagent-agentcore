@@ -37,7 +37,6 @@ NPM packages can contain security vulnerabilities and require frequent auditing.
 
 7. Install Volta using these [instructions](https://docs.volta.sh/guide/getting-started).
 8. Run the command `volta install node@22` to install Node.js.
-
     - You may also use Node Version Manager (NVM).
 
     - Make sure you install the same version of Node specified in the [package.json](../../package.json).
@@ -55,20 +54,12 @@ NPM packages can contain security vulnerabilities and require frequent auditing.
 
 We highly recommend setting up a Python version manager so you can seamlessly switch versions based on your demo needs.
 
-### Mac/Cloud Desktop
-
-11. Install `pyenv` from [here](https://github.com/pyenv/pyenv?tab=readme-ov-file#installation).
-
-### Windows
-
-11. Install the `pyenv-win` fork from [here](https://github.com/pyenv-win/pyenv-win).
-
-### Install
-
-12. After installing `pyenv` or `pyenv-win`, run the command `pyenv install 3.12.5` to install Python.
+11. Install `uv` from [here](https://github.com/astral-sh/uv).
+12. Run the command `uv python install 3.12.5` to install Python.
     - Make sure you install the same version of Python specified in [.python-version](../../.python-version).
     - We have included this `.python-version` file so the starter kit uses the same version of Python across its users.
-13. If you have a global Python version configured via `pyenv`, then we recommend that you match the global version to the starter kit's version. Read more on setting global and local versions [here](https://realpython.com/intro-to-pyenv/#specifying-your-python-version).
+13. If you have a global/system Python installation, then we recommend that you match its version to the starter kit's version.
+    - Read more on Python versions [here](https://docs.astral.sh/uv/concepts/python-versions/).
 
 ## AWS CLI
 

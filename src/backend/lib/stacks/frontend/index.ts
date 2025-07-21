@@ -8,7 +8,6 @@ import {
     CustomResource,
     Duration,
     aws_iam as iam,
-    aws_logs as logs,
     aws_s3 as s3,
     aws_s3_assets as s3_assets,
     Stack,
@@ -202,7 +201,6 @@ export class FrontendDeploymentStack extends CommonStack {
                     }),
                 ],
             }),
-            logRetention: logs.RetentionDays.THREE_MONTHS,
             queryInterval: Duration.seconds(15),
             totalTimeout: Duration.minutes(15),
             waiterStateMachineLogOptions: {
@@ -215,6 +213,10 @@ export class FrontendDeploymentStack extends CommonStack {
                 {
                     id: "AwsSolutions-SF2",
                     reason: "X-Ray tracing is not configurable.",
+                },
+                {
+                    id: "AwsSolutions-SF1",
+                    reason: "Step Function does log all events.",
                 },
             ],
             true

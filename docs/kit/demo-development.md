@@ -16,11 +16,9 @@ Let's start by deploying the starter kit app directly to our sandbox account for
     - Ideally, there should be no issues at this point.
 3. To deploy your app, select **Deploy CDK Stack(s) 🚀** then your sandbox account.
 4. Select **Yes** to deploy all stacks.
-
     - If you select **No**, the CLI will allow you to select exactly which stacks you would like to deploy to the target account.
 
     ![cli-select-stacks.png](images/cli-select-stacks.png)
-
     - Deployment may take several minutes.
 
 5. Once the deployment completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendDeployment**.
@@ -37,7 +35,6 @@ Let's now setup a local server to test the frontend React app locally so you can
 9. Once the CLI finishes creating the local environment, click the **local** URL.
 
     ![cli-local-env](images/cli-local-env.png)
-
     - You should see the application's login page. Note that any changes made to the app will be reflected locally for you to test.
 
 10. **Press enter to continue** to explore other operations.
