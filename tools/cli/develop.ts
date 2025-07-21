@@ -30,6 +30,9 @@ import {
     refreshCredentials,
 } from "./utils";
 
+// global flag for bypassing prompts
+let allFlag = false;
+
 enum Operations {
     REFRESH_CREDS = "Refresh Credentials 🔑",
     SYNTHESIZE_CDK = "Synthesize CDK Stacks 🗂️",
@@ -66,7 +69,7 @@ const selectStacks = async (
     }
     if (
         action !== "destroy" &&
-        (await promptConfirm(`Would you like to just ${action} all ${stage} stacks?`))
+        (allFlag || (await promptConfirm(`Would you like to just ${action} all ${stage} stacks?`)))
     ) {
         return `${getStackPrefix(stage)}*`;
     }
@@ -339,6 +342,55 @@ const userManagement = async (stage: string) => {
     }
 };
 
+const executeOperation = async (operation: string, stage?: string): Promise<void> => {
+    if (!stage) {
+        stage = await promptSelect("stage", Object.keys(projectConfig.accounts));
+    }
+
+    await refreshCredentials(stage);
+
+    switch (operation) {
+        case Operations.REFRESH_CREDS:
+            break;
+        case Operations.SYNTHESIZE_CDK:
+        case "synth":
+            await synthesizeStacks(stage);
+            break;
+        case Operations.DEPLOY_CDK:
+        case "deploy":
+            await deployStacks(stage, "deploy");
+            break;
+        case Operations.HOTSWAP_CDK:
+        case "hotswap":
+            await deployStacks(stage, "hotswap");
+            break;
+        case Operations.DEPLOY_FRONTEND:
+        case "deploy-frontend":
+            await deployFrontendStack(stage);
+            break;
+        case Operations.REFRESH_ENV:
+        case "refresh-env":
+            await createLocalEnvironment(stage);
+            break;
+        case Operations.TEST_FRONTEND:
+            await createLocalServer(stage);
+            break;
+        case Operations.MANAGE_USERS:
+            await userManagement(stage);
+            break;
+        case Operations.DESTROY_CDK:
+            await destroyStacks(stage);
+            break;
+        default:
+            console.error(
+                redBright(
+                    `\n🛑 Unknown operation: ${operation}. Run the command "npm run develop -- help" to learn more.`
+                )
+            );
+            bye(1);
+    }
+};
+
 const operations = async () => {
     let selection = "";
     try {
@@ -352,49 +404,28 @@ const operations = async () => {
     }
 
     try {
-        const stage = await promptSelect("stage", Object.keys(projectConfig.accounts));
-
-        await refreshCredentials(stage);
-
-        switch (selection) {
-            case Operations.SYNTHESIZE_CDK:
-                await synthesizeStacks(stage);
-                break;
-            case Operations.DEPLOY_CDK:
-                await deployStacks(stage, "deploy");
-                break;
-            case Operations.HOTSWAP_CDK:
-                await deployStacks(stage, "hotswap");
-                break;
-            case Operations.DEPLOY_FRONTEND:
-                await deployFrontendStack(stage);
-                break;
-            case Operations.REFRESH_ENV:
-                await createLocalEnvironment(stage);
-                break;
-            case Operations.TEST_FRONTEND:
-                await createLocalServer(stage);
-                break;
-            case Operations.MANAGE_USERS:
-                await userManagement(stage);
-                break;
-            case Operations.DESTROY_CDK:
-                await destroyStacks(stage);
-                break;
-        }
+        await executeOperation(selection);
     } catch {}
 
     operations();
 };
 
 const main = async () => {
-    const argOperation = process.argv[2];
-    const argStage = process.argv[3];
+    const args = process.argv.slice(2);
+    const argOperation = args[0];
+    const argStage = args[1];
 
-    if (argOperation && argStage) {
-        if (argOperation === "deploy-frontend") {
-            await deployFrontendStack(argStage);
+    allFlag = args.includes("--all");
+    const notHelp = !args.includes("help");
+
+    if (argOperation && notHelp) {
+        try {
+            await executeOperation(argOperation, argStage);
+        } catch {
+            bye(0);
         }
+    } else if (!notHelp) {
+        console.log(readFileSync(path.join(__dirname, "help.txt"), "utf8"));
     } else {
         banner();
         await operations();

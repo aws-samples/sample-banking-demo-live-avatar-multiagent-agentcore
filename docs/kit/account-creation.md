@@ -23,7 +23,6 @@ If you are creating a brand new demo, create new dev/prod accounts using the ins
 10. Verify the final **Review and Submit** page then click **Submit**.
 
     ![merlon-review](images/merlon-review.png)
-
     - Account creation may take a few minutes.
 
 11. Once your account is created, navigate to the [Isengard manage accounts dashboard](https://isengard.amazon.com/manage-accounts) then search for and click on the account.

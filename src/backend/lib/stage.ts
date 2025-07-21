@@ -1,6 +1,8 @@
 import { Aspects, Stage, StageProps } from "aws-cdk-lib";
+import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import { AwsSolutionsChecks, NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
+import { LogsRetentionAspect } from "./common/aspects";
 import { BackendStack } from "./stacks/backend";
 import { FrontendDeploymentStack, FrontendStack } from "./stacks/frontend";
 
@@ -20,6 +22,8 @@ export class ApplicationStage extends Stage {
             distribution: frontend.distribution,
             environmentVariables: backend.environmentVariables,
         });
+
+        Aspects.of(this).add(new LogsRetentionAspect(RetentionDays.THREE_MONTHS));
 
         NagSuppressions.addResourceSuppressions(
             this,

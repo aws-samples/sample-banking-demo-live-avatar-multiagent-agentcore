@@ -9,11 +9,11 @@
         "src/*"
     ],
     "scripts": {
-        "setup": "pip install -r requirements-dev.txt && npm config set registry=https://registry.npmjs.com/ && npm install && cd ./src/backend && npm install && cd ../frontend && npm install",
+        "setup": "uv venv --allow-existing && uv pip install -r requirements-dev.txt && npm config set registry=https://registry.npmjs.com/ && npm install && cd ./src/backend && npm install && cd ../frontend && npm install",
         "prepare": "husky",
         "configure": "npx tsx tools/cli/configure.ts",
-        "format": "prettier --write . && ruff format .",
-        "lint": "eslint . && ruff check .",
+        "format": "prettier --write . && uv run ruff format .",
+        "lint": "eslint . && uv run ruff check .",
         "develop": "npx tsx tools/cli/develop.ts",
         "stage": "npx generate-changelog && git add -A",
         "commit": "npx cz",
@@ -28,8 +28,8 @@
             "prettier --write"
         ],
         "*.py": [
-            "ruff format",
-            "ruff check"
+            "uv run ruff format",
+            "uv run ruff check"
         ]
     },
     "config": {
@@ -41,34 +41,34 @@
         "node": "22.8.0"
     },
     "devDependencies": {
-        "@commitlint/cli": "^19.5.0",
-        "@commitlint/config-conventional": "^19.5.0",
-        "@commitlint/prompt-cli": "^19.5.0",
-        "@commitlint/types": "^19.5.0",
+        "@commitlint/cli": "^19.8.1",
+        "@commitlint/config-conventional": "^19.8.1",
+        "@commitlint/prompt-cli": "^19.8.1",
+        "@commitlint/types": "^19.8.1",
         "@types/node": "22.7.9",
-        "@typescript-eslint/eslint-plugin": "^8.20.0",
-        "@typescript-eslint/parser": "^8.20.0",
+        "@typescript-eslint/eslint-plugin": "^8.25.0",
+        "@typescript-eslint/parser": "^8.25.0",
         "commitizen": "^4.3.1",
         "cz-conventional-changelog": "^3.3.0",
-        "eslint": "^9.19.0",
-        "eslint-config-prettier": "^10.0.1",
-        "eslint-plugin-prettier": "^5.2.3",
-        "globals": "^15.14.0",
+        "eslint": "^9.31.0",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-prettier": "^5.5.3",
+        "globals": "^15.15.0",
         "husky": "^9.1.6",
-        "lint-staged": "^15.4.3",
-        "prettier": "^3.4.2",
-        "tsx": "^4.19.3",
-        "typescript": "~5.6.3",
-        "typescript-eslint": "^8.23.0"
+        "lint-staged": "^15.5.2",
+        "prettier": "^3.6.2",
+        "tsx": "^4.20.3",
+        "typescript": "~5.8.3",
+        "typescript-eslint": "^8.25.0"
     },
     "dependencies": {
-        "@aws-sdk/client-cloudformation": "^3.772.0",
-        "@aws-sdk/client-cognito-identity-provider": "^3.772.0",
-        "@aws-sdk/credential-providers": "^3.772.0",
+        "@aws-sdk/client-cloudformation": "^3.848.0",
+        "@aws-sdk/client-cognito-identity-provider": "^3.848.0",
+        "@aws-sdk/credential-providers": "^3.848.0",
         "chalk": "4.1.0",
         "enquirer": "^2.4.1",
         "node-email-verifier": "^2.0.0",
-        "yaml": "^2.7.0",
-        "zod": "^3.24.1"
+        "yaml": "^2.8.0",
+        "zod": "^3.25.76"
     }
 }

@@ -30,7 +30,6 @@ You can use existing Isengard accounts provided you have access to an **Admin** 
 4. Enter a **Project description**.
 5. Under **Branches to include**, select **Only the default branch `main`**.
 6. Under **Visibility level**, select the **Internal** option.
-
     - This is a **_very important step_** so AWS employees outside your team can view the project.
 
     ![git-fork](images/git-fork-details.png)
@@ -103,7 +102,6 @@ If you are not on the core GenAI Labs team, follow these [instructions](./federa
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
 30. Enter **Redirect URIs** using the following format `https://[PROJECT-IDENTIFIER]-[ACCOUNT_NUMBER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
-
     - The project identifier, account numbers, and regions should reflect your [project configuration file](../../config/project-config.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
     - Ex:
@@ -137,7 +135,6 @@ If you created a prod account in the [project configuration file](../../config/p
 41. Check the box titled **Unfabric guidelines** then click **Next**.
 42. Verify the **Client ID** is matches the one you previously provided.
 43. Update the **Redirect URI** for the prod account using the following format `https://[PROJECT-IDENTIFIER]-[PROD_ACCOUNT_NUMBER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
-
     - The project identifier, account number, and region should reflect the prod account in your [project configuration file](../../config/project-config.json).
     - Ex:
 
@@ -155,7 +152,6 @@ If you created a prod account in the [project configuration file](../../config/p
 47. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm run setup`.
     - This will install the [NPM](https://nodejs.org/en/learn/getting-started/an-introduction-to-the-npm-package-manager) dependencies and [Python dev requirements](../../requirements-dev.txt). It may take a couple minutes to complete. Great time for a ☕!
 48. To run the configuration CLI, run the command `npm run configure`.
-
     - You **_must_** run this command each time you update the [project configuration file](../../config/project-config.json) file.
 
     ![cli-configure-start](images/cli-configure-start.png)
@@ -163,7 +159,6 @@ If you created a prod account in the [project configuration file](../../config/p
 49. When prompted to **confirm the project identifier**, select **yes** to start.
 
 50. Assuming they have not already been provided, the CLI will ask for the dev and prod Midway client secret keys from the [previous section](#create-federatemidway-profiles). Enter them.
-
     - The tool will automatically exit after it has finished the configuration.
 
     ![cli-configure-finish](images/cli-configure-finish.png)
@@ -213,7 +208,6 @@ From now on, **_do not_** work and push changes on the `main` branch. Always wor
 64. Check the status of your GitLab pipeline by by clicking **Build** then **Pipelines** from the side menu.
 
     ![git-cicd-pipeline](images/git-cicd-pipeline.png)
-
     - There are three stages of the GitLab pipeline:
         1. Scan: this stage will publish your code's SAST scan reports to the [Probe dashboard](https://probe.aws.dev/).
             - Find your project here and notice how the static code analysis has been automated using the GitLab runner.
