@@ -1,23 +1,30 @@
 {
     "name": "PROJECT-IDENTIFIER",
     "description": "project description",
-    "version": "3.0.1",
+    "version": "4.0.0",
     "author": "GenAI Labs Team",
     "license": "Apache License Version 2.0",
     "private": true,
+    "bin": {
+        "demo": "bin/demo.js"
+    },
     "workspaces": [
-        "src/*"
+        "lib/stacks/frontend/app"
     ],
     "scripts": {
-        "setup": "uv venv --allow-existing && uv pip install -r requirements-dev.txt && npm config set registry=https://registry.npmjs.com/ && npm install && cd ./src/backend && npm install && cd ../frontend && npm install",
+        "preinstall": "npm config set registry=https://registry.npmjs.com/",
+        "postinstall": "pip install uv && uv venv --allow-existing && uv tool install ruff ",
         "prepare": "husky",
-        "configure": "npx tsx tools/cli/configure.ts",
-        "format": "prettier --write . && uv run ruff format .",
-        "lint": "eslint . && uv run ruff check .",
-        "develop": "npx tsx tools/cli/develop.ts",
+        "format": "prettier --write . && ruff format .",
+        "lint": "eslint . && ruff check .",
+        "kit": "npx tsx tools/cli.ts",
+        "export": "npx tsx tools/export.ts",
         "stage": "npx generate-changelog && git add -A",
         "commit": "npx cz",
-        "clean": "npx npkill -nu -D -y"
+        "build": "tsc",
+        "watch": "tsc -w",
+        "test": "jest",
+        "cdk": "npx aws-cdk@2.1023.0"
     },
     "lint-staged": {
         "*.{js,jsx,ts,tsx}": [
@@ -28,8 +35,8 @@
             "prettier --write"
         ],
         "*.py": [
-            "uv run ruff format",
-            "uv run ruff check"
+            "ruff format",
+            "ruff check"
         ]
     },
     "config": {
@@ -41,34 +48,51 @@
         "node": "22.8.0"
     },
     "devDependencies": {
+        "@aws-sdk/client-cloudformation": "^3.857.0",
+        "@aws-sdk/client-cognito-identity-provider": "^3.857.0",
+        "@aws-sdk/client-secrets-manager": "^3.857.0",
+        "@aws-sdk/credential-providers": "^3.857.0",
         "@commitlint/cli": "^19.8.1",
         "@commitlint/config-conventional": "^19.8.1",
         "@commitlint/prompt-cli": "^19.8.1",
         "@commitlint/types": "^19.8.1",
+        "@inquirer/prompts": "^7.8.0",
+        "@types/archiver": "^6.0.3",
+        "@types/aws-lambda": "^8.10.152",
+        "@types/jest": "^29.5.14",
         "@types/node": "22.7.9",
-        "@typescript-eslint/eslint-plugin": "^8.25.0",
-        "@typescript-eslint/parser": "^8.25.0",
+        "@typescript-eslint/eslint-plugin": "^8.37.0",
+        "@typescript-eslint/parser": "^8.37.0",
+        "archiver": "^7.0.1",
+        "aws-cdk": "^2.1023.0",
+        "chalk": "4.1.0",
+        "commander": "^14.0.0",
         "commitizen": "^4.3.1",
         "cz-conventional-changelog": "^3.3.0",
-        "eslint": "^9.31.0",
+        "eslint": "^9.32.0",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-prettier": "^5.5.3",
         "globals": "^15.15.0",
         "husky": "^9.1.6",
+        "jest": "^29.7.0",
         "lint-staged": "^15.5.2",
         "prettier": "^3.6.2",
+        "ts-jest": "^29.4.0",
+        "ts-node": "^10.9.2",
         "tsx": "^4.20.3",
         "typescript": "~5.8.3",
-        "typescript-eslint": "^8.25.0"
+        "typescript-eslint": "^8.37.0",
+        "yaml": "^2.8.0"
     },
     "dependencies": {
-        "@aws-sdk/client-cloudformation": "^3.848.0",
-        "@aws-sdk/client-cognito-identity-provider": "^3.848.0",
-        "@aws-sdk/credential-providers": "^3.848.0",
-        "chalk": "4.1.0",
-        "enquirer": "^2.4.1",
-        "node-email-verifier": "^2.0.0",
-        "yaml": "^2.8.0",
-        "zod": "^3.25.76"
+        "@aws-amplify/data-construct": "^1.16.3",
+        "@aws-cdk/aws-lambda-python-alpha": "^2.208.0-alpha.0",
+        "@aws-sdk/client-codebuild": "^3.857.0",
+        "@aws/pdk": "^0.26.14",
+        "@cdklabs/generative-ai-cdk-constructs": "^0.1.309",
+        "aws-appsync": "^4.1.10",
+        "aws-cdk-lib": "^2.208.0",
+        "cdk-nag": "^2.36.48",
+        "constructs": "^10.4.2"
     }
 }

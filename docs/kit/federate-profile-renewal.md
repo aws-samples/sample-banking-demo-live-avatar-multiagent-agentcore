@@ -1,3 +1,5 @@
+<!-- @export {"deleteFile": true} -->
+
 # Federate Profile Renewal
 
 > Production Federate profiles don't expire. These instructions are for dev Integration profiles.

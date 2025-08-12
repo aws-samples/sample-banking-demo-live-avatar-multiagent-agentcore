@@ -6,16 +6,11 @@ This documentation will walk you through how the Demo Starter Kit works in depth
 
 ## Configuration File
 
-The starter kit uses a file named [project-config.json](../../config/project-config.json) in the config folder to centrally track and manage project configurations.
+The starter kit uses [`cdk.json`](../../cdk.json) to centrally track and manage CDK configurations.
 
 ```json
 {
     "projectId": "PROJECT-IDENTIFIER",
-    "gitlabGroup": "genai-labs/demo-assets",
-    "gitlabProject": "GITLAB-PROJECT-NAME",
-    "codeArtifact": false,
-    "codePipeline": true,
-    "midway": true,
     "accounts": {
         "dev": {
             "number": "AWS_ACCOUNT_ID",
@@ -34,11 +29,15 @@ The starter kit uses a file named [project-config.json](../../config/project-con
             "region": "AWS_REGION"
         }
         // more aliases if needed
-    }
+    },
+    "pipeline": true,
+    "gitlab": {
+        "group": "genai-labs/demo-assets",
+        "project": "GITLAB-PROJECT-NAME"
+    },
+    "midway": true
 }
 ```
-
-[index.ts](../../config/index.ts) will throw an error if a dev account is not found or if the configuration is incorrect to prevent downstream errors in the CLIs or CDK constructs.
 
 ### Project Identifier
 
@@ -46,99 +45,93 @@ The **projectId** property must be less than 15 characters long and not use any 
 
 - Creating a prefix for stack names and generated resource names, supporting multiple demo deployments in the same account.
 - Tagging all CDK resources in the project.
-    - See the [stack construct](../../src/backend/lib/common/constructs/stack.ts) for more context.
-- Linking Midway profiles to the Amazon Cognito domain URL.
+    - See the [stack construct](../../lib/common/constructs/stack.ts) for more context.
+
+<!-- @export {"deleteLines": 15} -->
+
+- Linking Federate profiles to the Amazon Cognito domain URL.
     - See the [Cognito construct](#cognito-construct) for more context.
 
 ### GitLab Group / Project
 
-If **codePipeline** is `false`, the **gitlabGroup** and **gitlabProject** properties are optional. These properties are used to give the GitLab runner the necessary permissions to write to Amazon S3, which triggers the pipeline. See the [pipeline stack](#pipeline-stack) for more details.
+If **pipeline** is `false`, the **gitlab** **group** and **gitlab** **project** properties are optional. These properties are used to give the GitLab runner the necessary permissions to write to Amazon S3, which triggers the pipeline. See the [pipeline stack](#pipeline-stack) for more details.
 
-### CodeArtifact
+### Pipeline
 
-Setting **codeArtifact** to `true` enables the use of [CodeArtifact](https://docs.hub.amazon.dev/codeartifact/user-guide/getting-started/) in the [CodeBuild construct](#codebuild-construct).
-
-### CodePipeline
-
-When **codePipeline** is set to `true`, the configuration CLI will deploy a [self-mutating pipeline](https://docs.aws.amazon.com/cdk/v2/guide/cdk_pipeline.html) to the account labeled "dev" in the project configuration file. See the [pipeline stack](#pipeline-stack) and [configuration CLI](#configuration) for more details.
+When **pipeline** is set to `true`, the CLI will allow for the deployment of a [self-mutating pipeline](https://docs.aws.amazon.com/cdk/v2/guide/cdk_pipeline.html) to the account labeled "dev" in the CDK configuration file. See the [pipeline stack](#pipeline-stack) and [kit CLI](#kit-cli) for more details.
 
 ### Midway
 
 Seting **midway** to `true` enables [Federate/Midway authentication](https://integ.ep.federate.a2z.com/help), allowing Amazon employees to access to your demo. You can also use Federate to limit access to your demo to particular teams and/or users.
 
-## CLIs
+## Kit CLI
 
-The starter kit comes packages with three scripts/CLIs: **configure**, **develop**, and **commit**. The former two were developed by the GenAI Labs team and can be found in `tools/cli`.
+The starter kit comes packaged with a CLI that can be found in `tools`.
 
-Here are some basic guidelines for the CLIs:
+Here are some basic guidelines for the CLI:
 
 - Commands must be run from the project's root directory.
+- Run the command `npm install` from the root directory beforehand.
 - Commands are run as standard "npm" scripts so we must append `npm run [command]`
-- Run the command `npm run setup` from the root directory before running any other commands.
 - Press the escape button to cancel an operation or go back to the main menu from any sub menu.
-- To exit the CLI press control + "C" or select **Exit**.
+- To exit the CLI press control + "C" as needed or select **Exit**.
 - Feel free to change/alter tool behavior for project specific needs.
 
-### Configuration
-
 ```bash
-npm run configure
+npm run kit
 ```
 
-The configuration CLI will perform the following operations:
-
-1.  Create ADA profiles for each of the accounts in the project configuration.
-2.  Bootstrap those accounts in the region configured and `us-east-1`, including trust relationships with dev and termination protection for prod accounts.
-3.  Map Midway secrets to those accounts, if the **midway** property is set to `true`.
-    - If not already provided, the CLI will ask for the dev and prod Federate/Midway client secret keys from the [Federate profile](./demo-creation.md#federatemidway-profiles).
-    - The secret keys you provide are used in the creation of Midway secrets in AWS Secrets Manager, which are tracked via the **midwaySecretId** in the project configuration file.
-4.  Deploy the dev pipeline, if the **codePipeline** property is set to `true`.
-
-The configuration CLI will automatically exit after it has finished the configuration.
-
-![cli-configure-finish](images/cli-configure-finish.png)
-
-You **_must_** run this command each time you update the project configuration file.
-
-See [configure.ts](../../tools/cli/configure.ts) for more context.
-
-### Development
-
-```bash
-npm run develop
-```
-
-The development CLI provides a set of options to help facilitate local development.
+The kit CLI provides a set of options to help facilitate local development.
 
 ![cli-welcome](images/cli-welcome.png)
 
-The development CLI can be also used in headless mode by directly providing the operation, stage, and, if applicable, `--all` flag as command line arguments.
+The kit CLI can be also used in headless mode by directly providing the operation, stage, and, if applicable, option(s) as command line arguments.
 
 ```bash
-npm run develop -- deploy dev --all
+npm run kit -- deploy dev --all
 ```
 
-See [develop.ts](../../tools/cli/develop.ts) for more context.
+See [kit.ts](../../tools/cli.ts) for more context.
 
-#### Refresh Credentials
-
-- This operation will use [ADA](https://w.amazon.com/bin/view/DevAccount/Docs/) to fetch AWS credentials for the target account configured in the project configuration file.
-    - The received credentials are always stored under the `default` profile in the [AWS config files](https://docs.aws.amazon.com/cli/v1/userguide/cli-configure-files.html).
-- The CLI runs this operation before each action to keep things simple.
-
-#### Synthesize CDK Stacks
+### Configure Credentials
 
 ```bash
-npm run develop -- synth <stage>
+npm run kit -- configure-credentials [stage] [option]
+```
+
+- This operation will configure credentials using AWS Developer Account (ADA), IAM Identity Center, or short-term credentials.
+
+### Configure Secret
+
+```bash
+npm run kit -- configure-secret [stage] [options]
+```
+
+- This operation will help you configure an [AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html) secret in the target account.
+    - The secret name you provide is prefixed with the **projectId** in the CDK configuration file.
+    - If the secret is available in the dev account, it will be copied to sandbox accounts.
+
+### Bootstrap Account
+
+```bash
+npm run kit -- bootstrap [stage]
+```
+
+- This operation will bookstrap the target account in the region configured and `us-east-1`, including setting trust relationships with dev and termination protection for prod accounts.
+
+### Synthesize CDK Stacks
+
+```bash
+npm run kit -- synth [stage]
 ```
 
 - This operation will validate your CDK code and check for [CDK NAG](https://github.com/cdklabs/cdk-nag) errors/warnings.
 - The CLI will transparently output the stack building process, Docker invocations, etc. to keep you informed.
 
-#### Deploy CDK Stack(s)
+### Deploy CDK Stack(s)
 
 ```bash
-npm run develop -- deploy <stage> [flag]
+npm run kit -- deploy [stage] [option]
 ```
 
 - If you elect to not just deploy all stacks, the operation will allow you to select exactly which stacks you would like to deploy to the target account.
@@ -153,10 +146,10 @@ npm run develop -- deploy <stage> [flag]
 - Stack dependencies will also be deployed alongside the selected stacks to ensure functionality.
 - The operation uses the `--concurrency` flag to deploy stacks in parallel for faster deployment.
 
-#### Hotswap CDK Stack(s)
+### Hotswap CDK Stack(s)
 
 ```bash
-npm run develop -- hotswap <stage> [flag]
+npm run kit -- hotswap [stage] [option]
 ```
 
 - This operation is similar to the [previous operation](#deploy-cdk-stacks), but it performs a faster, hotswap deployment if possible. See the [documentation](https://docs.aws.amazon.com/cdk/v2/guide/ref-cli-cmd-deploy.html#ref-cli-cmd-deploy-options) for more details.
@@ -165,12 +158,12 @@ Many demos use synethetic data, such as as flat files (text/JSON/XML), images, a
 
 ![react-photos](./images/react-photos.png)
 
-- This operation can be used to speed up asset changes of Amazon S3 bucket deployments like that in the [storage construct](../../src/backend/lib/stacks/backend/storage/index.ts).
-    - When you push data to the S3 bucket, folders in `src/backend/lib/stacks/backend/storage/assets` become prefixes that can be referenced after authenticating with Cognito.
+- This operation can be used to speed up asset changes of Amazon S3 bucket deployments like that in the [storage construct](../../lib/stacks/backend/storage/index.ts).
+    - When you push data to the S3 bucket, folders in `lib/stacks/backend/storage/assets` become prefixes that can be referenced after authenticating with Cognito.
 
-##### Static Files vs Hydration
+#### Static Files vs Hydration
 
-Sometimes, we just need static file serving through which files (images, icons, simple HTML/JS scripts, etc.) can be accessed globally with just a simple URL. There is an `assets` folder under `src/frontend/src` for this purpose.
+Sometimes, we just need static file serving through which files (images, icons, simple HTML/JS scripts, etc.) can be accessed globally with just a simple URL. There is an `assets` folder for this purpose.
 
 - Ex: `https://d1ohf10999rv0h.cloudfront.net/assets/arch-DS8hMkeH.png`
     - Note the `assets` prefix. If you have nested folders, then they must be included in the URL path as well.
@@ -178,27 +171,27 @@ Sometimes, we just need static file serving through which files (images, icons, 
 
 Keep in mind that `static` files/folders can simply be accessed without any authorization tokens by directly referencing their URL path. Only use small files that can be accessed without any protections such as icons, fonts, brand logos, etc.
 
-#### Deploy Frontend
+### Deploy Frontend
 
 ```bash
-npm run develop -- deploy-frontend <stage>
+npm run kit -- deploy-frontend [stage]
 ```
 
-- This operation deploys the [frontend deployment stack](../../src/backend/lib/stacks/frontend/index.ts) by itself using the `-e` flag for quicker deployment.
+- This operation deploys the [frontend deployment stack](../../lib/stacks/frontend/index.ts) by itself using the `-e` flag for quicker deployment.
 - It first builds the frontend to ensure there are no errors.
 
-#### Refresh Local Environment
+### Refresh Local Environment
 
 ```bash
-npm run develop -- refresh-env <stage>
+npm run kit -- refresh-frontend [stage]
 ```
 
 - This operation is invoked by the [next operation](#test-frontend-locally-) automatically, but it can also be run by itself if you just want to:
-    - Pull down the CfnOutputs from the [frontend deployment stack](../../src/backend/lib/stacks/frontend/index.ts).
+    - Pull down the CfnOutputs from the [frontend deployment stack](../../lib/stacks/frontend/index.ts).
     - Update the .env file in the frontend source folder with those outputs.
     - If a Graph API ID is present, generate GraphQL files.
 
-#### Test Frontend Locally
+### Test Frontend Locally
 
 - This operation will [refresh the local environment](#refresh-local-environment-) then output a link to a [local server](http://localhost:3000/) for testing changes to your frontend React app.
 
@@ -207,7 +200,7 @@ npm run develop -- refresh-env <stage>
 
 - After you **press enter to continue**, the operation will kill the local server so future changes don't clutter the terminal.
 
-#### Manage Cognito Users
+### Manage Cognito User
 
 - This operation will get the user pool ID from the CfnOutputs then give you the option to create or delete a Cognito user in that user pool.
     - When creating a user, you will be asked to enter an email address. A temporary password will be emailed to this address, enabling you to log in to the frontend application.
@@ -215,9 +208,9 @@ npm run develop -- refresh-env <stage>
         ![react-login](./images/react-login.png)
 
     - You can use the **Reset Password** option to set a new password for the user if needed.
-    - Note that you cannot delete Amazon Federate (Midway) users.
+    - Note that you cannot delete Amazon Federate users.
 
-#### Destroy CDK Stack(s)
+### Destroy CDK Stack(s)
 
 - This operation will first use `cdk list` to list all available stacks for that target account.
     - Note that stacks in the dev account will be prefixed with the pipeline stack name.
@@ -231,10 +224,59 @@ npm run develop -- refresh-env <stage>
 - Use this operation with **_extreme caution_** as the CDK stacks destroyed with this operation cannot be recovered and may leave your application broken when using dependent stacks.
 - There are certain limitations with this operation due to how CDK is designed:
     - Stacks that are destroyed are still listed because the CDK uses the local `cdk.out` manifest, unlike [Terraform](https://www.hashicorp.com/products/terraform) and [Pulumi](https://github.com/pulumi/pulumi) which retain a cloud referenced stack list.
-    - We recommend that you delete the stacks in accordance with their dependencies in [stage.ts](../../src/backend/lib/stage.ts).
+    - We recommend that you delete the stacks in accordance with their dependencies in [stage.ts](../../lib/stage.ts).
     - This operation may not destroy certain cloud resource such as AWS WAF (Global & Regional), AWS Buckets, VPC configurations, Secrets Manager, etc. Manually delete these resources in the AWS Management Console.
 
-### Commit
+<!-- @export {"deleteLines": 46} -->
+
+## Export CLI
+
+```bash
+npm run export
+```
+
+Creates a ZIP archive `export.zip` by processing `@export` directives in your files to remove sensitive/internal code.
+
+### Directives
+
+- Typescript
+
+    ```typescript
+    // @export {"deleteLines": 0}
+    ```
+
+- Markdown
+
+    ```markdown
+    <!-- @export { "replace": "sensitive-value", "with": "placeholder" } -->
+    ```
+
+- JSON
+
+    ```json
+    {
+        "@export": { "deleteLines": 0 }
+    }
+    ```
+
+### Options
+
+- `deleteFile: true` - Remove entire file.
+- `deleteLines: number` - Remove directive and the following number of lines.
+- `replace/with` - Remove directive and replace text.
+
+### Defaults
+
+The tool automatically removes:
+
+- The export ZIP file
+- The export script `tools/export.ts`
+- `docs/kit/images/`
+- Any files matching patterns in `.gitignore`
+
+See [export.ts](../../tools/export.ts) for more context.
+
+## Commit CLI
 
 ```bash
 npm run commit
@@ -242,7 +284,7 @@ npm run commit
 
 The commit CLI is provided by [Commitizen](https://commitizen-tools.github.io/commitizen/). See their [documentation](https://commitizen-tools.github.io/commitizen/tutorials/writing_commits/) for more details.
 
-#### Hooks
+### Hooks
 
 The starter kit also includes two commit hooks, powered by [Husky](https://typicode.github.io/husky/), that will run automatically after the commit CLI:
 
@@ -255,21 +297,25 @@ The starter kit also includes two commit hooks, powered by [Husky](https://typic
 
 ## CDK Constructs
 
+<!-- @export {"deleteLines": 3} -->
+
 Some aspects of the starter kit infrastructure are specific to internal Amazon authentication/security requirements. Remove the [pipeline](#pipeline-stack) stack as well as the [Cognito](#cognito-construct) and [CodeBuild](#codebuild-construct) constructs before sharing publicly.
 
 ### App
 
-`bin/demo.ts` is the CDK entrypoint as configured in [cdk.json](../../src/backend/cdk.json).
+`bin/demo.ts` is the CDK entrypoint as configured in [cdk.json](../../cdk.json).
 
-The stack prefix and stage for the app are determined by a context variable passed by the [development CLI](#development). The account details are determined by the project configuration file itself.
+The stack prefix and stage for the app are determined by a context variable passed by the [kit CLI](#kit-cli). The account details are determined by the `cdk.json` file itself.
 
-See [bin/demo.ts](../../src/backend/bin/demo.ts) for more context.
+See [bin/demo.ts](../../bin/demo.ts) for more context.
+
+<!-- @export {"deleteLines": 32} -->
 
 ### Pipeline Stack
 
 ![arch-pipeline](./images/arch-pipeline.drawio.png)
 
-This stack is only deployed to the `dev` account via the [configuration CLI](#configuration) when the **codePipeline** property is set to `true` in the project configuration file.
+This stack is only deployed to the `dev` account via the CLI when the **pipeline** property is set to `true` in the CDK configuration file.
 
 It sets up all the necessary resources and permissions for the GitLab runner to upload zipped code from commits to Amazon S3, kicking off the CodePipeline.
 
@@ -277,27 +323,21 @@ It sets up all the necessary resources and permissions for the GitLab runner to 
 - An Amazon CloudTrail trial that tracks write events in the source bucket to trigger the pipleine.
 - An AWS IAM role that will be assumed by the [GitCI Credential vendor](https://gitlab.pages.aws.dev/docs/Platform/aws-credential-vendor.html), allowing it access to the source bucket.
 - An AWS pipeline construct for synthesizing the infrastructure then deploying it to each stage.
-    - A dev stage that deploys the [application stage](../../src/backend/lib/stage.ts) to the dev account in the [project configuration file](../../config/project-config.json).
-    - If configured, a prod stage that deploys the application stage to the prod account in the project configuration file.
+    - A dev stage that deploys the [application stage](../../lib/stage.ts) to the dev account in the [`cdk.json` file](../../cdk.json).
+    - If configured, a prod stage that deploys the application stage to the prod account in the CDK configuration file.
 
-See [pipeline.ts](../../src/backend/lib/stacks/pipeline.ts) and [.gitlab-ci.yml](../../.gitlab-ci.yml) for more context.
+See [pipeline.ts](../../lib/stacks/pipeline.ts) and [.gitlab-ci.yml](../../.gitlab-ci.yml) for more context.
 
 > [Can I just use the GitLab runner?](./faq.md#can-i-just-use-the-gitlab-runner)
 
 ### Cognito Construct
 
-This custom construct sets the necessary properties for creating a Federate/Midway-compatible User Pool and User Pool Client.
+This custom construct sets the necessary properties for creating a Federate-compatible User Pool and User Pool Client.
 
-- It uses **midwaySecretId** to import a Midway secret from AWS Secrets Manager. The stage, whether prod or not, determines which secret is used.
-- It uses the project identifier as the **clientId** and in the User Pool Domain URL to align with the [redirect URIs we set up in Federate](./demo-creation.md#federatemidway-profiles).
-- It also adds a **callbackUrls** property for referencing the CloudFront distribution URL and `http://localhost:3000` for enabling Midway for local development.
+- It imports a Federate secret from AWS Secrets Manager. The stage, whether prod or not, determines which secret is used.
+- It uses the project identifier as the **clientId** and in the User Pool Domain URL to align with the [redirect URIs we set up in Federate](./demo-creation.md#federate-profiles).
+- It also adds a **callbackUrls** property for referencing the CloudFront distribution URL and `http://localhost:3000` for local development.
 
-You can simply replace the standard `UserPool` construct with `LabsUserPool` and the standard `UserPoolClient` construct with `LabsUserPoolClient` to add Midway authorization.
+You can simply replace the standard `UserPool` construct with `FederateUserPool` and the standard `UserPoolClient` construct with `FederateUserPoolClient` to add Midway authorization.
 
-See [cognito.ts](../../src/backend/lib/common/constructs/cognito.ts) for more context.
-
-### CodeBuild Construct
-
-This custom construct enables the use of [CodeArtifact (formerly Goshawk)](https://docs.hub.amazon.dev/codeartifact/user-guide/getting-started/) in both the [frontend deployment stack](../../src/backend/lib/stacks/frontend/index.ts) and [pipeline stack](../../src/backend/lib/stacks/pipeline.ts).
-
-See [codebuild.ts](../../src/backend/lib/common/constructs/codebuild.ts) for more context.
+See [cognito.ts](../../lib/common/constructs/cognito.ts) for more context.
