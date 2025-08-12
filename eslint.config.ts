@@ -15,7 +15,7 @@ export default tseslint.config(
             reportUnusedDisableDirectives: false,
         },
         plugins: {
-            prettier: prettier,
+            prettier,
         },
         rules: {
             "no-empty": ["error", { allowEmptyCatch: true }],

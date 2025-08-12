@@ -4,7 +4,7 @@
 
 ## Components
 
-This project is structured as a monorepository with a CDK backend and React frontend in the `src` folder. Modules that are unique to a certain CDK construct or React component are colocated (in the same parent folder). Shared or generic modules are found in a "common" folder.
+Modules that are unique to a certain CDK construct or React component are colocated (in the same parent folder). Shared or generic modules are found in a "common" folder.
 
 ### Backend
 
@@ -12,45 +12,45 @@ This project is structured as a monorepository with a CDK backend and React fron
 
 `bin/demo.ts` is the entrypoint to the CDK application. `lib/stacks` contains the application's stacks and child constructs.
 
-#### [Frontend Stack](./src/backend/lib/stacks/frontend/index.ts)
+#### [Frontend Stack](./lib/stacks/frontend/index.ts)
 
 - The static React website is hosted in a private Amazon S3 bucket and served using Amazon CloudFront with an Origin Access Control.
 - Another S3 bucket is used for storing access logs.
 - A CloudFront-scoped AWS Web Application Firewall (WAF) web access control list (ACL) protects the CloudFront distribution with the following managed rules: AWSManagedRulesCommonRuleSet, AWSManagedRulesAmazonIpReputationList, and AWSManagedRulesBotControlRuleSet.
 
-#### [Backend Stack](./src/backend/lib/stacks/backend/index.ts)
+#### [Backend Stack](./lib/stacks/backend/index.ts)
 
-##### [VPC](./src/backend/lib/stacks/backend/vpc.ts)
+##### [Networking](./lib/stacks/backend/networking.ts)
 
 - An Amazon VPC with 3 subnets: one public, one private isolated, and one private with agress are created.
 - Gateway and interface endpoints are used to provide secure connectivity to services like Amazon S3, DynamoDB, and Bedrock.
 - A security group allows all outbound traffic and access from the client.
 
-##### [Auth](./src/backend/lib/stacks/backend/auth.ts)
+##### [Auth](./lib/stacks/backend/auth.ts)
 
 - An Amazon Cognito UserPool, UserPoolClient, and IdentityPool are used for authentication.
 - A regional web ACL is created to protect Cognito and APIs.
 
-##### [Graph API](./src/backend/lib/stacks/backend/graph-api/index.ts)
+##### [Graph API](./lib/stacks/backend/graph-api/index.ts)
 
 - The AWS Amplify GraphQL contruct is powered by AWS AppSync and connected to an Amazon DynamoDB database.
 - A sample schema is provided to get you started.
 
-##### [REST API](./src/backend/lib/stacks/backend/rest-api/index.ts)
+##### [REST API](./lib/stacks/backend/rest-api/index.ts)
 
 - An Amazon API Gateway Lambda proxy integration, alongside Powertools for AWS Lambda, is used to enable the quick creation of new API routes without managing additional infrastructure.
 
-##### [Storage](./src/backend/lib/stacks/backend/storage/index.ts)
+##### [Storage](./lib/stacks/backend/storage/index.ts)
 
 - An Amazon S3 bucket is used to store other demo assets like images, videos, synthetic data, etc.
 
-##### [Knowledge](./src/backend/lib/stacks/backend/knowledge.ts)
+##### [Knowledge](./lib/stacks/backend/knowledge.ts)
 
 - Another Amazon S3 bucket is used as a Knowledge Base source, with a Knowledge Base construct simplifying GenAI infrastructure management.
 
-#### [Frontend Deployment Stack](./src/backend/lib/stacks/frontend/index.ts)
+#### [Frontend Deployment Stack](./lib/stacks/frontend/index.ts)
 
-- Website assets are uploaded to an Amazon S3 bucket from the `src/frontend` folder.
+- Website assets are uploaded to an Amazon S3 bucket from the `app` folder.
 - A CDK custom resource provider triggers an Amazon CodeBuild project which builds the React application.
 
 ### Frontend
@@ -58,7 +58,7 @@ This project is structured as a monorepository with a CDK backend and React fron
 `src/index.tsx` is the entrypoint to the React application. `src/pages` contains the application's pages and child components.
 
 - The frontend application uses [Vite React](https://vite.dev/guide/) and Amazon's [CloudScape design system](https://cloudscape.design/).
-- The AWS CDK-created backend resources are linked to the frontend via [Amplify.configure](./src/frontend/src/App.tsx).
+- The AWS CDK-created backend resources are linked to the frontend via [Amplify.configure](./lib/stacks/frontend/app/src/App.tsx).
     - Amplify [Auth](https://docs.amplify.aws/vue/build-a-backend/auth/set-up-auth/) wraps the application, providing identity-based permissioning.
     - Amplify [API](https://docs.amplify.aws/gen1/javascript/build-a-backend/restapi/set-up-rest-api/) and [Storage](https://docs.amplify.aws/react/build-a-backend/storage/) are used to access a REST API and S3 bucket respectively.
 
@@ -109,8 +109,8 @@ For more details, visit the [AWS Pricing Calculator](https://calculator.aws/#/).
 ### Deployment
 
 - Open a terminal and set the working directory to the location where you want to clone this repository. Clone the repository using the command `git clone [url]`.
-- From the root directory, run the command `npm run setup` to install the [CDK](https://docs.aws.amazon.com/cdk/v2/guide/work-with-cdk-typescript.html#work-with-cdk-typescript-dependencies) and React dependencies.
-- [Deploy the CDK application](https://docs.aws.amazon.com/cdk/v2/guide/deploy.html#deploy-how-deploy) using a command like `npm run -w backend cdk deploy -- --all`.
+- From the root directory, run the command `npm install` to install the [CDK](https://docs.aws.amazon.com/cdk/v2/guide/work-with-cdk-typescript.html#work-with-cdk-typescript-dependencies) and React dependencies.
+- [Deploy the CDK application](https://docs.aws.amazon.com/cdk/v2/guide/deploy.html#deploy-how-deploy) using a command like `npm run cdk deploy "*/**"`.
 
 ## Clean-up
 

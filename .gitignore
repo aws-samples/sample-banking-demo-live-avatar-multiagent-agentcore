@@ -1,2 +1,16 @@
+*.js
+!jest.config.js
+*.d.ts
+!vite-env.d.ts
 node_modules
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+
 .DS_STORE
+dist
+dist/*
+
+.venv
+.vscode

@@ -1,3 +1,5 @@
+<!-- @export {"deleteFile": true} -->
+
 # Personal CTI/Team/Bindle Creation
 
 These instructions will walk you through creating a personal CTI, Team, and Bindle for use with your Isengard account(s). This is a one-time process.

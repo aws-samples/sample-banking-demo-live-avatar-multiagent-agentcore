@@ -1,10 +1,12 @@
+<!-- @export {"deleteFile": true} -->
+
 # Federate Profile Creation
 
 1. Click **Create Service Profile**.
 2. Skip over the **Questionnaire Based Onboarding** by clicking **Submit**.
 3. Select **OIDC** then click **Next**.
 4. Enter a **Service Name** using the following format `genai-labs-[PROJECT-IDENTIFIER]`.
-    - The project identifier should exactly match the **projectId** in your [project configuration file](../../config/project-config.json).
+    - The project identifier should exactly match the **projectId** in your [`cdk.json` file](../../cdk.json).
     - Ex: `genai-labs-email-generator`
 5. Select **Pre-Approved Use Cases** then **Federate-Cognito Integration**.
 6. Check both boxes titled **I acknowledge** then click **Ok**.
@@ -12,11 +14,11 @@
 8. Under **Ownership Configuration**, select your team's POSIX group and CTI properties.
     - If needed, create a new team using these [instructions](https://permissions.amazon.com/a/team/new).
 9. Click **Next**.
-10. Enter a **Client ID** that exactly matches the **projectId** in your [project configuration file](../../config/project-config.json).
+10. Enter a **Client ID** that exactly matches the **projectId** in your [`cdk.json` file](../../cdk.json).
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
 11. Enter **Redirect URIs** using the following format `https://[PROJECT-IDENTIFIER]-[ACCOUNT_NUMBER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
-    - The project identifier, account numbers, and regions should reflect your [project configuration file](../../config/project-config.json).
+    - The project identifier, account numbers, and regions should reflect your [`cdk.json` file](../../cdk.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
     - Ex:
 
@@ -42,7 +44,7 @@
     ![federate-default-claims](images/federate-default-claims.png)
 
 21. Click **Next** then **Submit**.
-22. Copy the generated Midway client secret key. **_Keep it safe_**.
-    > [I forgot to copy the Midway client secret key. Now what?](./faq.md#i-forgot-to-copy-the-midway-client-secret-key-now-what)
+22. Copy the generated client secret key. **_Keep it safe_**.
+    > [I forgot to copy the Federate client secret key. Now what?](./faq.md#i-forgot-to-copy-the-federate-client-secret-key-now-what)
 23. The Integration profile expires after 30 days. Set a recurring calendar invite to renew it.
     - Follow these [instructions](./federate-profile-renewal.md) to renew it.

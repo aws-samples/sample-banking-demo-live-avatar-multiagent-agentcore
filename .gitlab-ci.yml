@@ -22,9 +22,9 @@ prepare:
     script:
         - apk add --no-cache jq
         - |
-            export PROJECT_ID="$(jq -r '.projectId' config/project-config.json)"
-            export AWS_ACCOUNT_NUMBER="$(jq -r '.accounts.dev.number' config/project-config.json)"
-            export AWS_DEFAULT_REGION="$(jq -r '.accounts.dev.region' config/project-config.json)"
+            export PROJECT_ID="$(jq -r '.context.projectId' cdk.json)"
+            export AWS_ACCOUNT_NUMBER="$(jq -r '.context.accounts.dev.number' cdk.json)"
+            export AWS_DEFAULT_REGION="$(jq -r '.context.accounts.dev.region' cdk.json)"
             echo "PROJECT_ID=$PROJECT_ID" >> build.env
             echo "AWS_ACCOUNT_NUMBER=$AWS_ACCOUNT_NUMBER" >> build.env
             echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION" >> build.env
