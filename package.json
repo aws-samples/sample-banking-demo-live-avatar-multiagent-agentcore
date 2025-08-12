@@ -6,7 +6,7 @@
     "license": "Apache License Version 2.0",
     "private": true,
     "bin": {
-        "demo": "bin/demo.js"
+        "index": "bin/index.js"
     },
     "workspaces": [
         "lib/stacks/frontend/app"
