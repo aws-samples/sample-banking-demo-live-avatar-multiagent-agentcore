@@ -27,7 +27,7 @@ import * as fs from "fs";
         );
 
     for (const file of files) {
-        if (!file.match(/\.(ts|tsx|md|json)$/)) {
+        if (!file.match(/\.(ts|tsx|md|json|yml|yaml)$/)) {
             archive.file(file, { name: file });
             continue;
         }
@@ -41,13 +41,13 @@ import * as fs from "fs";
                 match = lines[i].match(/"@export":\s*(\{[^}]+\})/);
             } else {
                 match = lines[i].match(
-                    /(?:\/\/\s*@export\s*(\{[^}]+\})|<!--\s*@export\s*(\{[^}]+\})\s*-->)/
+                    /(?:\/\/\s*@export\s*(\{[^}]+\})|<!--\s*@export\s*(\{[^}]+\})\s*-->|#\s*@export\s*(\{[^}]+\}))/
                 );
             }
             if (!match) continue;
 
             try {
-                const config = JSON.parse(match[1] || match[2]);
+                const config = JSON.parse(match[1] || match[2] || match[3]);
                 if (config.deleteFile) {
                     shouldDelete = true;
                     break;

@@ -259,6 +259,12 @@ Creates a ZIP archive `export.zip` by processing `@export` directives in your fi
     }
     ```
 
+- YAML
+
+    ```yaml
+    # @export {"deleteLines": 0}
+    ```
+
 ### Options
 
 - `deleteFile: true` - Remove entire file.
