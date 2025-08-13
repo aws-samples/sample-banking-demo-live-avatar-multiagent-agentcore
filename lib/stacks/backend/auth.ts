@@ -37,10 +37,10 @@ export class Auth extends Construct {
 
         // @export {"replace": "FederateUserPool", "with": "UserPool"}
         const userPool = new FederateUserPool(this, "userPool", {
+            // @export {"replace": "false,", "with": "true,"}
             selfSignUpEnabled: false,
             signInAliases: {
-                phone: false,
-                email: false,
+                email: true,
             },
             autoVerify: {
                 email: true,
@@ -67,7 +67,7 @@ export class Auth extends Construct {
         NagSuppressions.addResourceSuppressions(userPool, [
             {
                 id: "AwsSolutions-COG2",
-                reason: "Cognito user pool should not require MFA when using Federate/Midway.",
+                reason: "Cognito user pool should not require MFA for demos.",
             },
             {
                 id: "AwsSolutions-COG3",

@@ -7,6 +7,7 @@ import Amazicon from "./amazicon.svg";
 const Login = () => {
     return (
         <Authenticator
+            // @export {"replace": "true", "with": "false"}
             hideSignUp={true}
             variation="modal"
             // socialProviders={["amazon"]}

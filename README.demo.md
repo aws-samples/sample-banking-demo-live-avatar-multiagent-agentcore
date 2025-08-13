@@ -112,6 +112,12 @@ For more details, visit the [AWS Pricing Calculator](https://calculator.aws/#/).
 - From the root directory, run the command `npm install` to install the [CDK](https://docs.aws.amazon.com/cdk/v2/guide/work-with-cdk-typescript.html#work-with-cdk-typescript-dependencies) and React dependencies.
 - [Deploy the CDK application](https://docs.aws.amazon.com/cdk/v2/guide/deploy.html#deploy-how-deploy) using a command like `npm run cdk deploy "*/**"`.
 
+### Accessing the Website
+
+- Once the deployment completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendDeployment**.
+- Click the **Outputs** tab then the **callbackUrl** to visit the frontend app.
+- **Create Account** then verify your email to access the frontend app.
+
 ## Clean-up
 
 - Open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home) then select each stack you created and click **Delete** twice. Or use [`cdk destroy`](https://docs.aws.amazon.com/cdk/v2/guide/ref-cli-cmd-destroy.html).

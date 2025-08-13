@@ -6,6 +6,7 @@ import {
     AdminDeleteUserCommand,
     CognitoIdentityProviderClient,
     ListUsersCommand,
+    ListUsersCommandOutput,
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
     CreateSecretCommand,
@@ -603,40 +604,55 @@ const manageUser = async (stage: string) => {
         }
         case UserManagementActions.DELETE_USER: {
             console.log(blueBright("\nListing users..."));
+            let listResponse: ListUsersCommandOutput;
             try {
-                const listResponse = await cognitoClient.send(
+                listResponse = await cognitoClient.send(
                     new ListUsersCommand({
                         UserPoolId: userPoolId,
                     })
                 );
-                const userList =
-                    listResponse.Users?.filter((u) => !u.Username?.includes("AmazonFederate")) ||
-                    [];
-                if (userList.length === 0) {
-                    console.log(redBright(`\n🛑 No users found.`));
-                    return;
-                }
-                const user = await prompt.select(
-                    "user",
-                    userList.map((i) => i.Username || "")
-                );
-                if (!(await prompt.confirm(`Are you sure you want to delete user ${user}?`))) {
-                    return;
-                }
-                try {
-                    await cognitoClient.send(
-                        new AdminDeleteUserCommand({
-                            UserPoolId: userPoolId,
-                            Username: user,
-                        })
-                    );
-                    console.log(greenBright(bold(`\nDeleted user ${user}.`)));
-                } catch (error) {
-                    console.log(redBright(`\n🛑 Failed to delete user.`));
-                    console.error("\n", error);
-                }
             } catch (error) {
                 console.log(redBright(`\n🛑 Failed to list users.`));
+                console.error("\n", error);
+                return;
+            }
+            const users =
+                listResponse.Users?.filter((user) => !user.Username?.startsWith("Amazon")) || [];
+            if (users.length === 0) {
+                console.log(redBright(`\n🛑 No users found.`));
+                return;
+            }
+            let user = "";
+            try {
+                const userEmails = users.map((user) => {
+                    return (
+                        user.Attributes?.find((attr) => attr.Name === "email")?.Value ||
+                        user.Username ||
+                        ""
+                    );
+                });
+                const selectedEmail = await prompt.select("user", userEmails);
+                if (
+                    !(await prompt.confirm(
+                        `Are you sure you want to delete user ${selectedEmail}?`
+                    ))
+                ) {
+                    return;
+                }
+                user = users[userEmails.indexOf(selectedEmail)]?.Username || "";
+            } catch {
+                return;
+            }
+            try {
+                await cognitoClient.send(
+                    new AdminDeleteUserCommand({
+                        UserPoolId: userPoolId,
+                        Username: user,
+                    })
+                );
+                console.log(greenBright(bold(`\nDeleted user.`)));
+            } catch (error) {
+                console.log(redBright(`\n🛑 Failed to delete user.`));
                 console.error("\n", error);
             }
             break;
