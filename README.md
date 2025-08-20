@@ -1,6 +1,6 @@
 <!-- @export {"deleteFile": true} -->
 
-# GenAI Labs Demo Starter Kit
+# AWS Technical Product Marketing Demo Starter Kit
 
 ![cli-welcome](./docs/kit/images/cli-welcome.png)
 

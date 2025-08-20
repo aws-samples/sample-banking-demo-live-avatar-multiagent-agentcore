@@ -390,7 +390,7 @@ const bootstrapAccount = async (stage: string) => {
         }
     };
     await bootstrapRegion(account.region);
-    await bootstrapRegion("us-east-1");
+    if (account.region !== "us-east-1") await bootstrapRegion("us-east-1");
 };
 
 const synthesizeStacks = async (stage: string): Promise<void> => {
@@ -441,10 +441,9 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
         return false;
     }
 
-    const workspace = JSON.parse(
-        await executeCommand('npm query .workspace[name="frontend"]', true)
-    )[0];
-    const frontendPath = path.join(__dirname, "..", workspace.location);
+    const frontendPath = JSON.parse(
+        await executeCommand('npm query .workspace name="frontend"', true)
+    )[0].path;
 
     // create environment file
     const environmentVariables = stackOutputs
@@ -781,7 +780,7 @@ if (!cdkContext.accounts) {
 if (process.argv.length === 2) {
     console.clear();
     console.log(bold(magentaBright("Welcome to the Demo Starter Kit!")));
-    console.log(bold(magentaBright("Created by the GenAI Labs Team 🧪")));
+    console.log(bold(magentaBright("Created by AWS Technical Product Marketing 🧪")));
 
     (async () => {
         while (true) {
