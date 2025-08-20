@@ -292,14 +292,12 @@ The commit CLI is provided by [Commitizen](https://commitizen-tools.github.io/co
 
 ### Hooks
 
-The starter kit also includes two commit hooks, powered by [Husky](https://typicode.github.io/husky/), that will run automatically after the commit CLI:
+Commit hooks, powered by [Husky](https://typicode.github.io/husky/), will run automatically after the commit CLI:
 
 - The pre-commit hook will run code formatting and quality checks, stopping you from committing bad code that might block the pipeline.
     - [lint-staged](https://github.com/lint-staged/lint-staged) will format and lint staged files.
         - Formatting and linting will be handled by [Prettier](https://prettier.io/) and [ESLint](https://eslint.org/) for TypeScript and [Ruff](https://docs.astral.sh/ruff/) for Python.
     - See [pre-commit](../../.husky/pre-commit), [package.json](../../package.json), [eslint.config.ts](../../eslint.config.ts), and [.prettierrc](../../.prettierrc) for more context.
-- The commit-msg hook will validate the commit message and ensure it follows the [Git Conventional Commits Standard](https://www.conventionalcommits.org/en/v1.0.0/).
-    - See [commit-msg](../../.husky/commit-msg) for more context.
 
 ## CDK Constructs
 

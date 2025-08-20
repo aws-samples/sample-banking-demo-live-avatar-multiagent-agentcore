@@ -3,6 +3,7 @@ import { applyMode, Mode } from "@cloudscape-design/global-styles";
 import { getCurrentUser, signOut } from "aws-amplify/auth";
 import { useEffect, useState } from "react";
 import Favicon from "./favicon.png";
+import AboutModal from "./AboutModal.tsx";
 
 const APP_NAME = "Demo Starter Kit";
 
@@ -18,6 +19,7 @@ const TopBar = () => {
     }, [theme]);
 
     const [email, setEmail] = useState<string>("");
+    const [showAboutModal, setShowAboutModal] = useState(false);
 
     useEffect(() => {
         const getEmail = async () => {
@@ -58,12 +60,18 @@ const TopBar = () => {
                         onItemClick: ({ detail }) => {
                             if (detail.id === "switch-theme") {
                                 setTheme(theme === Mode.Light ? Mode.Dark : Mode.Light);
+                            } else if (detail.id === "about") {
+                                setShowAboutModal(true);
                             }
                         },
                         items: [
                             {
                                 id: "switch-theme",
                                 text: theme === Mode.Light ? "🌑  Dark Theme" : "☀️ Light Theme",
+                            },
+                            {
+                                id: "about",
+                                text: "About",
                             },
                         ],
                     },
@@ -88,6 +96,11 @@ const TopBar = () => {
                         },
                     },
                 ]}
+            />
+            <AboutModal
+                visible={showAboutModal}
+                onDismiss={() => setShowAboutModal(false)}
+                appName={APP_NAME}
             />
         </div>
     );

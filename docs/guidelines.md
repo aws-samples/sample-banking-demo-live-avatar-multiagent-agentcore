@@ -1,6 +1,6 @@
 # AWS Technical Marketing Demo Guidelines
 
-A comprehensive, end-to-end guide to architect, build, deploy, and operate AWS Technical Marketing demos. Follow these standards to ensure consistency, scalability, security, and maintainability for our team. If you have any questions about the guidance mentioned, then please contact your GenAI Labs lead.
+A comprehensive, end-to-end guide to architect, build, deploy, and operate AWS Technical Marketing demos. Follow these standards to ensure consistency, scalability, security, and maintainability for our team. If you have any questions about the guidance mentioned, then please contact your AWS Technical Product Marketing lead.
 
 ---
 

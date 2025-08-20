@@ -1,4 +1,4 @@
-import { StackProps } from "aws-cdk-lib";
+import { StackProps, Stage } from "aws-cdk-lib";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import { CommonStack } from "../../common/constructs/stack";
@@ -54,6 +54,9 @@ export class Backend extends CommonStack {
 
         this.environmentVariables = {
             VITE_REGION: this.region!,
+            VITE_STAGE: Stage.of(this)?.stageName || "unknown",
+            VITE_BUILD_TIMESTAMP: new Date().toISOString(),
+            VITE_BUILD_VERSION: process.env.npm_package_version || "0.0.0",
             VITE_CALLBACK_URL: urls[0],
             VITE_USER_POOL_ID: auth.userPool.userPoolId,
             ...(auth.userPoolDomain && {
