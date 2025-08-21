@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @export {"id": "kit", "deleteFile": true}
 
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import {

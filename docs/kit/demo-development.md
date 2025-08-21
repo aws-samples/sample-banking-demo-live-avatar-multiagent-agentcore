@@ -1,3 +1,5 @@
+<!-- @export {"id": "kit", "deleteFile": true} -->
+
 # Demo Development
 
 <!-- @export {"deleteLines": 3} -->

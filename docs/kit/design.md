@@ -1,3 +1,5 @@
+<!-- @export {"id": "kit", "deleteFile": true} -->
+
 # Design
 
 This documentation will walk you through how the Demo Starter Kit works in depth so you can better leverage and/or customize its functionality.
@@ -227,12 +229,12 @@ npm run kit -- refresh-frontend [stage]
     - We recommend that you delete the stacks in accordance with their dependencies in [stage.ts](../../lib/stage.ts).
     - This operation may not destroy certain cloud resource such as AWS WAF (Global & Regional), AWS Buckets, VPC configurations, Secrets Manager, etc. Manually delete these resources in the AWS Management Console.
 
-<!-- @export {"deleteLines": 46} -->
+<!-- @export {"deleteLines": 52} -->
 
 ## Export CLI
 
 ```bash
-npm run export
+npm run export -- --id kit
 ```
 
 Creates a ZIP archive `export.zip` by processing `@export` directives in your files to remove sensitive/internal code.
@@ -243,12 +245,14 @@ Creates a ZIP archive `export.zip` by processing `@export` directives in your fi
 
     ```typescript
     // @export {"deleteLines": 0}
+    // @export {"id": "kit", "deleteLines": 4}
     ```
 
 - Markdown
 
     ```markdown
     <!-- @export { "replace": "sensitive-value", "with": "placeholder" } -->
+    <!-- @export { "id": "kit", "deleteFile": true } -->
     ```
 
 - JSON
@@ -267,6 +271,7 @@ Creates a ZIP archive `export.zip` by processing `@export` directives in your fi
 
 ### Options
 
+- `id: string` - Only process this tag when a matching ID is specified via repeatable `--id` flag.
 - `deleteFile: true` - Remove entire file.
 - `deleteLines: number` - Remove directive and the following number of lines.
 - `replace/with` - Remove directive and replace text.

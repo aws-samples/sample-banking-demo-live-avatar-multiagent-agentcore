@@ -154,9 +154,9 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
 48. First, select **dev**, **Configure Credentials**, then **AWS Developer Account**.
 49. Second, select **Configure Secret**, then enter `federateSecret` followed by the Federate client secret key from the [previous section](#federate-profiles).
 50. Third, select **Bootstrap Account**.
-51. Fourth, select **Deploy CDK Stack(s)** then **no**, wait for the stacks to list, then select the stack ending in **pipeline** by pressing the spacebar followed by **Enter**.
+51. Select **Back**, then repeat steps 48-50 for **prod** and your sandbox account(s) if applicable.
+52. Finally, select **Back**, **dev**, **Deploy CDK Stack(s)**, then **no**, wait for the stacks to list, then select the stack ending in **pipeline** by pressing the spacebar followed by **Enter**.
     - This deploys the pipeline to the dev account.
-52. Select **Back**, then repeat steps 48-51 for **prod** and your sandbox account.
 
 - See the [design documentation](./design.md#kit-cli) to learn more about the Demo Starter Kit CLI.
 
