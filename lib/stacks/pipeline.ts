@@ -23,7 +23,7 @@ import { CommonBucket } from "../common/constructs/s3";
 import { CommonStack } from "../common/constructs/stack";
 import { ApplicationStage } from "../stage";
 
-export class PipelineStack extends CommonStack {
+export class Pipeline extends CommonStack {
     constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
 

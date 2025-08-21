@@ -1,6 +1,6 @@
 import { App, Tags } from "aws-cdk-lib";
 // @export {"deleteLines": 1}
-import { PipelineStack } from "../lib/stacks/pipeline";
+import { Pipeline } from "../lib/stacks/pipeline";
 import { ApplicationStage } from "../lib/stage";
 
 const app = new App({});
@@ -20,7 +20,7 @@ const properties = {
 // @export {"deleteLines": 4}
 if (app.node.tryGetContext("pipeline") && stage === "dev") {
     // this stack must be named pipeline
-    new PipelineStack(app, "pipeline", properties);
+    new Pipeline(app, "pipeline", properties);
 } else {
     new ApplicationStage(app, stage, properties);
     // @export {"deleteLines": 1}

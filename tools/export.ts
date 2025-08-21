@@ -3,9 +3,10 @@
 import archiver from "archiver";
 import { bold, greenBright } from "chalk";
 import { execSync } from "child_process";
+import { Command } from "commander";
 import * as fs from "fs";
 
-(async () => {
+const exportZip = async (ids: string[] = []) => {
     const zipName = "export.zip";
 
     const output = fs.createWriteStream(zipName);
@@ -48,20 +49,25 @@ import * as fs from "fs";
 
             try {
                 const config = JSON.parse(match[1] || match[2] || match[3]);
-                if (config.deleteFile) {
-                    shouldDelete = true;
-                    break;
-                }
-                if (config.deleteLines) {
-                    lines.splice(i, config.deleteLines + 1);
-                }
-                if (config.replace && config.with !== undefined) {
-                    lines.splice(i, 1);
-                    if (i < lines.length && lines[i].includes(config.replace)) {
-                        lines[i] = lines[i].replace(config.replace, config.with);
+
+                if (!config.id || ids.includes(config.id)) {
+                    if (config.deleteFile) {
+                        shouldDelete = true;
+                        break;
+                    }
+                    if (config.deleteLines) {
+                        lines.splice(i, config.deleteLines);
+                    }
+                    if (config.replace && config.with !== undefined) {
+                        if (i + 1 < lines.length && lines[i + 1].includes(config.replace)) {
+                            lines[i + 1] = lines[i + 1].replace(config.replace, config.with);
+                        }
                     }
                 }
-            } catch {}
+            } catch {
+            } finally {
+                lines.splice(i, 1);
+            }
         }
 
         if (!shouldDelete) {
@@ -71,4 +77,21 @@ import * as fs from "fs";
 
     await archive.finalize();
     console.log(greenBright(bold(`Created ${zipName} at root!\n`)));
-})();
+};
+
+const program = new Command();
+program
+    .name("export")
+    .description("Export project files with @export tag processing")
+    .option(
+        "-i, --id <id>",
+        "filter export tags by ID (repeatable)",
+        (value: string, previous: string[]) => {
+            return previous ? [...previous, value] : [value];
+        },
+        []
+    )
+    .action((options) => {
+        exportZip(options.id);
+    });
+program.parse();

@@ -1,3 +1,5 @@
+<!-- @export {"id": "kit", "deleteFile": true} -->
+
 # Developer Machine Setup
 
 These instructions will walk you through properly setting up your Mac, Windows, or Cloud Desktop machine for use with the starter kit.
