@@ -4,7 +4,5 @@ type Messages @model @auth(rules: [{ allow: owner, ownerField: "userId", identit
 }
 
 type Mutation {
-    testMessage(message: String!): AWSJSON
-        @function(name: "resolverFunction")
-        @auth(rules: [{ allow: private }])
+    testMessage(message: String!): AWSJSON @aws_cognito_user_pools
 }
