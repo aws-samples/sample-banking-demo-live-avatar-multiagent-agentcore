@@ -10,7 +10,7 @@ Modules that are unique to a certain CDK construct or React component are coloca
 
 ![architecture](architecture.drawio.png)
 
-`bin/demo.ts` is the entrypoint to the CDK application. `lib/stacks` contains the application's stacks and child constructs.
+`bin/app.ts` is the entrypoint to the CDK application. `lib/stacks` contains the application's stacks and child constructs.
 
 #### [Frontend Stack](./lib/stacks/frontend/index.ts)
 

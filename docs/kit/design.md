@@ -312,11 +312,11 @@ Some aspects of the starter kit infrastructure are specific to internal Amazon a
 
 ### App
 
-`bin/demo.ts` is the CDK entrypoint as configured in [cdk.json](../../cdk.json).
+`bin/app.ts` is the CDK entrypoint as configured in [cdk.json](../../cdk.json).
 
 The stack prefix and stage for the app are determined by a context variable passed by the [kit CLI](#kit-cli). The account details are determined by the `cdk.json` file itself.
 
-See [bin/demo.ts](../../bin/demo.ts) for more context.
+See [bin/app.ts](../../bin/app.ts) for more context.
 
 <!-- @export {"deleteLines": 32} -->
 

@@ -33,22 +33,6 @@ export class RestApi extends Construct {
 
         const { urls, vpc, securityGroup, userPool, regionalWebAclArn } = props;
 
-        const proxyFunction = new CommonPythonFunction(this, "proxyFunction", {
-            entry: path.join(__dirname, "proxy"),
-            environment: {
-                ALLOWED_ORIGINS: JSON.stringify(urls),
-            },
-            memorySize: 1024,
-            timeout: Duration.minutes(2),
-            ...(vpc && {
-                vpc,
-                vpcSubnets: {
-                    subnetType: SubnetType.PRIVATE_WITH_EGRESS,
-                },
-                securityGroups: [securityGroup!],
-            }),
-        });
-
         const restApi = new apigateway.RestApi(this, "restApi", {
             defaultMethodOptions: {
                 authorizationType: AuthorizationType.COGNITO,
@@ -82,11 +66,27 @@ export class RestApi extends Construct {
             [
                 {
                     id: "AwsSolutions-IAM4",
-                    reason: "LambdaRestApi requires the AmazonAPIGatewayPushToCloudWatchLogs policy for logging.",
+                    reason: "RestApi requires the AmazonAPIGatewayPushToCloudWatchLogs policy for logging.",
                 },
             ],
             true
         );
+
+        const proxyFunction = new CommonPythonFunction(this, "proxyFunction", {
+            entry: path.join(__dirname, "proxy"),
+            environment: {
+                ALLOWED_ORIGINS: JSON.stringify(urls),
+            },
+            memorySize: 1024,
+            timeout: Duration.minutes(2),
+            ...(vpc && {
+                vpc,
+                vpcSubnets: {
+                    subnetType: SubnetType.PRIVATE_WITH_EGRESS,
+                },
+                securityGroups: [securityGroup!],
+            }),
+        });
 
         restApi.root.addProxy({
             defaultIntegration: new LambdaIntegration(proxyFunction),

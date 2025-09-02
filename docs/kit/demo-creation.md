@@ -38,7 +38,7 @@ You can use existing Isengard accounts provided you have access to an **Admin** 
 
 7. Click **Fork project**.
 8. From your demo's new GitLab page, click **Settings** then **Merge requests**.
-9. Under **Target project**, select **This project**.
+9. Under **Target project**, select **This project**, then click **Save changes**.
 
 ### Clone It
 

@@ -5,6 +5,7 @@ import {
     RetentionDays,
 } from "@aws-amplify/data-construct";
 import { Duration } from "aws-cdk-lib";
+import { MappingTemplate } from "aws-cdk-lib/aws-appsync";
 import { UserPool } from "aws-cdk-lib/aws-cognito";
 import { SecurityGroup, SubnetType, Vpc } from "aws-cdk-lib/aws-ec2";
 import { CfnWebACLAssociation } from "aws-cdk-lib/aws-wafv2";
@@ -28,19 +29,6 @@ export class GraphApi extends Construct {
 
         const { vpc, securityGroup, userPool, regionalWebAclArn } = props;
 
-        const resolverFunction = new CommonNodejsFunction(this, "resolverFunction", {
-            entry: path.join(__dirname, "resolver.ts"),
-            memorySize: 1024,
-            timeout: Duration.minutes(2),
-            ...(vpc && {
-                vpc,
-                vpcSubnets: {
-                    subnetType: SubnetType.PRIVATE_WITH_EGRESS,
-                },
-                securityGroups: [securityGroup!],
-            }),
-        });
-
         const amplifiedGraphApi = new AmplifyData(this, "amplifiedGraphApi", {
             definition: AmplifyDataDefinition.fromFiles(path.join(__dirname, "schema.graphql")),
             authorizationModes: {
@@ -56,9 +44,6 @@ export class GraphApi extends Construct {
                 fieldLogLevel: FieldLogLevel.ALL,
                 retention: RetentionDays.THREE_MONTHS,
                 excludeVerboseContent: false,
-            },
-            functionNameMap: {
-                resolverFunction,
             },
         });
         NagSuppressions.addResourceSuppressions(
@@ -79,13 +64,34 @@ export class GraphApi extends Construct {
             ],
             true
         );
-
         amplifiedGraphApi.resources.cfnResources.cfnGraphqlApi.xrayEnabled = true;
         Object.values(amplifiedGraphApi.resources.cfnResources.cfnTables).forEach((table) => {
             table.pointInTimeRecoverySpecification = {
                 pointInTimeRecoveryEnabled: true,
             };
         });
+
+        const resolverFunction = new CommonNodejsFunction(this, "resolverFunction", {
+            entry: path.join(__dirname, "resolver.ts"),
+            memorySize: 1024,
+            timeout: Duration.minutes(2),
+            ...(vpc && {
+                vpc,
+                vpcSubnets: {
+                    subnetType: SubnetType.PRIVATE_WITH_EGRESS,
+                },
+                securityGroups: [securityGroup!],
+            }),
+        });
+
+        amplifiedGraphApi
+            .addLambdaDataSource("lambdaDataSource", resolverFunction)
+            .createResolver("resolver", {
+                typeName: "Mutation",
+                fieldName: "testMessage",
+                requestMappingTemplate: MappingTemplate.lambdaRequest(),
+                responseMappingTemplate: MappingTemplate.lambdaResult(),
+            });
 
         new CfnWebACLAssociation(this, "graphApiWebAclAssociation", {
             resourceArn: amplifiedGraphApi.resources.graphqlApi.arn,
