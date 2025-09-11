@@ -8,6 +8,13 @@ type GeneratedMutation<InputType, OutputType> = string & {
   __generatedMutationOutput: OutputType;
 };
 
+export const testMessage = /* GraphQL */ `mutation TestMessage($message: String!) {
+  testMessage(message: $message)
+}
+` as GeneratedMutation<
+  APITypes.TestMessageMutationVariables,
+  APITypes.TestMessageMutation
+>;
 export const createMessages = /* GraphQL */ `mutation CreateMessages(
   $input: CreateMessagesInput!
   $condition: ModelMessagesConditionInput
@@ -58,11 +65,4 @@ export const deleteMessages = /* GraphQL */ `mutation DeleteMessages(
 ` as GeneratedMutation<
   APITypes.DeleteMessagesMutationVariables,
   APITypes.DeleteMessagesMutation
->;
-export const testMessage = /* GraphQL */ `mutation TestMessage($message: String!) {
-  testMessage(message: $message)
-}
-` as GeneratedMutation<
-  APITypes.TestMessageMutationVariables,
-  APITypes.TestMessageMutation
 >;

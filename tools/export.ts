@@ -37,18 +37,13 @@ const exportZip = async (ids: string[] = []) => {
         let shouldDelete = false;
 
         for (let i = lines.length - 1; i >= 0; i--) {
-            let match;
-            if (file.endsWith(".json")) {
-                match = lines[i].match(/"@export":\s*(\{[^}]+\})/);
-            } else {
-                match = lines[i].match(
-                    /(?:\/\/\s*@export\s*(\{[^}]+\})|<!--\s*@export\s*(\{[^}]+\})\s*-->|#\s*@export\s*(\{[^}]+\}))/
-                );
-            }
+            const match = lines[i].match(
+                /(?:\/\/\s*@export\s*(\{[^}]+\})|<!--\s*@export\s*(\{[^}]+\})\s*-->|#\s*@export\s*(\{[^}]+\})|"@export":\s*(\{[^}]+\}))/
+            );
             if (!match) continue;
 
             try {
-                const config = JSON.parse(match[1] || match[2] || match[3]);
+                const config = JSON.parse(match[1] || match[2] || match[3] || match[4]);
 
                 if (!config.id || ids.includes(config.id)) {
                     if (config.deleteFile) {

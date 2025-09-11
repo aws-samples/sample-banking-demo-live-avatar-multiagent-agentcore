@@ -1,5 +1,5 @@
 import { CloudfrontWebAcl } from "@aws/pdk/static-website";
-import { CfnOutput, Stack, StackProps } from "aws-cdk-lib";
+import { Aspects, CfnOutput, Stack, StackProps } from "aws-cdk-lib";
 import {
     AllowedMethods,
     Distribution,
@@ -14,6 +14,7 @@ import { Bucket } from "aws-cdk-lib/aws-s3";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import * as path from "path";
+import { FunctionRuntimeAspect } from "../../common/aspects";
 import { CommonBucket } from "../../common/constructs/s3";
 import { CommonStack } from "../../common/constructs/stack";
 import { StaticWebsiteBuild } from "../../common/constructs/static-website";
@@ -48,6 +49,7 @@ export class Frontend extends CommonStack {
                 },
             ],
         });
+        Aspects.of(cloudfrontWebAcl).add(new FunctionRuntimeAspect());
 
         const distribution = new Distribution(this, "distribution", {
             defaultRootObject: "index.html",
@@ -121,15 +123,10 @@ export class FrontendDeployment extends CommonStack {
             primaryOutputDirectory: "dist",
         });
 
-        const outputPrefix = Stack.of(this).stackName;
-        Object.entries(environmentVariables).forEach(([key, value]) => {
-            const outputKey = key.toLocaleLowerCase();
-            const outputId = outputKey.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-            const outputSuffix = outputKey.replace(/_/g, "-");
-            new CfnOutput(this, outputId, {
-                value,
-                exportName: `${outputPrefix}-${outputSuffix}`,
-            });
+        const environmentVariablesId = "environmentVariables";
+        new CfnOutput(this, environmentVariablesId, {
+            value: JSON.stringify(environmentVariables),
+            exportName: `${Stack.of(this).stackName}-${environmentVariablesId}`,
         });
     }
 }

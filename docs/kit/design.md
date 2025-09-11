@@ -32,6 +32,7 @@ The starter kit uses [`cdk.json`](../../cdk.json) to centrally track and manage 
         }
         // more aliases if needed
     },
+    "@export": { "deleteLines": 6 },
     "pipeline": true,
     "gitlab": {
         "group": "genai-labs/demo-assets",
@@ -229,7 +230,7 @@ npm run kit -- refresh-frontend [stage]
     - We recommend that you delete the stacks in accordance with their dependencies in [stage.ts](../../lib/stage.ts).
     - This operation may not destroy certain cloud resource such as AWS WAF (Global & Regional), AWS Buckets, VPC configurations, Secrets Manager, etc. Manually delete these resources in the AWS Management Console.
 
-<!-- @export {"deleteLines": 52} -->
+<!-- @export {"deleteLines": 50} -->
 
 ## Export CLI
 
