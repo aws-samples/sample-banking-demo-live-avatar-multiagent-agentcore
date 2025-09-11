@@ -156,6 +156,14 @@ export type ModelSubscriptionIDInput = {
   notIn?: Array< string | null > | null,
 };
 
+export type TestMessageMutationVariables = {
+  message: string,
+};
+
+export type TestMessageMutation = {
+  testMessage?: string | null,
+};
+
 export type CreateMessagesMutationVariables = {
   input: CreateMessagesInput,
   condition?: ModelMessagesConditionInput | null,
@@ -202,14 +210,6 @@ export type DeleteMessagesMutation = {
     createdAt: string,
     updatedAt: string,
   } | null,
-};
-
-export type TestMessageMutationVariables = {
-  message: string,
-};
-
-export type TestMessageMutation = {
-  testMessage?: string | null,
 };
 
 export type GetMessagesQueryVariables = {

@@ -19,7 +19,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { checkbox, confirm, input, password, select } from "@inquirer/prompts";
-import { blueBright, bold, greenBright, magentaBright, redBright } from "chalk";
+import { blueBright, bold, greenBright, magentaBright, redBright, yellowBright } from "chalk";
 import { spawn } from "child_process";
 import { Command } from "commander";
 import { existsSync, readFileSync, writeFileSync } from "fs";
@@ -51,6 +51,7 @@ const prompt = {
             return await password({
                 message,
                 validate,
+                mask: "*",
             });
         } else {
             return await input({
@@ -137,7 +138,8 @@ const getStackPrefix = (stage: string): string => {
     return stackPrefix;
 };
 
-const getStackOutputs = async (stage: string) => {
+const getEnvironmentVariables = async (stage: string) => {
+    let outputs;
     try {
         const response = await new CloudFormationClient({
             region: getAccountDetail(stage, "region"),
@@ -147,16 +149,25 @@ const getStackOutputs = async (stage: string) => {
                 StackName: `${stage}-${cdkContext.projectId}-frontendDeployment`,
             })
         );
-        return response.Stacks?.[0].Outputs ?? [];
+        outputs = response.Stacks?.[0].Outputs;
     } catch (error) {
-        console.error(
+        console.error("\n", error);
+        throw new Error(
             redBright(
-                "\n🛑 Failed to get stack outputs. Make sure the frontendDeployment stack is deployed."
+                "Failed to get environment variables. Make sure the frontendDeployment stack is deployed."
             )
         );
-        console.error("\n", error);
-        return;
     }
+    const environmentVariablesOutput = outputs?.find(
+        (output) => output.OutputKey === "environmentVariables"
+    )?.OutputValue;
+    if (!environmentVariablesOutput) {
+        throw new Error(
+            redBright(
+                "Failed to find environment variables. Make sure the environmentVariables CloudFormation output exists."
+            )
+        );
+    } else return JSON.parse(environmentVariablesOutput) as Record<string, string>;
 };
 
 const selectStacks = async (
@@ -186,8 +197,7 @@ const selectStacks = async (
             true
         );
     } catch {
-        console.log(redBright(`\n🛑 Failed to synthesize ${stage} stacks.`));
-        return;
+        throw new Error(redBright(`Failed to synthesize ${stage} stacks.`));
     }
 
     const stacks = await prompt.multiSelect(`stacks to ${action}`, [
@@ -203,14 +213,12 @@ const selectStacks = async (
     return stacks.map((stack) => `"${stack}"`).join(" ");
 };
 
-const createLocalBuild = async (): Promise<boolean> => {
+const createLocalBuild = async () => {
     console.log(blueBright(`\nBuilding frontend...`));
     try {
         await executeCommand("npm run -w frontend build");
-        return true;
     } catch {
-        console.error(redBright("\n🛑 Failed to build frontend."));
-        return false;
+        throw new Error(redBright("Failed to build frontend."));
     }
 };
 
@@ -234,7 +242,7 @@ const checkCredentials = async (profileName: string) => {
 
 const ensureCredentials = async (stage: string) => {
     if (!(await checkCredentials(getProfileName(stage)))) {
-        console.warn(redBright(`\nFailed to get ${stage} credentials profile.`));
+        console.warn(yellowBright(`\nFailed to get ${stage} credentials profile.`));
         await configureCredentials(stage);
     }
 };
@@ -246,41 +254,37 @@ const ensureCredentials = async (stage: string) => {
 const configureCredentials = async (stage: string, method?: string) => {
     const profileName = getProfileName(stage);
 
-    try {
-        if (
-            (await checkCredentials(profileName)) &&
-            !(await prompt.confirm(
-                `Already configured ${stage} credentials profile "${profileName}". Do you want to reconfigure it?`
-            ))
-        ) {
-            return;
-        }
+    if (
+        (await checkCredentials(profileName)) &&
+        !(await prompt.confirm(
+            `Already configured ${stage} credentials profile "${profileName}". Do you want to reconfigure it?`
+        ))
+    ) {
+        return;
+    }
 
-        console.log(blueBright(`\nConfiguring ${stage} credentials profile "${profileName}"...`));
-        const credentialType =
-            method ||
-            (await prompt.select("credential method", [
-                // @export {"deleteLines": 1}
-                "AWS Developer Account",
-                "IAM Identity Center",
-                "Short-term Credentials",
-            ]));
+    console.log(blueBright(`\nConfiguring ${stage} credentials profile "${profileName}"...`));
+    const credentialType =
+        method ||
+        (await prompt.select("credential method", [
+            "AWS Developer Account",
+            "IAM Identity Center",
+            "Short-term Credentials",
+        ]));
+    try {
         if (credentialType === "IAM Identity Center") {
             await executeCommand(`aws configure sso --profile ${profileName}`);
         } else if (credentialType === "Short-term Credentials") {
             await executeCommand(`aws configure --profile ${profileName}`);
-            // @export {"deleteLines": 4}
         } else if (credentialType === "AWS Developer Account") {
             await executeCommand(
                 `ada credentials update --profile=${profileName} --account=${getAccountDetail(stage, "number")} --provider=isengard --role=Admin --once`
             );
-        } else {
-            return;
         }
         console.log(greenBright(`\nConfigured ${stage} credentials profile "${profileName}"!`));
     } catch {
-        console.error(
-            redBright(`\nFailed to configure ${stage} credentials profile "${profileName}".`)
+        throw new Error(
+            redBright(`Failed to configure ${stage} credentials profile "${profileName}".`)
         );
     }
 };
@@ -313,7 +317,6 @@ const configureSecret = async (stage: string, secretNameInput?: string, secretVa
         }
 
         console.log(blueBright(`\nConfiguring ${stage} secret...`));
-
         let secret = "";
 
         if (secretValue) {
@@ -335,8 +338,8 @@ const configureSecret = async (stage: string, secretNameInput?: string, secretVa
                     )
                 ).SecretString!;
             } catch (error) {
-                console.warn("\n", error);
-                console.warn(redBright("\nFailed to copy dev secret."));
+                if (!(error instanceof ResourceNotFoundException)) throw error;
+                console.warn(yellowBright("\nFailed to copy dev secret."));
                 secret = await prompt.input(`Enter the secret:`, true);
             }
         }
@@ -362,7 +365,7 @@ const configureSecret = async (stage: string, secretNameInput?: string, secretVa
 
         console.log(greenBright(`\nConfigured ${stage} secret!`));
     } catch {
-        console.error(redBright(`\nFailed to configure ${stage} secret.`));
+        throw new Error(redBright(`Failed to configure ${stage} secret.`));
     }
 };
 
@@ -387,7 +390,7 @@ const bootstrapAccount = async (stage: string) => {
             );
             console.log(greenBright(`\nBootstrapped ${stage} account in ${region}!`));
         } catch {
-            console.error(redBright(`\nFailed to bootstrap ${stage} account in ${region}.`));
+            throw new Error(redBright(`Failed to bootstrap ${stage} account in ${region}.`));
         }
     };
     await bootstrapRegion(account.region);
@@ -427,48 +430,36 @@ const deployFrontendStack = async (stage: string): Promise<void> => {
         return;
     }
 
-    if (await createLocalBuild()) {
-        await executeCommand(
-            `npm run cdk deploy -- -e ${getStackPrefix(stage)}-frontendDeployment --profile ${getProfileName(stage)} -c stage=${stage}`
-        );
-    }
+    await createLocalBuild();
+    await executeCommand(
+        `npm run cdk deploy -- -e ${getStackPrefix(stage)}-frontendDeployment --profile ${getProfileName(stage)} -c stage=${stage}`
+    );
 };
 
-const createLocalEnvironment = async (stage: string): Promise<boolean> => {
+const createLocalEnvironment = async (stage: string) => {
     console.log(blueBright(bold("\nCreating local environment...")));
-
-    const stackOutputs = await getStackOutputs(stage);
-    if (!stackOutputs) {
-        return false;
-    }
 
     const frontendPath = JSON.parse(
         await executeCommand('npm query .workspace name="frontend"', true)
     )[0].path;
+    const environmentVariables = await getEnvironmentVariables(stage);
 
-    // create environment file
-    const environmentVariables = stackOutputs
-        .filter((output) => output.ExportName?.includes("vite-"))
-        .map((output) => {
-            const key = output.ExportName?.replace(/^.*?(vite-.*)/, "$1")
-                .toUpperCase()
-                .replace(/-/g, "_");
-            return `${key}=${output.OutputValue}`;
-        })
-        .join("\n");
     try {
-        writeFileSync(path.join(frontendPath, ".env"), environmentVariables);
+        // create environment file
+        writeFileSync(
+            path.join(frontendPath, ".env"),
+            Object.entries(environmentVariables)
+                .map(([key, value]) => `${key}=${value}`)
+                .join("\n")
+        );
         console.log(greenBright("\nCreated environment file!"));
     } catch {
-        console.error(redBright("\n🛑 Failed to create environment file."));
-        return false;
+        throw new Error(redBright("Failed to create environment file."));
     }
 
     const region = getAccountDetail(stage, "region");
     // create/update GraphQL config yaml
-    const graphApiId = stackOutputs.find((output) =>
-        output.ExportName?.endsWith("codegen-graph-api-id")
-    )?.OutputValue;
+    const graphApiId = environmentVariables["CODEGEN_GRAPH_API_ID"];
     if (graphApiId) {
         const configPath = path.join(frontendPath, ".graphqlconfig.yml");
         let graphqlConfig = {
@@ -506,20 +497,16 @@ const createLocalEnvironment = async (stage: string): Promise<boolean> => {
                 `AWS_PROFILE=${getProfileName(stage)} npm run -w frontend generate`
             );
         } catch {
-            console.error(redBright("\nFailed to generate GraphQL files."));
+            throw new Error(redBright("Failed to generate GraphQL files."));
         }
     }
 
-    if (await createLocalBuild()) {
-        console.log(greenBright(bold("\nCreated local environment!")));
-        return true;
-    } else {
-        return false;
-    }
+    await createLocalBuild();
+    console.log(greenBright(bold("\nCreated local environment!")));
 };
 
 const createLocalServer = async (stage: string): Promise<void> => {
-    const freePort = async (port: number): Promise<boolean> => {
+    const freePort = async (port: number) => {
         const processId = await executeCommand(
             `lsof -i :${port} | grep LISTEN | awk '{print $2}'`,
             true
@@ -528,18 +515,13 @@ const createLocalServer = async (stage: string): Promise<void> => {
             try {
                 await executeCommand(`kill -9 ${processId}`, true);
                 console.log(greenBright(`\nFreed port ${port}!`));
-                return true;
             } catch {
-                console.log(redBright(`\n🛑 Failed to free port ${port}.`));
-                return false;
+                throw new Error(redBright(`Failed to free port ${port}.`));
             }
         }
-        return true;
     };
-
-    if (!((await createLocalEnvironment(stage)) && (await freePort(3000)))) {
-        return;
-    }
+    await freePort(3000);
+    await createLocalEnvironment(stage);
 
     const command =
         process.platform === "win32" ? "npm run -w frontend dev" : "(npm run -w frontend dev &)";
@@ -559,13 +541,12 @@ const manageUser = async (stage: string) => {
         DELETE_USER = "Delete User",
     }
 
-    const stackOutputs = await getStackOutputs(stage);
-    const userPoolId = stackOutputs?.find((output) =>
-        output.ExportName?.includes("vite-user-pool-id")
-    )?.OutputValue;
+    const environmentVariables = await getEnvironmentVariables(stage);
+    const userPoolId = environmentVariables
+        ? Object.entries(environmentVariables).find(([key]) => key.includes("USER_POOL_ID"))?.[1]
+        : undefined;
     if (!userPoolId) {
-        console.log(redBright(`\n🛑 Default user pool not found.`));
-        return;
+        throw new Error(redBright(`Default user pool not found.`));
     }
     console.log(greenBright(`\nFound default user pool!`));
 
@@ -597,8 +578,8 @@ const manageUser = async (stage: string) => {
                     greenBright(`\nEmailed temporary password to ${email}.`)
                 );
             } catch (error) {
-                console.log(redBright(`\n🛑 Failed to create user.`));
                 console.error("\n", error);
+                throw new Error(redBright(`Failed to create user.`));
             }
             break;
         }
@@ -612,15 +593,13 @@ const manageUser = async (stage: string) => {
                     })
                 );
             } catch (error) {
-                console.log(redBright(`\n🛑 Failed to list users.`));
                 console.error("\n", error);
-                return;
+                throw new Error(redBright(`Failed to list users.`));
             }
             const users =
                 listResponse.Users?.filter((user) => !user.Username?.startsWith("Amazon")) || [];
             if (users.length === 0) {
-                console.log(redBright(`\n🛑 No users found.`));
-                return;
+                throw new Error(redBright(`No users found.`));
             }
             let user = "";
             try {
@@ -652,8 +631,8 @@ const manageUser = async (stage: string) => {
                 );
                 console.log(greenBright(bold(`\nDeleted user.`)));
             } catch (error) {
-                console.log(redBright(`\n🛑 Failed to delete user.`));
                 console.error("\n", error);
+                throw new Error(redBright(`Failed to delete user.`));
             }
             break;
         }
@@ -690,8 +669,7 @@ enum Actions {
 const stageArgument = "[stage]";
 const getStageOption = (stage?: string) => {
     if (stage && !cdkContext.accounts[stage]) {
-        console.log(bold(redBright(`\n🛑 Missing ${stage} account in cdk.json.`)));
-        bye();
+        throw new Error(bold(redBright(`Missing ${stage} account in cdk.json.`)));
     }
     return stage ?? prompt.select("stage", Object.keys(cdkContext.accounts));
 };
@@ -705,7 +683,6 @@ program
     .argument(stageArgument)
     .option(
         "-m, --method <method>",
-        // @export {"replace": "AWS Developer Account, ", "with": ""}
         "credential method (AWS Developer Account, IAM Identity Center, Short-term Credentials)"
     )
     .action(async (stage, options) => {
@@ -773,8 +750,7 @@ program
     });
 
 if (!cdkContext.accounts) {
-    console.log(bold(redBright(`\n🛑 Missing account(s) in cdk.json.`)));
-    bye();
+    throw new Error(bold(redBright(`Missing account(s) in cdk.json.`)));
 }
 
 // interactive mode
@@ -791,7 +767,7 @@ if (process.argv.length === 2) {
 
             if (stage === Actions.EXIT) bye(0);
 
-            await ensureCredentials(stage);
+            await ensureCredentials(stage).catch((error) => console.error(`\n${error}`));
 
             while (true) {
                 try {
@@ -840,7 +816,9 @@ if (process.argv.length === 2) {
                             await destroyStacks(stage);
                             break;
                     }
-                } catch {}
+                } catch (error) {
+                    console.error(`\n${error}`);
+                }
             }
         }
     })();
