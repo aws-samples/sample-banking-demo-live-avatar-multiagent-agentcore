@@ -42,14 +42,14 @@ After the sandbox account has been added to the CDK configuration, we need to ad
 10. Click on the profile **Name** link.
 11. Click **Edit** in the top right corner then click **Ok** after reading the dialogue.
 12. On the **Service Profile Configuration** page, leave all options to their defaults then click **Next** at the bottom of the page.
-13. Add a **Redirect URI** on a new line using the following format `https://[PROJECT-IDENTIFIER]-[SANDBOX_ACCOUNT_NUMBER].auth.[SANDBOX_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+13. Add a **Redirect URI** on a new line using the following format `https://[STAGE]-[PROJECT-IDENTIFIER].auth.[SANDBOX_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
     - The project identifier, account number, and region should reflect the sandbox account you added to the [`cdk.json` file](../../cdk.json).
     - Ex:
 
     ```
-    https://email-generator-043309355269.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
-    https://email-generator-294075526655.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
-    https://email-generator-212075525600.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
+    https://dev-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
+    https://kppinker-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
+    https://psantora-email-generator.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
     ```
 
     - Please **_be careful not to edit exisiting URIs_** as this will cause Midway login to malfunction for associated accounts.
