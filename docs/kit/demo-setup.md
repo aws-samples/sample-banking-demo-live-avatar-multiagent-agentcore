@@ -70,32 +70,24 @@ After the sandbox account has been added to the CDK configuration, we need to ad
 
 - See the [design documentation](./design.md#kit-cli) to learn more about the Demo Starter Kit CLI.
 
-### Code Defender
-
-In order commit changes, we must first install [Code Defender](https://w.amazon.com/bin/view/AWS/Teams/GlobalServicesSecurity/Engineering/CodeDefender/UserHelp/#5).
-
-22. Install Code Defender from [here](https://codedefender.proserve.aws.dev/).
-23. From the project's root directory, run the command `git defender --setup` followed by `git-defender --mw-register`.
-    - You should see a message saying **Successfully registered**.
-
 ## Code Check-In
 
 **_Do not_** work and push changes on the `main` branch. Always work on a feature branch then submit a merge request via GitLab to merge changes to `main`, which will trigger the pipeline.
 
-24. From the root directory, run `git checkout -B feat/[ALIAS]` to create a new dev branch for yourself with your alias.
+22. From the root directory, run `git checkout -B feat/[ALIAS]` to create a new dev branch for yourself with your alias.
     - Ex: `git checkout -B feat/tamjay`
 
 Now we are all set to make our first code check in! The starter kit comes pre-built with a commit CLI to improve the quality of Git commits.
 
-25. From the root directory, run the command `npm run commit`.
-26. For **Select the type of change that you're committing**, select **chore**.
-27. For **What is the scope of this change**, enter `app`.
-28. For **Write a short, imperative tense description of the change**, enter `initial code commit`.
-29. For **Provide a longer description of the change**, press **Enter** to skip.
-30. For **Are there any breaking changes?** press **Enter** to indicate **N**.
+23. From the root directory, run the command `npm run commit`.
+24. For **Select the type of change that you're committing**, select **chore**.
+25. For **What is the scope of this change**, enter `app`.
+26. For **Write a short, imperative tense description of the change**, enter `initial code commit`.
+27. For **Provide a longer description of the change**, press **Enter** to skip.
+28. For **Are there any breaking changes?** press **Enter** to indicate **N**.
 
-31. If the commit hooks powered by Husky fail, you will need to repeat steps 2-7.
+29. If the commit hooks powered by Husky fail, you will need to repeat steps 2-7.
     - See the [design documentation](./design.md#commit) to learn more about the commit hooks.
-32. If the commit hooks succeed, you can push the committed files to your repository with the command `git push`.
+30. If the commit hooks succeed, you can push the committed files to your repository with the command `git push`.
 
 🎉 Congratulations! You have successfully set up your brand new demo! Now let's [set up your local development environment](./demo-development.md).

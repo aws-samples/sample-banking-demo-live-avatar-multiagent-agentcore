@@ -25,8 +25,8 @@ Let's start by deploying the starter kit app directly to our sandbox account for
     ![cli-select-stacks.png](images/cli-select-stacks.png)
     - Deployment may take several minutes.
 
-5. Once the deployment completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendDeployment**.
-6. Click the **Outputs** tab then the **callbackUrl** to visit your new frontend React app.
+5. Once the deployment completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontend**.
+6. Click the **Outputs** tab then the CloudFront **url** to visit your new frontend React app.
 
     ![react-login](images/react-login.png)
 

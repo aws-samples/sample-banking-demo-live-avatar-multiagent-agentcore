@@ -114,8 +114,8 @@ For more details, visit the [AWS Pricing Calculator](https://calculator.aws/#/).
 
 ### Accessing the Website
 
-- Once the deployment completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendDeployment**.
-- Click the **Outputs** tab then the **callbackUrl** to visit the frontend app.
+- Once the deployment completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontend**.
+- Click the **Outputs** tab then the CloudFront **url** to visit the frontend app.
 - **Create Account** then verify your email to access the frontend app.
 
 ## Clean-up
