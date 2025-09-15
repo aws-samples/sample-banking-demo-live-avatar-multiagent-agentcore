@@ -19,7 +19,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { fromIni } from "@aws-sdk/credential-providers";
 import { checkbox, confirm, input, password, select } from "@inquirer/prompts";
-import { blueBright, bold, greenBright, magentaBright } from "chalk";
+import { blueBright, bold, greenBright, magentaBright, redBright, yellowBright } from "chalk";
 import { spawn } from "child_process";
 import { Command } from "commander";
 import { existsSync, readFileSync, writeFileSync } from "fs";
@@ -35,6 +35,35 @@ enum PresetStage {
 }
 
 // #region helper functions
+
+const printInfo = (message: string) => {
+    console.info("\n" + blueBright(message));
+};
+
+const printSuccess = (message: string) => {
+    console.log("\n" + greenBright(message));
+};
+
+const printWarning = (message: string) => {
+    console.warn("\n" + yellowBright(message));
+};
+
+const printError = (error: Error) => {
+    console.error("");
+    if (error.cause instanceof Error) {
+        console.error(redBright(error.cause.message));
+    }
+    console.error(bold(redBright(error.message)));
+};
+
+const bye = (exitCode: number = 1) => {
+    if (exitCode === 0) {
+        console.log(bold(magentaBright("\nGoodbye! 👋\n")));
+    } else {
+        console.log("");
+    }
+    process.exit(exitCode);
+};
 
 const prompt = {
     confirm: async (message: string): Promise<boolean> => {
@@ -84,7 +113,7 @@ const executeCommand = <T extends boolean = false>(
     command: string,
     saveOutput?: T
 ): Promise<T extends true ? string : void> => {
-    if (!saveOutput) console.log(`\n${blueBright("Executing command:")} ${command}\n`);
+    if (!saveOutput) console.info(`\n${blueBright("Executing command:")} ${command}\n`);
 
     return new Promise((resolve, reject) => {
         const childProcess = spawn(command, [], {
@@ -117,12 +146,12 @@ const executeCommand = <T extends boolean = false>(
     });
 };
 
-const getProfileName = (stage: string): string => {
-    return `${cdkContext.projectId}-${stage}`;
+const getProfile = (stage: string): string => {
+    return `${stage}-${cdkContext.projectId}`;
 };
 
-const getProfileCredentials = (stage: string) => {
-    return fromIni({ profile: getProfileName(stage), ignoreCache: true });
+const getCredentials = (stage: string) => {
+    return fromIni({ profile: getProfile(stage), ignoreCache: true });
 };
 
 const getAccountDetail = (stage: string, detail: "number" | "region"): string => {
@@ -142,7 +171,7 @@ const getEnvironmentVariables = async (stage: string) => {
     try {
         const response = await new CloudFormationClient({
             region: getAccountDetail(stage, "region"),
-            credentials: getProfileCredentials(stage),
+            credentials: getCredentials(stage),
         }).send(
             new DescribeStacksCommand({
                 StackName: `${stage}-${cdkContext.projectId}-frontendDeployment`,
@@ -181,11 +210,11 @@ const selectStacks = async (
         return `${getStackPrefix(stage)}*`;
     }
 
-    console.log(blueBright(`\nListing ${stage} stacks...`));
+    printInfo(`Listing ${stage} stacks...`);
     let stackString: string = "";
     try {
         stackString = await executeCommand(
-            `npm run cdk list -- --profile ${getProfileName(stage)} -c stage=${stage}`,
+            `npm run cdk list -- --profile ${getProfile(stage)} -c stage=${stage}`,
             true
         );
     } catch {
@@ -206,7 +235,6 @@ const selectStacks = async (
 };
 
 const createLocalBuild = async () => {
-    console.log(blueBright(`\nBuilding frontend...`));
     try {
         await executeCommand("npm run -w frontend build");
     } catch {
@@ -214,26 +242,9 @@ const createLocalBuild = async () => {
     }
 };
 
-const printError = (error: Error) => {
-    console.log("");
-    if (error.cause instanceof Error) {
-        console.error(error.cause.message);
-    }
-    console.error(bold(error.message));
-};
-
-const bye = (exitCode: number = 1) => {
-    if (exitCode === 0) {
-        console.log(bold(magentaBright("\nGoodbye! 👋\n")));
-    } else {
-        console.log("");
-    }
-    process.exit(exitCode);
-};
-
-const checkCredentials = async (profileName: string) => {
+const checkCredentials = async (profile: string) => {
     try {
-        await executeCommand(`aws sts get-caller-identity --profile ${profileName}`, true);
+        await executeCommand(`aws sts get-caller-identity --profile ${profile}`, true);
         return true;
     } catch {
         return false;
@@ -241,8 +252,8 @@ const checkCredentials = async (profileName: string) => {
 };
 
 const ensureCredentials = async (stage: string) => {
-    if (!(await checkCredentials(getProfileName(stage)))) {
-        console.warn(`\nFailed to get ${stage} credentials profile.`);
+    if (!(await checkCredentials(getProfile(stage)))) {
+        printWarning(`Failed to get ${stage} credentials profile.`);
         await configureCredentials(stage);
     }
 };
@@ -252,18 +263,18 @@ const ensureCredentials = async (stage: string) => {
 // #region operation functions
 
 const configureCredentials = async (stage: string, method?: string) => {
-    const profileName = getProfileName(stage);
+    const profile = getProfile(stage);
 
     if (
-        (await checkCredentials(profileName)) &&
+        (await checkCredentials(profile)) &&
         !(await prompt.confirm(
-            `Already configured ${stage} credentials profile "${profileName}". Do you want to reconfigure it?`
+            `Already configured ${stage} credentials profile "${profile}". Do you want to reconfigure it?`
         ))
     ) {
         return;
     }
 
-    console.log(blueBright(`\nConfiguring ${stage} credentials profile "${profileName}"...`));
+    printInfo(`Configuring ${stage} credentials profile "${profile}"...`);
     const credentialType =
         method ||
         (await prompt.select("credential method", [
@@ -273,35 +284,42 @@ const configureCredentials = async (stage: string, method?: string) => {
         ]));
     try {
         if (credentialType === "IAM Identity Center") {
-            await executeCommand(`aws configure sso --profile ${profileName}`);
+            await executeCommand(`aws configure sso --profile ${profile}`);
         } else if (credentialType === "Short-term Credentials") {
-            await executeCommand(`aws configure --profile ${profileName}`);
+            await executeCommand(`aws configure --profile ${profile}`);
         } else if (credentialType === "AWS Developer Account") {
             await executeCommand(
-                `ada credentials update --profile=${profileName} --account=${getAccountDetail(stage, "number")} --provider=isengard --role=Admin --once`
+                `ada credentials update --profile=${profile} --account=${getAccountDetail(stage, "number")} --provider=isengard --role=Admin --once`
             );
         }
-        console.log(greenBright(`\nConfigured ${stage} credentials profile "${profileName}"!`));
+        printSuccess(`Configured ${stage} credentials profile "${profile}"!`);
     } catch (error) {
-        throw new Error(`Failed to configure ${stage} credentials profile "${profileName}".`, {
+        throw new Error(`Failed to configure ${stage} credentials profile "${profile}".`, {
             cause: error,
         });
     }
 };
 
-const configureSecret = async (stage: string, secretNameInput?: string, secretValue?: string) => {
+const configureSecret = async (
+    stage: string,
+    secretNameInput?: string,
+    secretValueInput?: string
+) => {
     const account = cdkContext.accounts[stage];
 
     try {
         const secretsManagerClient = new SecretsManagerClient({
             region: account.region,
-            credentials: getProfileCredentials(stage),
+            credentials: getCredentials(stage),
         });
-        const secretName = `${cdkContext.projectId}-${secretNameInput || (await prompt.input(`Enter the secret name/ID:`, false, "federateSecret"))}`;
+        const secretName =
+            secretNameInput ||
+            (await prompt.input("Enter the secret name/ID:", false, "federateSecret"));
+        const secretId = `${getProfile(stage)}-${secretName}`;
 
         let secretExists = false;
         try {
-            await secretsManagerClient.send(new GetSecretValueCommand({ SecretId: secretName }));
+            await secretsManagerClient.send(new GetSecretValueCommand({ SecretId: secretId }));
             secretExists = true;
         } catch (error) {
             if (!(error instanceof ResourceNotFoundException)) throw error;
@@ -316,54 +334,56 @@ const configureSecret = async (stage: string, secretNameInput?: string, secretVa
             return;
         }
 
-        console.log(blueBright(`\nConfiguring ${stage} secret...`));
-        let secret = "";
-
-        if (secretValue) {
-            secret = secretValue;
+        printInfo(`Configuring ${stage} secret...`);
+        let secretValue = "";
+        const getSecretValue = async () => {
+            return await prompt.input("Enter the secret value:", true);
+        };
+        if (secretValueInput) {
+            secretValue = secretValueInput;
         } else if (Object.values(PresetStage).includes(stage as PresetStage)) {
-            secret = await prompt.input(`Enter the secret:`, true);
+            secretValue = await getSecretValue();
         } else {
             try {
-                console.log(blueBright(`\nCopying dev secret...`));
+                printInfo("Copying dev secret...");
                 await ensureCredentials(PresetStage.Dev);
-                secret = (
+                secretValue = (
                     await new SecretsManagerClient({
                         region: getAccountDetail(PresetStage.Dev, "region"),
-                        credentials: getProfileCredentials(PresetStage.Dev),
+                        credentials: getCredentials(PresetStage.Dev),
                     }).send(
                         new GetSecretValueCommand({
-                            SecretId: secretName,
+                            SecretId: `${getProfile(PresetStage.Dev)}-${secretName}`,
                         })
                     )
                 ).SecretString!;
             } catch (error) {
                 if (!(error instanceof ResourceNotFoundException)) throw error;
-                console.warn("\nFailed to copy dev secret.");
-                secret = await prompt.input(`Enter the secret:`, true);
+                printWarning("Failed to copy dev secret.");
+                secretValue = await getSecretValue();
             }
         }
 
         const secretProperties: Partial<UpdateSecretCommandInput> = {
-            SecretString: secret,
+            SecretString: secretValue,
         };
         if (secretExists) {
             await secretsManagerClient.send(
                 new UpdateSecretCommand({
-                    SecretId: secretName,
+                    SecretId: secretId,
                     ...secretProperties,
                 })
             );
         } else {
             await secretsManagerClient.send(
                 new CreateSecretCommand({
-                    Name: secretName,
+                    Name: secretId,
                     ...secretProperties,
                 })
             );
         }
 
-        console.log(greenBright(`\nConfigured ${stage} secret!`));
+        printSuccess(`Configured ${stage} secret!`);
     } catch (error) {
         throw new Error(`Failed to configure ${stage} secret.`, { cause: error });
     }
@@ -374,21 +394,19 @@ const bootstrapAccount = async (stage: string) => {
 
     const bootstrapRegion = async (region: string) => {
         const isProd = stage === PresetStage.Prod;
-        console.log(
-            blueBright(
-                `\nBootstrapping${isProd ? ", enabling termination protection and setting up trust with dev account for" : ""} ${stage} account in ${region}...`
-            )
+        printInfo(
+            `Bootstrapping${isProd ? ", enabling termination protection and setting up trust with dev account for" : ""} ${stage} account in ${region}...`
         );
         try {
             await executeCommand(
                 `npm run cdk bootstrap aws://${account.number}/${region} -- ` +
-                    `--cloudformation-execution-policies arn:aws:iam::aws:policy/AdministratorAccess ` +
-                    `--profile ${getProfileName(stage)}` +
+                    "--cloudformation-execution-policies arn:aws:iam::aws:policy/AdministratorAccess " +
+                    `--profile ${getProfile(stage)}` +
                     (isProd
                         ? ` --termination-protection --trust ${getAccountDetail(PresetStage.Dev, "number")}`
                         : "")
             );
-            console.log(greenBright(`\nBootstrapped ${stage} account in ${region}!`));
+            printSuccess(`Bootstrapped ${stage} account in ${region}!`);
         } catch (error) {
             throw new Error(`Failed to bootstrap ${stage} account in ${region}.`, {
                 cause: error,
@@ -400,9 +418,7 @@ const bootstrapAccount = async (stage: string) => {
 };
 
 const synthesizeStacks = async (stage: string): Promise<void> => {
-    await executeCommand(
-        `npm run cdk synth -- --profile ${getProfileName(stage)} -c stage=${stage}`
-    );
+    await executeCommand(`npm run cdk synth -- --profile ${getProfile(stage)} -c stage=${stage}`);
 };
 
 const deployStacks = async (
@@ -414,11 +430,11 @@ const deployStacks = async (
     if (stacks) {
         if (action === "deploy") {
             await executeCommand(
-                `npm run cdk deploy ${stacks} -- --concurrency 4 --profile ${getProfileName(stage)} -c stage=${stage}`
+                `npm run cdk deploy ${stacks} -- --concurrency 4 --profile ${getProfile(stage)} -c stage=${stage}`
             );
         } else if (action === "hotswap") {
             await executeCommand(
-                `npm run cdk deploy ${stacks} -- --hotswap --profile ${getProfileName(stage)} -c stage=${stage}`
+                `npm run cdk deploy ${stacks} -- --hotswap --profile ${getProfile(stage)} -c stage=${stage}`
             );
         }
     }
@@ -427,14 +443,14 @@ const deployStacks = async (
 const deployFrontendStack = async (stage: string): Promise<void> => {
     if (
         stage === "prod" &&
-        !(await prompt.confirm(`Are you sure you want to deploy prod frontend?`))
+        !(await prompt.confirm("Are you sure you want to deploy prod frontend?"))
     ) {
         return;
     }
 
     await createLocalBuild();
     await executeCommand(
-        `npm run cdk deploy -- -e ${getStackPrefix(stage)}-frontendDeployment --profile ${getProfileName(stage)} -c stage=${stage}`
+        `npm run cdk deploy -- -e ${getStackPrefix(stage)}-frontendDeployment --profile ${getProfile(stage)} -c stage=${stage}`
     );
 };
 
@@ -452,7 +468,7 @@ const createLocalEnvironment = async (stage: string) => {
                 .map(([key, value]) => `${key}=${value}`)
                 .join("\n")
         );
-        console.log(greenBright("\nCreated environment file!"));
+        printSuccess("Created environment file!");
     } catch (error) {
         throw new Error("Failed to create environment file.", { cause: error });
     }
@@ -482,20 +498,18 @@ const createLocalEnvironment = async (stage: string) => {
                 },
             },
         };
-        let successMessage = greenBright("\nCreated GraphQL config file!");
+        let successMessage = "Created GraphQL config file!";
         try {
             if (existsSync(configPath)) {
                 graphqlConfig = yaml.parse(readFileSync(configPath, "utf-8"));
                 graphqlConfig.projects["Codegen Project"].extensions.amplify.apiId = graphApiId;
                 graphqlConfig.projects["Codegen Project"].extensions.amplify.region = region;
-                successMessage = greenBright("\nUpdated GraphQL config file!");
+                successMessage = "Updated GraphQL config file!";
             }
 
             writeFileSync(configPath, yaml.stringify(graphqlConfig));
-            console.log(successMessage);
-            await executeCommand(
-                `AWS_PROFILE=${getProfileName(stage)} npm run -w frontend generate`
-            );
+            printSuccess(successMessage);
+            await executeCommand(`AWS_PROFILE=${getProfile(stage)} npm run -w frontend generate`);
         } catch (error) {
             throw new Error("Failed to generate GraphQL files.", { cause: error });
         }
@@ -513,7 +527,7 @@ const createLocalServer = async (stage: string): Promise<void> => {
         if (processId) {
             try {
                 await executeCommand(`kill -9 ${processId}`, true);
-                console.log(greenBright(`\nFreed port ${port}!`));
+                printSuccess(`Freed port ${port}!`);
             } catch (error) {
                 throw new Error(`Failed to free port ${port}.`, { cause: error });
             }
@@ -545,13 +559,13 @@ const manageUser = async (stage: string) => {
         ? Object.entries(environmentVariables).find(([key]) => key.includes("USER_POOL_ID"))?.[1]
         : undefined;
     if (!userPoolId) {
-        throw new Error(`Default user pool not found.`);
+        throw new Error("Default user pool not found.");
     }
-    console.log(greenBright(`\nFound default user pool!`));
+    printSuccess("Found default user pool!");
 
     const cognitoClient = new CognitoIdentityProviderClient({
         region: getAccountDetail(stage, "region"),
-        credentials: getProfileCredentials(stage),
+        credentials: getCredentials(stage),
     });
 
     const manageUserOperation = await prompt.select(
@@ -560,7 +574,7 @@ const manageUser = async (stage: string) => {
     );
     switch (manageUserOperation) {
         case UserManagementActions.CREATE_USER: {
-            const email = await prompt.input(`Enter an email address:`);
+            const email = await prompt.input("Enter an email address:");
             try {
                 await cognitoClient.send(
                     new AdminCreateUserCommand({
@@ -572,17 +586,14 @@ const manageUser = async (stage: string) => {
                         ],
                     })
                 );
-                console.log(
-                    greenBright(`\nCreated user!`),
-                    greenBright(`\nEmailed temporary password to ${email}.`)
-                );
+                printSuccess(`Created user!\nEmailed temporary password to ${email}.`);
             } catch (error) {
-                throw new Error(`Failed to create user.`, { cause: error });
+                throw new Error("Failed to create user.", { cause: error });
             }
             break;
         }
         case UserManagementActions.DELETE_USER: {
-            console.log(blueBright("\nListing users..."));
+            printInfo("Listing users...");
             let listResponse: ListUsersCommandOutput;
             try {
                 listResponse = await cognitoClient.send(
@@ -591,12 +602,12 @@ const manageUser = async (stage: string) => {
                     })
                 );
             } catch (error) {
-                throw new Error(`Failed to list users.`, { cause: error });
+                throw new Error("Failed to list users.", { cause: error });
             }
             const users =
                 listResponse.Users?.filter((user) => !user.Username?.startsWith("Amazon")) || [];
             if (users.length === 0) {
-                throw new Error(`No users found.`);
+                throw new Error("No users found.");
             }
             let user = "";
             try {
@@ -626,9 +637,9 @@ const manageUser = async (stage: string) => {
                         Username: user,
                     })
                 );
-                console.log(greenBright(`\nDeleted user.`));
+                printSuccess("Deleted user.");
             } catch (error) {
-                throw new Error(`Failed to delete user.`, { cause: error });
+                throw new Error("Failed to delete user.", { cause: error });
             }
             break;
         }
@@ -639,7 +650,7 @@ const destroyStacks = async (stage: string): Promise<void> => {
     const stacks = await selectStacks(stage, "destroy");
     if (stacks) {
         await executeCommand(
-            `npm run cdk destroy ${stacks} -- --profile ${getProfileName(stage)} -c stage=${stage}`
+            `npm run cdk destroy ${stacks} -- --profile ${getProfile(stage)} -c stage=${stage}`
         );
     }
 };
@@ -747,7 +758,7 @@ program
     });
 
 if (!cdkContext.accounts) {
-    console.error(bold(`Missing account(s) in cdk.json.`));
+    console.error(bold("Missing account(s) in cdk.json."));
     bye(1);
 }
 

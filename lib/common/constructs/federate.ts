@@ -16,6 +16,10 @@ import {
 } from "aws-cdk-lib/aws-cognito";
 import { Construct } from "constructs";
 
+function getProfile(scope: Construct) {
+    return `${Stage.of(scope)!.stageName}-${scope.node.getContext("projectId")}`;
+}
+
 export class FederateUserPool extends UserPool {
     public readonly userPoolDomain: UserPoolDomain;
     constructor(scope: Construct, id: string, props: UserPoolProps) {
@@ -35,7 +39,7 @@ export class FederateUserPool extends UserPool {
         });
         this.userPoolDomain = this.addDomain("userPoolDomain", {
             cognitoDomain: {
-                domainPrefix: `${Stage.of(scope)!.stageName}-${scope.node.getContext("projectId")}`,
+                domainPrefix: getProfile(scope),
             },
         });
     }
@@ -78,7 +82,7 @@ export class FederateUserPoolClient extends UserPoolClient {
                               },
                               clientId: projectId,
                               clientSecret: SecretValue.secretsManager(
-                                  `${projectId}-federateSecret`
+                                  `${getProfile(scope)}-federateSecret`
                               ).unsafeUnwrap(),
                               attributeRequestMethod: OidcAttributeRequestMethod.GET,
                               issuerUrl:
