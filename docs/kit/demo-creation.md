@@ -100,15 +100,14 @@ If you are not on the core GenAI Labs team, follow these [instructions](./federa
 28. Enter a **Client ID** that exactly matches the **projectId** in your [`cdk.json` file](../../cdk.json).
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
-29. Enter **Redirect URIs** using the following format `https://[PROJECT-IDENTIFIER]-[ACCOUNT_NUMBER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+29. Enter **Redirect URIs** using the following format `https://[STAGE]-[PROJECT-IDENTIFIER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
     - The project identifier, account numbers, and regions should reflect your [`cdk.json` file](../../cdk.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
     - Ex:
 
     ```
-    https://email-generator-043309355269.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
-    https://email-generator-294075526655.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
-    https://email-generator-212075525600.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
+    https://dev-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
+    https://kppinker-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     ```
 
 30. Turn the **Client Secret** switch on.
@@ -133,12 +132,12 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
 39. Verify the **Service Name** matches the one you provided in [step 30](#dev-profile).
 40. Check the box titled **Unfabric guidelines** then click **Next**.
 41. Verify the **Client ID** is matches the one you previously provided.
-42. Update the **Redirect URI** for the prod account using the following format `https://[PROJECT-IDENTIFIER]-[PROD_ACCOUNT_NUMBER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+42. Update the **Redirect URI** for the prod account using the following format `https://[PROD_STAGE]-[PROJECT-IDENTIFIER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
     - The project identifier, account number, and region should reflect the prod account in your [`cdk.json` file](../../cdk.json).
     - Ex:
 
     ```
-    https://email-generator-123409357812.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
+    https://prod-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     ```
 
 43. Turn the **Client Secret** switch on then click **Next**.

@@ -17,15 +17,14 @@
 10. Enter a **Client ID** that exactly matches the **projectId** in your [`cdk.json` file](../../cdk.json).
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
-11. Enter **Redirect URIs** using the following format `https://[PROJECT-IDENTIFIER]-[ACCOUNT_NUMBER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+11. Enter **Redirect URIs** using the following format `https://[STAGE]-[PROJECT-IDENTIFIER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
     - The project identifier, account numbers, and regions should reflect your [`cdk.json` file](../../cdk.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
     - Ex:
 
     ```
-    https://email-generator-043309355269.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
-    https://email-generator-294075526655.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
-    https://email-generator-212075525600.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
+    https://dev-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
+    https://kppinker-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     ```
 
 12. Turn the **Client Secret** switch on.
