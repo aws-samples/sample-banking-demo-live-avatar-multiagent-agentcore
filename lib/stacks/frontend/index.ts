@@ -1,5 +1,5 @@
 import { CloudfrontWebAcl } from "@aws/pdk/static-website";
-import { Aspects, CfnOutput, Stack, StackProps } from "aws-cdk-lib";
+import { Aspects, CfnOutput, StackProps } from "aws-cdk-lib";
 import {
     AllowedMethods,
     Distribution,
@@ -89,6 +89,11 @@ export class Frontend extends CommonStack {
             },
         ]);
 
+        new CfnOutput(this, "url", {
+            value: distribution.distributionDomainName,
+            description: "CloudFront URL",
+        });
+
         this.websiteBucket = websiteBucket;
         this.distribution = distribution;
         this.urls = [`https://${distribution.distributionDomainName}`, "http://localhost:3000"];
@@ -123,10 +128,8 @@ export class FrontendDeployment extends CommonStack {
             primaryOutputDirectory: "dist",
         });
 
-        const environmentVariablesId = "environmentVariables";
-        new CfnOutput(this, environmentVariablesId, {
+        new CfnOutput(this, "environmentVariables", {
             value: JSON.stringify(environmentVariables),
-            exportName: `${Stack.of(this).stackName}-${environmentVariablesId}`,
         });
     }
 }

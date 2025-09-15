@@ -160,19 +160,11 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
 
 - See the [design documentation](./design.md#kit-cli) to learn more about the Demo Starter Kit CLI.
 
-### Code Defender
-
-In order commit changes, we must first install [Code Defender](https://w.amazon.com/bin/view/AWS/Teams/GlobalServicesSecurity/Engineering/CodeDefender/UserHelp/#5).
-
-53. Install Code Defender from [here](https://codedefender.proserve.aws.dev/).
-54. From the project's root directory, run the command `git defender --setup` followed by `git-defender --mw-register`.
-    - You should see a message saying **Successfully registered**.
-
 ## Code Check-In
 
 Lets make some changes in the package before we commit our code.
 
-55. Open the `package.json` and edit the following
+53. Open the `package.json` and edit the following
 
     **name**: Enter the project identifier you provided in your [`cdk.json` file](../../cdk.json).
 
@@ -180,27 +172,27 @@ Lets make some changes in the package before we commit our code.
 
 Now we are all set to make our first code check in! The starter kit comes pre-built with a commit CLI to improve the quality of Git commits.
 
-56. From the root directory, run the command `git add -A && npm run commit`.
-57. For **Select the type of change that you're committing**, select **chore**.
-58. For **What is the scope of this change**, enter `app`.
-59. For **Write a short, imperative tense description of the change**, enter `initial code commit`.
-60. For **Provide a longer description of the change**, press **Enter** to skip.
-61. For **Are there any breaking changes?** press **Enter** to indicate **N**.
+54. From the root directory, run the command `git add -A && npm run commit`.
+55. For **Select the type of change that you're committing**, select **chore**.
+56. For **What is the scope of this change**, enter `app`.
+57. For **Write a short, imperative tense description of the change**, enter `initial code commit`.
+58. For **Provide a longer description of the change**, press **Enter** to skip.
+59. For **Are there any breaking changes?** press **Enter** to indicate **N**.
 
-62. If the commit hooks powered by Husky fail, you will need to repeat steps 59-64.
+60. If the commit hooks powered by Husky fail, you will need to repeat steps 59-64.
     - See the [design documentation](./design.md#commit) to learn more about the commit hooks.
-63. If the commit hooks succeed, you can push the committed files to your repository with the command `git push origin main`.
+61. If the commit hooks succeed, you can push the committed files to your repository with the command `git push origin main`.
     - Pushing to main will trigger a pipeline execution.
 
 From now on, **_do not_** work and push changes on the `main` branch. Always work on a feature branch then submit a merge request via GitLab to merge changes to `main`.
 
-64. From the root directory, run `git checkout -B feat/[ALIAS]` to create a new dev branch for yourself with your alias.
+62. From the root directory, run `git checkout -B feat/[ALIAS]` to create a new dev branch for yourself with your alias.
     - Ex: `git checkout -B feat/tamjay`
 
 ## Verify Pipelines
 
-65. Navigate back to your demo's GitLab page.
-66. Check the status of your GitLab pipeline by by clicking **Build** then **Pipelines** from the side menu.
+63. Navigate back to your demo's GitLab page.
+64. Check the status of your GitLab pipeline by by clicking **Build** then **Pipelines** from the side menu.
 
     ![git-cicd-pipeline](images/git-cicd-pipeline.png)
     - There are three stages of the GitLab pipeline:
@@ -209,9 +201,9 @@ From now on, **_do not_** work and push changes on the `main` branch. Always wor
         2. Prepare: this stage will create environment variables using your [`cdk.json` file](../../cdk.json).
         3. Deploy: this stage will compress the code base into a zip format, get cross-account credentials via AWS Credential Vendor, then upload the zip file to Amazon S3, kicking of the CodePipeline.
 
-67. Once the **zip-deploy** stage succeeds, navigate to the dev account's [AWS Management Console](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/) to verify that the pipeline is in-progress.
-68. Once the pipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontendDeployment**.
-69. Click the **Outputs** tab then the **callbackUrl** to visit your new frontend React app.
+65. Once the **zip-deploy** stage succeeds, navigate to the dev account's [AWS Management Console](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/) to verify that the pipeline is in-progress.
+66. Once the pipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontend**.
+67. Click the **Outputs** tab then the CloudFront **url** to visit your new frontend React app.
 
     ![react-login](images/react-login.png)
 
