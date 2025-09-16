@@ -48,7 +48,6 @@ export class FederateUserPool extends UserPool {
 export class FederateUserPoolClient extends UserPoolClient {
     constructor(scope: Construct, id: string, props: UserPoolClientProps) {
         const midway = scope.node.tryGetContext("midway");
-        const projectId = midway ? scope.node.getContext("projectId") : undefined;
         super(scope, id, {
             ...props,
             authFlows: midway
@@ -80,7 +79,7 @@ export class FederateUserPoolClient extends UserPoolClient {
                                       "custom:posix": ProviderAttribute.other("POSIX_GROUPS"),
                                   },
                               },
-                              clientId: projectId,
+                              clientId: scope.node.getContext("projectId"),
                               clientSecret: SecretValue.secretsManager(
                                   `${getProfile(scope)}-federateSecret`
                               ).unsafeUnwrap(),
