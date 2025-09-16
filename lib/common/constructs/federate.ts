@@ -1,6 +1,6 @@
 // @export {"deleteFile": true}
 
-import { RemovalPolicy, SecretValue, Stack, Stage } from "aws-cdk-lib";
+import { RemovalPolicy, SecretValue, Stage } from "aws-cdk-lib";
 import {
     OAuthScope,
     OidcAttributeRequestMethod,
@@ -85,8 +85,7 @@ export class FederateUserPoolClient extends UserPoolClient {
                               ).unsafeUnwrap(),
                               attributeRequestMethod: OidcAttributeRequestMethod.GET,
                               issuerUrl:
-                                  Stack.of(scope).account ===
-                                  scope.node.getContext("accounts").prod?.number
+                                  Stage.of(scope)!.stageName === "prod"
                                       ? "https://idp.federate.amazon.com"
                                       : "https://idp-integ.federate.amazon.com",
                           }).providerName

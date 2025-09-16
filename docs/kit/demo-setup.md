@@ -86,7 +86,7 @@ Now we are all set to make our first code check in! The starter kit comes pre-bu
 27. For **Provide a longer description of the change**, press **Enter** to skip.
 28. For **Are there any breaking changes?** press **Enter** to indicate **N**.
 
-29. If the commit hooks powered by Husky fail, you will need to repeat steps 2-7.
+29. If the commit hooks powered by Husky fail, you will need to repeat steps 23-28.
     - See the [design documentation](./design.md#commit) to learn more about the commit hooks.
 30. If the commit hooks succeed, you can push the committed files to your repository with the command `git push`.
 
