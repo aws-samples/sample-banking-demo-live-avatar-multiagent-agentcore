@@ -2,12 +2,6 @@
 
 # Frequently Asked Questions (FAQs)
 
-## Why can't I find the GenAI Labs Bindle?
-
-If you can't find the [GenAI labs](https://bindles.amazon.com/software_app/AWS-GenAI-Labs-Demo) bindle ID, please reach out to your manager so they can add you to the [aws-genai-labs-demo team](https://permissions.amazon.com/a/team/amzn1.abacus.team.qbcf3u7wr4w6jmaqtaka), then try again. It may take up to 24 hours for changes to propagate.
-
-Alternatively, you may ask a fellow team member who is already part of the GenAI labs demo team to create the Isengard account(s) for you then add your alias to the `Admin` console role access list.
-
 ## I forgot to copy the Federate client secret key. Now what?
 
 So...you didn't keep the key(s) safe? Don't worry, we got you!

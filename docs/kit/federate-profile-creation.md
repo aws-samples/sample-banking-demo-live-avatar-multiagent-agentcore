@@ -5,7 +5,7 @@
 1. Click **Create Service Profile**.
 2. Skip over the **Questionnaire Based Onboarding** by clicking **Submit**.
 3. Select **OIDC** then click **Next**.
-4. Enter a **Service Name** using the following format `genai-labs-[PROJECT-IDENTIFIER]`.
+4. Enter a **Service Name** using the following format `genai-labs-[PROJECT_IDENTIFIER]`.
     - The project identifier should exactly match the **projectId** in your [`cdk.json` file](../../cdk.json).
     - Ex: `genai-labs-email-generator`
 5. Select **Pre-Approved Use Cases** then **Federate-Cognito Integration**.
@@ -17,7 +17,7 @@
 10. Enter a **Client ID** that exactly matches the **projectId** in your [`cdk.json` file](../../cdk.json).
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
-11. Enter **Redirect URIs** using the following format `https://[STAGE]-[PROJECT-IDENTIFIER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+11. Enter **Redirect URIs** using the following format `https://[STAGE]-[PROJECT_IDENTIFIER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
     - The project identifier, account numbers, and regions should reflect your [`cdk.json` file](../../cdk.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
     - Ex:

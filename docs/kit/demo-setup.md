@@ -42,7 +42,7 @@ After the sandbox account has been added to the CDK configuration, we need to ad
 10. Click on the profile **Name** link.
 11. Click **Edit** in the top right corner then click **Ok** after reading the dialogue.
 12. On the **Service Profile Configuration** page, leave all options to their defaults then click **Next** at the bottom of the page.
-13. Add a **Redirect URI** on a new line using the following format `https://[STAGE]-[PROJECT-IDENTIFIER].auth.[SANDBOX_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+13. Add a **Redirect URI** on a new line using the following format `https://[STAGE]-[PROJECT_IDENTIFIER].auth.[SANDBOX_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
     - The project identifier, account number, and region should reflect the sandbox account you added to the [`cdk.json` file](../../cdk.json).
     - Ex:
 
@@ -63,7 +63,7 @@ After the sandbox account has been added to the CDK configuration, we need to ad
 17. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm install`.
     - It may take a couple minutes to complete. Great time for a ☕!
 18. To configure the demo, we will use the [kit CLI](./design.md#kit-cli). Run the command `npm run kit`.
-19. First, select your sandbox account, **Configure Credentials**, then **AWS Developer Account**.
+19. First, select your sandbox account, then **AWS Developer Account**.
 20. Next, select **Configure Secret**, then enter `federateSecret`.
     - The secret should be copied from the dev account.
 21. Finally, select **Bootstrap Account**.

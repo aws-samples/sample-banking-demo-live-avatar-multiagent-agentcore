@@ -6,14 +6,14 @@
     "license": "Apache License Version 2.0",
     "private": true,
     "bin": {
-        "index": "bin/index.js"
+        "app": "bin/app.js"
     },
     "workspaces": [
         "lib/stacks/frontend/app"
     ],
     "scripts": {
         "preinstall": "npm config set registry=https://registry.npmjs.com/",
-        "postinstall": "pip install uv && uv venv --allow-existing && uv tool install ruff ",
+        "postinstall": "uv venv --allow-existing && uv tool install ruff ",
         "prepare": "husky",
         "format": "prettier --write . && ruff format .",
         "lint": "eslint . && ruff check .",

@@ -14,7 +14,7 @@ You can use existing Isengard accounts provided you have access to an **Admin** 
 
 - Follow steps 11-18 [here](./account-creation.md#dev-account) to add an admin role.
 
-<br>\* GenAI Labs Builders are required to create new dev and prod accounts for each demo using these [instructions](./account-creation.md)<br />
+<br>\* GenAI Labs builders are required to create new dev and prod accounts for each demo using these [instructions](./account-creation.md)<br />
 
 ## GitLab Repository
 
@@ -24,8 +24,8 @@ You can use existing Isengard accounts provided you have access to an **Admin** 
 
     ![git-fork](images/git-fork.png)
 
-2. Enter a **Project name** using the following format `[SEGMENT]-[DEMO-NAME]` and ensure the **Project slug** updates accordingly.
-    - Ex: `retail-marketing-email-generator`
+2. Enter a **Project name** using the following format `[DEMO_NAME]` and ensure the **Project slug** updates accordingly.
+    - Ex: `marketing-email-generator`
 3. Under **Project URL**, **select a namespace**.
     - If you are on the core GenAI Labs team, select `genai-labs/demo-assets`. Otherwise, you may use your alias or another namespace.
     - This is a **_very important step and non-reversible_**.
@@ -98,7 +98,7 @@ If you are not on the core GenAI Labs team, follow these [instructions](./federa
 
     ![federate-clone-profile](images/federate-clone-profile.png)
 
-26. Enter a **Service Name** using the following format `genai-labs-[PROJECT-IDENTIFIER]`.
+26. Enter a **Service Name** using the following format `genai-labs-[PROJECT_IDENTIFIER]`.
     - The project identifier should exactly match the **projectId** in your [`cdk.json` file](../../cdk.json).
     - Ex: `genai-labs-email-generator`
 27. Check the box titled **Unfabric guidelines**.
@@ -107,7 +107,7 @@ If you are not on the core GenAI Labs team, follow these [instructions](./federa
 30. Enter a **Client ID** that exactly matches the **projectId** in your [`cdk.json` file](../../cdk.json).
     - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
     - Ex: `email-generator`
-31. Enter **Redirect URIs** using the following format `https://[STAGE]-[PROJECT-IDENTIFIER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+31. Enter **Redirect URIs** using the following format `https://[STAGE]-[PROJECT_IDENTIFIER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
     - The project identifier, account numbers, and regions should reflect your [`cdk.json` file](../../cdk.json).
     - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
     - Ex:
@@ -139,7 +139,7 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
 41. Verify the **Service Name** matches the one you provided in [step 26](#dev-profile).
 42. Check the box titled **Unfabric guidelines** then click **Next**.
 43. Verify the **Client ID** is matches the one you previously provided.
-44. Update the **Redirect URI** for the prod account using the following format `https://[PROD_STAGE]-[PROJECT-IDENTIFIER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+44. Update the **Redirect URI** for the prod account using the following format `https://[PROD_STAGE]-[PROJECT_IDENTIFIER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
     - The project identifier, account number, and region should reflect the prod account in your [`cdk.json` file](../../cdk.json).
     - Ex:
 
@@ -157,7 +157,7 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
 48. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm install`.
     - It may take a couple minutes to complete. Great time for a ☕!
 49. To configure the demo, we will use the [kit CLI](./design.md#kit-cli). Run the command `npm run kit`.
-50. First, select **dev**, **Configure Credentials**, then **AWS Developer Account**.
+50. First, select **dev**, then **AWS Developer Account**.
 51. Second, select **Configure Secret**, then enter `federateSecret` followed by the Federate client secret key from the [previous section](#federate-profiles).
 52. Third, select **Bootstrap Account**.
 53. Select **Back**, then repeat steps 50-52 for **prod** and your sandbox account(s) if applicable.
