@@ -8,13 +8,13 @@ These instructions will walk you through creating a brand new demo. This is a on
 
 ## AWS Account(s)
 
-You are required to have at least one dev account to use the starter kit. A single prod account and one sandbox account per builder are optional, but encouraged\*.
+You are required to have at least one account to develop a demo. A single prod account and one sandbox account per builder are optional, but encouraged.
+
+- Follow these [instructions](./account-creation.md) to create new Isengard accounts if needed.
 
 You can use existing Isengard accounts provided you have access to an **Admin** console role for each account.
 
 - Follow steps 11-18 [here](./account-creation.md#dev-account) to add an admin role.
-
-<br>\* GenAI Labs builders are required to create new dev and prod accounts for each demo using these [instructions](./account-creation.md)<br />
 
 ## GitLab Repository
 
@@ -29,7 +29,7 @@ You can use existing Isengard accounts provided you have access to an **Admin** 
 3. Under **Project URL**, **select a namespace**.
     - If you are on the core GenAI Labs team, select `genai-labs/demo-assets`. Otherwise, you may use your alias or another namespace.
     - This is a **_very important step and non-reversible_**.
-4. Enter a **Project description**.
+4. Enter your demo name for the **Project description**.
 5. Under **Branches to include**, select **Only the default branch `main`**.
 6. Under **Visibility level**, select the **Internal** option.
     - This is a **_very important step_** so AWS employees outside your team can view the project.
@@ -54,7 +54,7 @@ You can use existing Isengard accounts provided you have access to an **Admin** 
 
 The starter kit uses `cdk.json` to centrally track and manage CDK configurations.
 
-- See the [design documentation](./design.md#configuration-file) for more details.
+- See the [kit documentation](./kit.md#configuration-file) for more details.
 
 13. Open the project folder in your IDE of choice then open [`cdk.json`](../../cdk.json).
 14. Update **projectId** with a unique identifier less than 15 characters that best reflects your project name.
@@ -66,7 +66,7 @@ The starter kit uses `cdk.json` to centrally track and manage CDK configurations
     - Ex: `retail-marketing-email-generator`
 17. Set **pipeline** to `true` to trigger a pipeline with GitLab commits\*\*.
     - We **_strongly recommend_** setting this property to `true`, even if there is no prod account configured. If you set this property to `false`, you must manually deploy the app using the CLI.
-18. Set **midway** to `true` to enable [Federate/Midway authentication](https://integ.ep.federate.a2z.com/help), allowing Amazon employees to access to your demo\*\*.
+18. Set **midway** to `true` to enable [Federate/Midway authentication](https://integ.ep.federate.a2z.com/help), allowing Amazon employees to access your demo\*\*.
     - We **_strongly recommend_** setting this property to `true`, even if your demo may not initially need Midway.
 19. Update the account configuration with at least one **dev** account, including the account **number** and **region** for each account.
     - Accounts with user aliases are automatically considered sandbox accounts and can be added or removed anytime.
@@ -74,9 +74,9 @@ The starter kit uses `cdk.json` to centrally track and manage CDK configurations
 20. **Save** `cdk.json`.
 21. Open [`package.json`](../../package.json) then edit the following:
 
-    **name**: Enter the project identifier you provided in step 14.
+    **name**: Type the project identifier you provided in step 14.
 
-    **description**: Enter the description you provided in [step 4](#fork-it).
+    **description**: Type the demo name you provided in [step 4](#fork-it).
 
 22. **Save** `package.json`.
 
@@ -93,7 +93,7 @@ The starter kit uses `cdk.json` to centrally track and manage CDK configurations
 
 If you are not on the core GenAI Labs team, follow these [instructions](./federate-profile-creation.md) to create a dev Integration profile then skip to [Prod Profile](#prod-profile). Otherwise, you can continue and clone our team's profile.
 
-24. Search for then select the profile named `demo-starter-tester`.
+24. Search for then select the profile named `start-kit-test`.
 25. After selecting the profile, click the **Actions** dropdown then click **Clone Service Profile**.
 
     ![federate-clone-profile](images/federate-clone-profile.png)
@@ -125,7 +125,7 @@ If you are not on the core GenAI Labs team, follow these [instructions](./federa
 34. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
 35. On the **Service Profile Overview** page, click **Submit**.
 36. Copy the generated client secret key. **_Keep it safe_**.
-    > [I forgot to copy the Federate client secret key. Now what?](./faq.md#i-forgot-to-copy-the-federate-client-secret-key-now-what)
+    > [I lost the Federate client secret key. Now what?](./federate-key-recovery.md)
 37. The Integration profile expires after 30 days. Set a recurring calendar invite to renew it.
     - Follow these [instructions](./federate-profile-renewal.md) to renew it.
 
@@ -150,13 +150,13 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
 45. Turn the **Client Secret** switch on then click **Next**.
 46. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
 47. On the **Service Profile Overview** page, click **Submit** then copy the generated client secret key. **_Keep it safe_**.
-    > [I forgot to copy the Federate client secret key. Now what?](./faq.md#i-forgot-to-copy-the-federate-client-secret-key-now-what)
+    > [I lost the Federate client secret key. Now what?](./federate-key-recovery.md)
 
 ## Configuration Commands
 
 48. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm install`.
     - It may take a couple minutes to complete. Great time for a ☕!
-49. To configure the demo, we will use the [kit CLI](./design.md#kit-cli). Run the command `npm run kit`.
+49. To configure the demo, we will use the [kit CLI](./kit.md#kit-cli). Run the command `npm run kit`.
 50. First, select **dev**, then **AWS Developer Account**.
 51. Second, select **Configure Secret**, then enter `federateSecret` followed by the Federate client secret key from the [previous section](#federate-profiles).
 52. Third, select **Bootstrap Account**.
@@ -164,7 +164,7 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
 54. Finally, select **Back**, **dev**, **Deploy CDK Stack(s)**, then **no**, wait for the stacks to list, then select the stack ending in **pipeline** by pressing the spacebar followed by **Enter**.
     - This deploys the pipeline to the dev account.
 
-- See the [design documentation](./design.md#kit-cli) to learn more about the Demo Starter Kit CLI.
+- See the [kit documentation](./kit.md#kit-cli) to learn more about the Demo Starter Kit CLI.
 
 ## Code Check-In
 
@@ -178,7 +178,7 @@ The starter kit comes pre-built with a commit CLI to improve the quality of Git 
 60. For **Are there any breaking changes?** press **Enter** to indicate **N**.
 
 61. If the commit hooks powered by Husky fail, you will need to repeat steps 55-60.
-    - See the [design documentation](./design.md#commit) to learn more about the commit hooks.
+    - See the [kit documentation](./kit.md#hooks) to learn more about the commit hooks.
 62. If the commit hooks succeed, you can push the committed files to your repository with the command `git push origin main`.
     - Pushing to main will trigger a pipeline execution.
 
@@ -205,4 +205,4 @@ From now on, **_do not_** work and push changes on the `main` branch. Always wor
 
     ![react-login](images/react-login.png)
 
-🎉 Congratulations! You have successfully created your brand new demo! Now let's [set up your local development environment](./demo-development.md).
+🎉 Congratulations! You have successfully created your brand new demo!

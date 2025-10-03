@@ -1,48 +1,30 @@
-import { RemovalPolicy } from "aws-cdk-lib";
-import {
-    BlockPublicAccess,
-    Bucket,
-    BucketProps,
-    HttpMethods,
-    ObjectOwnership,
-} from "aws-cdk-lib/aws-s3";
+import { Bucket, BucketProps, HttpMethods, ObjectOwnership } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
-type CommonBucketProps = Omit<
-    BucketProps,
-    "blockPublicAccess" | "enforceSSL" | "serverAccessLogsPrefix"
->;
-
-export class CommonBucket extends Bucket {
-    constructor(scope: Construct, id: string, props: CommonBucketProps) {
+export class LoggingBucket extends Bucket {
+    constructor(scope: Construct, id: string, props?: Omit<BucketProps, "serverAccessLogsBucket">) {
         super(scope, id, {
-            autoDeleteObjects: true,
-            removalPolicy: RemovalPolicy.DESTROY,
-            blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
-            enforceSSL: true,
             serverAccessLogsPrefix: `${id}/`,
-            objectOwnership: props.serverAccessLogsBucket
-                ? undefined
-                : ObjectOwnership.BUCKET_OWNER_PREFERRED,
+            objectOwnership: ObjectOwnership.BUCKET_OWNER_PREFERRED,
             ...props,
         });
     }
 }
 
-interface CommonWebBucketProps extends Omit<CommonBucketProps, "cors"> {
+interface WebBucketProps extends Omit<BucketProps, "cors"> {
     allowedOrigins: string[];
 }
 
-export class CommonWebBucket extends CommonBucket {
-    constructor(scope: Construct, id: string, props: CommonWebBucketProps) {
+export class WebBucket extends Bucket {
+    constructor(scope: Construct, id: string, props: WebBucketProps) {
         super(scope, id, {
             cors: [
                 {
                     allowedMethods: [
                         HttpMethods.GET,
+                        HttpMethods.HEAD,
                         HttpMethods.POST,
                         HttpMethods.PUT,
-                        HttpMethods.HEAD,
                         HttpMethods.DELETE,
                     ],
                     allowedOrigins: props.allowedOrigins,

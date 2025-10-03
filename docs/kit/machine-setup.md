@@ -22,8 +22,8 @@ These instructions will walk you through properly setting up your Mac, Windows, 
         },
         ```
 
-3. Ensure you do not have other global NodeJS installations from HomeBrew (Mac) or a standalone Node.js exe (Windows).
-4. Optionally, you can run the command `volta install npm@bundled`to get the latest NPM with your Node.js version.
+3. Ensure you do not have other global Node.js installations from Homebrew (Mac) or a standalone Node.js exe (Windows).
+4. Optionally, you can run the command `volta install npm@bundled` to get the latest NPM with your Node.js version.
 
 ## Python
 
@@ -39,7 +39,7 @@ We highly recommend setting up a Python version manager so you can seamlessly sw
 ## AWS CLI
 
 8. Verify if you have v2 of the AWS CLI by running the command `aws --version`.
-    - Unistall v1 if necessary.
+    - Uninstall v1 if necessary.
 9. Set up AWS CLI following the instructions [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
 
 ## Git
@@ -104,20 +104,28 @@ Docker is known to consume a lot of disk space and doesn't auto remove older ima
 
 17. Click **Apply & restart**
 
+## Kiro
+
+18. Install Kiro, Amazon's AI IDE, using these [instructions](https://kiro.dev/docs/getting-started/installation/).
+
+## Playwright MCP Extension
+
+19. Follow the [instructions](https://github.com/microsoft/playwright-mcp/tree/main/extension) to install the Playwright MCP Chrome Extension.
+
 <!-- @export {"deleteLines": 17} -->
 
 ## Builder Toolbox
 
-18. Run the `mwinit` command
+20. Run the `mwinit` command
     - `mwinit -f` on Mac/Windows.
     - `winit -o` on Cloud Desktop.
-19. Navigate to [BuilderHub](https://docs.hub.amazon.dev/dev-setup/laptop-or-ws/) then click the link for your machine's **setup**.
-20. Follow the instructions on that page to **Install Builder Toolbox**.
+21. Navigate to [BuilderHub](https://docs.hub.amazon.dev/dev-setup/laptop-or-ws/) then click the link for your machine's **setup**.
+22. Follow the instructions on that page to **Install Builder Toolbox**.
 
 ## AWS Developer Account (ADA)
 
 We use [ADA](https://w.amazon.com/bin/view/DevAccount/Docs) via the CLI to manage Isengard account credentials.
 
-21. Use Builder Toolbox to install ADA by running the command `toolbox install ada`.
-22. To confirm the installation, run the command `ada`.
+23. Use Builder Toolbox to install ADA by running the command `toolbox install ada`.
+24. To confirm the installation, run the command `ada`.
     - You should see information on usage, available commands, flags, etc.

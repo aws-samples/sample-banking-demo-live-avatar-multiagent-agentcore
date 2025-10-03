@@ -20,7 +20,8 @@
         "typeRoots": ["./node_modules/@types"],
         "esModuleInterop": true,
         "stripInternal": true,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "noEmit": true
     },
     "exclude": ["node_modules", "cdk.out"]
 }

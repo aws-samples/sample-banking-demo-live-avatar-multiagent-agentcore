@@ -7,14 +7,8 @@ import "@cloudscape-design/global-styles/index.css";
 import { Amplify } from "aws-amplify";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import { FlashbarProvider } from "./common/contexts/Flashbar";
-import Chat from "./pages/Chat";
-import Error from "./pages/Error";
-import Gallery from "./pages/Gallery";
+import Home from "./pages/Home";
 import Login from "./pages/Login";
-import NotFound from "./pages/NotFound";
-
-const LOCALE = "en";
 
 const apiConfig = {
     headers: async () => {
@@ -29,11 +23,9 @@ Amplify.configure(
             Cognito: {
                 userPoolId: import.meta.env.VITE_USER_POOL_ID,
                 userPoolClientId: import.meta.env.VITE_USER_POOL_CLIENT_ID,
-                identityPoolId: import.meta.env.VITE_IDENTITY_POOL_ID, // REQUIRED only for Federated Authentication.
+                identityPoolId: import.meta.env.VITE_IDENTITY_POOL_ID,
                 allowGuestAccess: false,
-                // OPTIONAL - Set to true to use your identity pool's unauthenticated role for unauthenticated users.
                 loginWith: {
-                    // OPTIONAL - Hosted UI configuration
                     oauth: {
                         domain: import.meta.env.VITE_USER_POOL_DOMAIN_URL,
                         scopes: ["openid"],
@@ -45,7 +37,7 @@ Amplify.configure(
                             "http://localhost:3000",
                             import.meta.env.VITE_CALLBACK_URL,
                         ],
-                        responseType: "code", //REFRESH token will only be generated when the responseType is code.
+                        responseType: "code",
                     },
                 },
             },
@@ -86,18 +78,8 @@ export default function App() {
 
     const router = createBrowserRouter([
         {
-            path: "*",
-            element: <NotFound />,
-        },
-        {
             path: "/",
-            element: <Chat />,
-            errorElement: <Error />,
-        },
-        {
-            path: "/gallery",
-            element: <Gallery />,
-            errorElement: <Error />,
+            element: <Home />,
         },
     ]);
 
@@ -107,10 +89,8 @@ export default function App() {
             {authStatus === "unauthenticated" && <Login />}
             {authStatus === "authenticated" && (
                 <>
-                    <I18nProvider locale={LOCALE} messages={[messages]}>
-                        <FlashbarProvider>
-                            <RouterProvider router={router} />
-                        </FlashbarProvider>
+                    <I18nProvider locale={"en"} messages={[messages]}>
+                        <RouterProvider router={router} />
                     </I18nProvider>
                 </>
             )}

@@ -1,0 +1,90 @@
+{
+    "@export": { "deleteFile": true },
+    "mcpServers": {
+        "awslabs-core-mcp-server": {
+            "command": "uvx",
+            "args": ["awslabs.core-mcp-server@latest"],
+            "env": {
+                "FASTMCP_LOG_LEVEL": "ERROR"
+            },
+            "disabled": false,
+            "autoApprove": ["prompt_understanding"]
+        },
+        "fetch": {
+            "command": "uvx",
+            "args": ["mcp-fetch@latest"],
+            "disabled": false,
+            "autoApprove": ["fetch"]
+        },
+        "aws-documentation": {
+            "command": "uvx",
+            "args": ["awslabs.aws-documentation-mcp-server@latest"],
+            "env": {
+                "FASTMCP_LOG_LEVEL": "ERROR"
+            },
+            "disabled": false,
+            "autoApprove": ["search_documentation", "read_documentation"]
+        },
+        "aws-cdk": {
+            "command": "uvx",
+            "args": ["awslabs.cdk-mcp-server@latest"],
+            "disabled": false,
+            "autoApprove": [
+                "CDKGeneralGuidance",
+                "ExplainCDKNagRule",
+                "CheckCDKNagSuppressions",
+                "GetAwsSolutionsConstructPattern",
+                "SearchGenAICDKConstructs",
+                "LambdaLayerDocumentationProvider"
+            ]
+        },
+        "frontend": {
+            "command": "uvx",
+            "args": ["awslabs.frontend-mcp-server@latest"],
+            "env": {
+                "FASTMCP_LOG_LEVEL": "ERROR"
+            },
+            "disabled": false,
+            "autoApprove": ["GetReactDocsByTopic"]
+        },
+        "aws-api": {
+            "command": "uvx",
+            "args": ["awslabs.aws-api-mcp-server@latest"],
+            "env": {
+                "READ_OPERATIONS_ONLY": "true"
+            },
+            "disabled": false,
+            "autoApprove": ["suggest_aws_commands"]
+        },
+        "aws-cloudwatch": {
+            "command": "uvx",
+            "args": ["awslabs.cloudwatch-mcp-server@latest"],
+            "disabled": false
+        },
+        "playwright": {
+            "command": "npx",
+            "args": ["@playwright/mcp@latest", "--extension"],
+            "disabled": false,
+            "autoApprove": [
+                "browser_close",
+                "browser_resize",
+                "browser_console_messages",
+                "browser_handle_dialog",
+                "browser_fill_form",
+                "browser_press_key",
+                "browser_type",
+                "browser_navigate",
+                "browser_navigate_back",
+                "browser_network_requests",
+                "browser_take_screenshot",
+                "browser_snapshot",
+                "browser_click",
+                "browser_drag",
+                "browser_hover",
+                "browser_select_option",
+                "browser_tabs",
+                "browser_wait_for"
+            ]
+        }
+    }
+}

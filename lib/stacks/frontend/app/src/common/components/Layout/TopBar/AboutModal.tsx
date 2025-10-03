@@ -3,12 +3,11 @@ import { Box, Modal, SpaceBetween } from "@cloudscape-design/components";
 interface AboutModalProps {
     visible: boolean;
     onDismiss: () => void;
-    appName?: string;
 }
 
-const AboutModal = ({ visible, onDismiss, appName = "Demo" }: AboutModalProps) => {
+const AboutModal = ({ visible, onDismiss }: AboutModalProps) => {
     return (
-        <Modal visible={visible} onDismiss={onDismiss} size="small" header={appName}>
+        <Modal visible={visible} onDismiss={onDismiss} size="small" header="About">
             <SpaceBetween size="xxxs">
                 <Box>Version: {import.meta.env.VITE_BUILD_VERSION}</Box>
                 <Box variant={"small"}>

@@ -1,8 +1,8 @@
-import { Stack, StackProps } from "aws-cdk-lib";
+import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 
-export class CommonStack extends Stack {
-    constructor(scope: Construct, id: string, props?: StackProps) {
+export class Stack extends cdk.Stack {
+    constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         const prefix = scope.node.tryGetContext("projectId");
         const prefixedId = prefix ? `${prefix}-${id}` : id;
         super(scope, prefixedId, {

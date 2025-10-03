@@ -1,18 +1,13 @@
-import {
-    PythonFunction,
-    PythonFunctionProps,
-    PythonLayerVersion,
-    PythonLayerVersionProps,
-} from "@aws-cdk/aws-lambda-python-alpha";
+import * as lambdaPython from "@aws-cdk/aws-lambda-python-alpha";
 import { Architecture, LayerVersion, LayerVersionProps, Runtime } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction, NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
+import * as lambdaNodejs from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 
 export const architecture = Architecture.ARM_64;
-
 export const nodejsRuntime = Runtime.NODEJS_22_X;
+export const pythonRuntime = Runtime.PYTHON_3_12;
 
-export class CommonNodejsLayerVersion extends LayerVersion {
+export class NodejsLayerVersion extends LayerVersion {
     constructor(
         scope: Construct,
         id: string,
@@ -26,11 +21,11 @@ export class CommonNodejsLayerVersion extends LayerVersion {
     }
 }
 
-export class CommonNodejsFunction extends NodejsFunction {
+export class NodejsFunction extends lambdaNodejs.NodejsFunction {
     constructor(
         scope: Construct,
         id: string,
-        props: Omit<NodejsFunctionProps, "architecture" | "runtime">
+        props: Omit<lambdaNodejs.NodejsFunctionProps, "architecture" | "runtime">
     ) {
         super(scope, id, {
             architecture,
@@ -40,13 +35,14 @@ export class CommonNodejsFunction extends NodejsFunction {
     }
 }
 
-export const pythonRuntime = Runtime.PYTHON_3_12;
-
-export class CommonPythonLayerVersion extends PythonLayerVersion {
+export class PythonLayerVersion extends lambdaPython.PythonLayerVersion {
     constructor(
         scope: Construct,
         id: string,
-        props: Omit<PythonLayerVersionProps, "compatibleArchitectures" | "compatibleRuntimes">
+        props: Omit<
+            lambdaPython.PythonLayerVersionProps,
+            "compatibleArchitectures" | "compatibleRuntimes"
+        >
     ) {
         super(scope, id, {
             compatibleArchitectures: [architecture],
@@ -56,10 +52,12 @@ export class CommonPythonLayerVersion extends PythonLayerVersion {
     }
 }
 
-type CommonPythonFunctionProps = Omit<PythonFunctionProps, "architecture" | "runtime">;
-
-export class CommonPythonFunction extends PythonFunction {
-    constructor(scope: Construct, id: string, props: CommonPythonFunctionProps) {
+export class PythonFunction extends lambdaPython.PythonFunction {
+    constructor(
+        scope: Construct,
+        id: string,
+        props: Omit<lambdaPython.PythonFunctionProps, "architecture" | "runtime">
+    ) {
         super(scope, id, {
             architecture,
             runtime: pythonRuntime,

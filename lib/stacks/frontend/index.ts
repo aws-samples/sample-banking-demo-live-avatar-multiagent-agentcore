@@ -1,5 +1,5 @@
 import { CloudfrontWebAcl } from "@aws/pdk/static-website";
-import { Aspects, CfnOutput, StackProps } from "aws-cdk-lib";
+import { CfnOutput, StackProps } from "aws-cdk-lib";
 import {
     AllowedMethods,
     Distribution,
@@ -9,17 +9,15 @@ import {
     ViewerProtocolPolicy,
 } from "aws-cdk-lib/aws-cloudfront";
 import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
-import { ComputeType, LinuxArmBuildImage } from "aws-cdk-lib/aws-codebuild";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
+import { NodejsBuild } from "deploy-time-build";
 import * as path from "path";
-import { FunctionRuntimeAspect } from "../../common/aspects";
-import { CommonBucket } from "../../common/constructs/s3";
-import { CommonStack } from "../../common/constructs/stack";
-import { StaticWebsiteBuild } from "../../common/constructs/static-website";
+import { LoggingBucket } from "../../common/constructs/s3";
+import { Stack } from "../../common/constructs/stack";
 
-export class Frontend extends CommonStack {
+export class Frontend extends Stack {
     public readonly websiteBucket: Bucket;
     public readonly distribution: Distribution;
     public readonly urls: string[];
@@ -27,9 +25,9 @@ export class Frontend extends CommonStack {
     constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
 
-        const loggingBucket = new CommonBucket(this, "loggingBucket", {});
+        const loggingBucket = new LoggingBucket(this, "loggingBucket");
 
-        const websiteBucket = new CommonBucket(this, "websiteBucket", {
+        const websiteBucket = new Bucket(this, "websiteBucket", {
             serverAccessLogsBucket: loggingBucket,
         });
 
@@ -49,7 +47,6 @@ export class Frontend extends CommonStack {
                 },
             ],
         });
-        Aspects.of(cloudfrontWebAcl).add(new FunctionRuntimeAspect());
 
         const distribution = new Distribution(this, "distribution", {
             defaultRootObject: "index.html",
@@ -106,27 +103,36 @@ interface FrontendDeploymentProps extends StackProps {
     environmentVariables: Record<string, string>;
 }
 
-export class FrontendDeployment extends CommonStack {
+export class FrontendDeployment extends Stack {
     constructor(scope: Construct, id: string, props: FrontendDeploymentProps) {
         super(scope, id, props);
 
         const { websiteBucket, distribution, environmentVariables } = props;
 
-        new StaticWebsiteBuild(this, "staticWebsiteBuild", {
-            path: path.join(__dirname, "app"),
-            exclude: ["node_modules", "dist"],
+        const staticWebsiteBuild = new NodejsBuild(this, "staticWebsiteBuild", {
+            assets: [
+                {
+                    path: path.join(__dirname, "app"),
+                },
+            ],
             destinationBucket: websiteBucket,
+            outputSourceDirectory: "dist",
+            buildCommands: ["npm install", "npm run build"],
+            buildEnvironment: environmentVariables,
             distribution,
-            buildImage: LinuxArmBuildImage.AMAZON_LINUX_2_STANDARD_3_0,
-            computeType: ComputeType.SMALL,
-            environmentVariables,
-            runtimeVersions: {
-                nodejs: "22",
-            },
-            installCommands: ["npm install"],
-            commands: ["npm run build"],
-            primaryOutputDirectory: "dist",
+            excludeCommonFiles: true,
+            nodejsVersion: 22,
         });
+        NagSuppressions.addResourceSuppressions(
+            staticWebsiteBuild,
+            [
+                {
+                    id: "AwsSolutions-CB4",
+                    reason: "CodeBuild project does not need a KMS key for encryption.",
+                },
+            ],
+            true
+        );
 
         new CfnOutput(this, "environmentVariables", {
             value: JSON.stringify(environmentVariables),
