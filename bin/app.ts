@@ -1,9 +1,12 @@
 import { App, Tags } from "aws-cdk-lib";
 // @export {"deleteLines": 1}
+import { getPropertyInjectors } from "../lib/common/blueprints";
 import { Pipeline } from "../lib/stacks/pipeline";
 import { ApplicationStage } from "../lib/stage";
 
-const app = new App({});
+const app = new App({
+    propertyInjectors: getPropertyInjectors(),
+});
 
 const projectId = app.node.tryGetContext("projectId");
 if (projectId) Tags.of(app).add("projectId", projectId);

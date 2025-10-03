@@ -26,7 +26,7 @@ If your demo pod has more than one builder, use a personal sandbox account to de
 
 The starter kit uses `cdk.json` to centrally track and manage CDK configurations.
 
-- See the [design documentation](./design.md#configuration-file) for more details.
+- See the [kit documentation](./kit.md#configuration-file) for more details.
 
 5. Open the project folder in your IDE of choice then open [`cdk.json`](../../cdk.json).
 6. If you have a personal sandbox account, but it has not been added to the CDK configuration file, please update it, including the account **number** and **region** for your sandbox account.
@@ -52,7 +52,7 @@ After the sandbox account has been added to the CDK configuration, we need to ad
     https://psantora-email-generator.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
     ```
 
-    - Please **_be careful not to edit exisiting URIs_** as this will cause Midway login to malfunction for associated accounts.
+    - Please **_be careful not to edit existing URIs_** as this will cause Midway login to malfunction for associated accounts.
 
 14. Click **Next**.
 15. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
@@ -62,13 +62,13 @@ After the sandbox account has been added to the CDK configuration, we need to ad
 
 17. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm install`.
     - It may take a couple minutes to complete. Great time for a ☕!
-18. To configure the demo, we will use the [kit CLI](./design.md#kit-cli). Run the command `npm run kit`.
+18. To configure the demo, we will use the [kit CLI](./kit.md#kit-cli). Run the command `npm run kit`.
 19. First, select your sandbox account, then **AWS Developer Account**.
 20. Next, select **Configure Secret**, then enter `federateSecret`.
     - The secret should be copied from the dev account.
 21. Finally, select **Bootstrap Account**.
 
-- See the [design documentation](./design.md#kit-cli) to learn more about the Demo Starter Kit CLI.
+- See the [kit documentation](./kit.md#kit-cli) to learn more about the Demo Starter Kit CLI.
 
 ## Code Check-In
 
@@ -87,7 +87,7 @@ Now we are all set to make our first code check in! The starter kit comes pre-bu
 28. For **Are there any breaking changes?** press **Enter** to indicate **N**.
 
 29. If the commit hooks powered by Husky fail, you will need to repeat steps 23-28.
-    - See the [design documentation](./design.md#commit) to learn more about the commit hooks.
+    - See the [kit documentation](./kit.md#hooks) to learn more about the commit hooks.
 30. If the commit hooks succeed, you can push the committed files to your repository with the command `git push`.
 
-🎉 Congratulations! You have successfully set up your brand new demo! Now let's [set up your local development environment](./demo-development.md).
+🎉 Congratulations! You have successfully set up your brand new demo!

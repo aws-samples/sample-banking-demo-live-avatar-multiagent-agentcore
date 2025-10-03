@@ -39,7 +39,7 @@ If you are creating a brand new demo, create new dev/prod accounts using the ins
     ![isengard-one-click-roles](images/isengard-one-click-roles.png)
 
 14. Select the **Admin** role card you just created then click **Edit**.
-15. Enter the folowing parameters:
+15. Enter the following parameters:
 
     **Assume Role**: `720`
 
@@ -47,7 +47,7 @@ If you are creating a brand new demo, create new dev/prod accounts using the ins
 
     **POSIX Groups**: `aws-genai-labs-demo`
 
-16. Optionally, You add non-GenAI Labs team members to this role by entering their alias in **Search employees**.
+16. Optionally, you can add non-GenAI Labs team members to this role by entering their alias in **Search employees**.
 
     ![isengard-admin-role](images/isengard-admin-role.png)
 

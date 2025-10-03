@@ -3,8 +3,7 @@
 import { StackProps } from "aws-cdk-lib";
 import { ReadWriteType, Trail } from "aws-cdk-lib/aws-cloudtrail";
 import { BuildSpec, ComputeType, LinuxArmBuildImage } from "aws-cdk-lib/aws-codebuild";
-import { Artifact } from "aws-cdk-lib/aws-codepipeline";
-import { S3SourceAction, S3Trigger } from "aws-cdk-lib/aws-codepipeline-actions";
+import { S3Trigger } from "aws-cdk-lib/aws-codepipeline-actions";
 import {
     ArnPrincipal,
     CfnRole,
@@ -12,6 +11,7 @@ import {
     PolicyDocument,
     PolicyStatement,
 } from "aws-cdk-lib/aws-iam";
+import { Bucket } from "aws-cdk-lib/aws-s3";
 import {
     CodeBuildStep,
     CodePipeline,
@@ -19,25 +19,24 @@ import {
     ManualApprovalStep,
 } from "aws-cdk-lib/pipelines";
 import { Construct } from "constructs";
-import { CommonBucket } from "../common/constructs/s3";
-import { CommonStack } from "../common/constructs/stack";
+import { LoggingBucket } from "../common/constructs/s3";
+import { Stack } from "../common/constructs/stack";
 import { ApplicationStage } from "../stage";
 
-export class Pipeline extends CommonStack {
+export class Pipeline extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
 
         const projectId = this.node.getContext("projectId");
         const accounts = this.node.getContext("accounts");
 
-        const sourceBucket = new CommonBucket(this, "sourceBucket", {
+        const sourceBucket = new Bucket(this, "sourceBucket", {
             bucketName: `${projectId}-source-bucket-${this.account}-${this.region}`,
-            serverAccessLogsBucket: new CommonBucket(this, "loggingBucket", {}),
-            versioned: true, // requirement for triggering pipeline
+            serverAccessLogsBucket: new LoggingBucket(this, "loggingBucket"),
+            versioned: true, // for triggering pipeline
         });
 
-        const objectKey: string = "deploy.zip";
-        // this is the file name Gitlab-CI will bundle the repo to in AWS S3
+        const objectKey: string = "deploy.zip"; // file name gitlab-CI uses
 
         new Trail(this, "trail").addS3EventSelector(
             [
@@ -61,7 +60,7 @@ export class Pipeline extends CommonStack {
                         actions: ["sts:AssumeRole", "sts:TagSession"],
                         principals: [
                             new ArnPrincipal("arn:aws:iam::979517299116:role/gitlab-runners-prod"),
-                        ], // must be the central Gitlab runner account
+                        ], // central gitlab runner account
                         conditions: {
                             StringEquals: {
                                 "aws:PrincipalTag/GitLab:Group": [
@@ -104,7 +103,7 @@ export class Pipeline extends CommonStack {
         });
 
         const pipeline = new CodePipeline(this, "pipeline", {
-            selfMutation: true,
+            selfMutation: false,
             dockerEnabledForSynth: true,
             crossAccountKeys: true,
             codeBuildDefaults: {
@@ -126,25 +125,19 @@ export class Pipeline extends CommonStack {
             synth: new CodeBuildStep("synth", {
                 input: CodePipelineSource.s3(sourceBucket, objectKey, {
                     trigger: S3Trigger.EVENTS,
-                    actionName: new S3SourceAction({
-                        actionName: "S3Source",
-                        bucket: sourceBucket,
-                        bucketKey: objectKey,
-                        output: new Artifact(),
-                        trigger: S3Trigger.EVENTS,
-                    }).actionProperties.actionName,
                 }),
-                installCommands: ["npm install"],
-                commands: ["npm run cdk synth"],
+                installCommands: ["pip install uv"],
+                commands: ["npm install", "npm run cdk synth"],
                 primaryOutputDirectory: "./cdk.out",
             }),
         });
 
+        const devAccount = accounts["dev"];
         pipeline.addStage(
             new ApplicationStage(this, "dev", {
                 env: {
-                    account: accounts["dev"].number,
-                    region: accounts["dev"].region,
+                    account: devAccount.number,
+                    region: devAccount.region,
                 },
             })
         );

@@ -1,8 +1,0 @@
-type Messages @model @auth(rules: [{ allow: owner, ownerField: "userId", identityClaim: "sub" }]) {
-    userId: ID @index(name: "byUserId", queryField: "chatByUserId")
-    message: String
-}
-
-type Mutation {
-    testMessage(message: String!): AWSJSON @aws_cognito_user_pools
-}

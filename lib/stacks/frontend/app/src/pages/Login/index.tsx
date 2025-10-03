@@ -2,7 +2,7 @@
 import { Authenticator, Button, Divider, Flex } from "@aws-amplify/ui-react";
 // @export {"deleteLines": 2}
 import { signInWithRedirect } from "aws-amplify/auth";
-import Amazicon from "./amazicon.svg";
+import Amazicon from "./assets/amazicon.svg";
 
 const Login = () => {
     return (

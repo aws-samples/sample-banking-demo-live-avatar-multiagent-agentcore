@@ -15,8 +15,8 @@ import { CfnWebACL, CfnWebACLAssociation } from "aws-cdk-lib/aws-wafv2";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 // @export {"deleteLines": 1}
-import { FederateUserPool, FederateUserPoolClient } from "../../common/constructs/federate";
-import { createManagedRules } from "../../common/utilities";
+import { FederateUserPool, FederateUserPoolClient } from "../../../common/constructs/federate";
+import { createManagedRules } from "../../../common/utilities";
 
 interface AuthProps {
     urls: string[];
@@ -157,7 +157,7 @@ export class Auth extends Construct {
                     {
                         name: "AWSManagedRulesCommonRuleSet",
                         overrideAction: {
-                            count: {}, // override to count to bypass AWS#AWSManagedRulesCommonRuleSet#SizeRestrictions_BODY
+                            count: {},
                         },
                     },
                     {
@@ -165,21 +165,6 @@ export class Auth extends Construct {
                         overrideAction: {
                             count: {},
                         },
-                        // ruleActionOverrides: [
-                        //     // allows requests from cURL and Postman to AppSync
-                        //     {
-                        //         actionToUse: {
-                        //             count: {},
-                        //         },
-                        //         name: "CategoryHttpLibrary",
-                        //     },
-                        //     {
-                        //         actionToUse: {
-                        //             count: {},
-                        //         },
-                        //         name: "SignalNonBrowserUserAgent",
-                        //     },
-                        // ],
                     },
                     {
                         name: "AWSManagedRulesKnownBadInputsRuleSet",
@@ -218,7 +203,7 @@ export class Auth extends Construct {
 
         this.userPool = userPool;
         // @export {"deleteLines": 1}
-        this.userPoolDomain = userPool.userPoolDomain;
+        this.userPoolDomain = userPool.addDomain("userPoolDomain");
         this.userPoolClient = userPoolClient;
         this.identityPool = identityPool;
         this.regionalWebAclArn = regionalWebAclArn;

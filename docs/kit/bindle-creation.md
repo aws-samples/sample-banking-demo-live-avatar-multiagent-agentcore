@@ -10,7 +10,7 @@ These instructions will walk you through creating a personal CTI, Team, and Bind
 
 1. Navigate to [CTI Self-Service](https://cti.amazon.com/).
 2. Click **Create a new Resolver Group**.
-3. Enter/select the folowing parameters:
+3. Enter/select the following parameters:
 
     **Group Name**: `[ALIAS]-personal`
 
@@ -22,7 +22,7 @@ These instructions will walk you through creating a personal CTI, Team, and Bind
 
 4. Click **Save**.
 5. Click **Create a new CTI** towards the bottom right of page.
-6. Enter/select the folowing parameters:
+6. Enter/select the following parameters:
 
     **New Category**: **No**
 
@@ -67,7 +67,7 @@ It's recommended you use Firefox here as there appears to be issues with the Tea
 24. On the **Preview Difference**, click **Next**.
 25. Check **confirm and acknowledge** box then click **Update rule**.
 
-Note: Users are now required to have a non-empty posix group associated with the bindle owning team. If you are seeing an error that says "posix group doesnt exist", its likely because there are no people in posix group that you created or changes are taking some time to propogate.
+Note: Users are now required to have a non-empty posix group associated with the bindle owning team. If you are seeing an error that says "posix group doesn't exist", it's likely because there are no people in posix group that you created or changes are taking some time to propagate.
 
 ## Bindle
 

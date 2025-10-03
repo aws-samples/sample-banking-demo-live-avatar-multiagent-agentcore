@@ -16,9 +16,9 @@ To ensure your Mac, Windows, or Cloud Desktop machine is properly set up for use
 
 ## Demo Creation
 
-If your demo has already been created and you are looking to set up the project, skip to the [next section](#demo-setup).
-
 If your developer machine has been properly set up and you are creating a brand new demo, start [here](./docs/kit/demo-creation.md).
+
+If your demo has already been created and you are looking to set up the project, skip to the [next section](#demo-setup).
 
 - This is a one-time process when creating a brand new demo.
 
@@ -28,7 +28,7 @@ If your developer machine has been properly set up, your demo has already been c
 
 ## Documentation
 
-See the [design documentation](./docs/kit/design.md) to learn more about the Demo Starter Kit.
+See the [kit documentation](./docs/kit/kit.md) to learn more about the Demo Starter Kit.
 
 ## License
 

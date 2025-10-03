@@ -2,7 +2,7 @@
 
 # Federate Profile Creation
 
-1. Click **Create Service Profile**.
+1. Click **Create Service Profile** then **switch back to the previous version**.
 2. Skip over the **Questionnaire Based Onboarding** by clicking **Submit**.
 3. Select **OIDC** then click **Next**.
 4. Enter a **Service Name** using the following format `genai-labs-[PROJECT_IDENTIFIER]`.
@@ -44,6 +44,6 @@
 
 21. Click **Next** then **Submit**.
 22. Copy the generated client secret key. **_Keep it safe_**.
-    > [I forgot to copy the Federate client secret key. Now what?](./faq.md#i-forgot-to-copy-the-federate-client-secret-key-now-what)
+    > [I lost the Federate client secret key. Now what?](./federate-key-recovery.md)
 23. The Integration profile expires after 30 days. Set a recurring calendar invite to renew it.
     - Follow these [instructions](./federate-profile-renewal.md) to renew it.

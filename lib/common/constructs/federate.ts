@@ -11,6 +11,7 @@ import {
     UserPoolClientIdentityProvider,
     UserPoolClientProps,
     UserPoolDomain,
+    UserPoolDomainOptions,
     UserPoolIdentityProviderOidc,
     UserPoolProps,
 } from "aws-cdk-lib/aws-cognito";
@@ -21,7 +22,14 @@ function getProfile(scope: Construct) {
 }
 
 export class FederateUserPool extends UserPool {
-    public readonly userPoolDomain: UserPoolDomain;
+    public addDomain(id: string, options?: UserPoolDomainOptions): UserPoolDomain {
+        return super.addDomain(id, {
+            ...options,
+            cognitoDomain: {
+                domainPrefix: getProfile(this),
+            },
+        });
+    }
     constructor(scope: Construct, id: string, props: UserPoolProps) {
         super(scope, id, {
             ...props,
@@ -36,11 +44,6 @@ export class FederateUserPool extends UserPool {
                       }),
                   }
                 : props.customAttributes,
-        });
-        this.userPoolDomain = this.addDomain("userPoolDomain", {
-            cognitoDomain: {
-                domainPrefix: getProfile(scope),
-            },
         });
     }
 }
