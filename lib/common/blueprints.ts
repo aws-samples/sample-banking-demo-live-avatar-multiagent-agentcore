@@ -1,5 +1,5 @@
 import { InjectionContext, IPropertyInjector, RemovalPolicy } from "aws-cdk-lib";
-import { Function, FunctionProps } from "aws-cdk-lib/aws-lambda";
+import { Function, FunctionProps, Runtime, RuntimeFamily } from "aws-cdk-lib/aws-lambda";
 import { LogGroup, LogGroupProps, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { BlockPublicAccess, Bucket, BucketProps } from "aws-cdk-lib/aws-s3";
 
@@ -30,6 +30,23 @@ export class FunctionLogGroupInjector implements IPropertyInjector {
         return {
             logGroup: new LogGroup(context.scope, `${context.id}LogGroup`),
             ...originalProps,
+        };
+    }
+}
+
+export class FunctionRuntimeInjector implements IPropertyInjector {
+    public readonly constructUniqueId: string;
+
+    constructor() {
+        this.constructUniqueId = Function.PROPERTY_INJECTION_ID;
+    }
+
+    public inject(originalProps: FunctionProps): FunctionProps {
+        return {
+            ...originalProps,
+            ...(originalProps.runtime.family === RuntimeFamily.NODEJS && {
+                runtime: Runtime.NODEJS_22_X,
+            }),
         };
     }
 }
