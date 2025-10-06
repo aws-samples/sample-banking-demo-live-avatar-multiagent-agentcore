@@ -1,11 +1,166 @@
----
-inclusion: always
----
+# AWS Technical Product Marketing Demo Guidelines
 
-- You are a principal full-stack software developer.
-- Closely follow these demo guidelines: #[[file:./docs/guidelines.md]]
-- Use MCP servers to look up documentation.
-- Request clarification for anything unclear or ambiguous.
-- Avoid repeating mistakes from earlier in conversation.
+## Technology Stack
+
+### Infrastructure
+
+- Use serverless [managed services](https://aws.amazon.com/managed-services/) like AWS Lambda, Fargate for Amazon ECS, DynamoDB, and Aurora DSQL.
+- Use [Graviton](https://aws.amazon.com/ec2/graviton/) processors (ARM64).
+- Use the AWS CDK in TypeScript for infrastructure as code (IaC), following [best practices](https://docs.aws.amazon.com/prescriptive-guidance/latest/best-practices-cdk-TypeScript-iac/introduction.html).
+    - Use [L2/L3 constructs](https://docs.aws.amazon.com/cdk/v2/guide/constructs.html#constructs-lib-levels) from `aws-cdk-lib` and [`generative-ai-cdk-constructs`](https://awslabs.github.io/generative-ai-cdk-constructs/) over L1/CloudFormation resources.
+    - Use [permission grants](https://docs.aws.amazon.com/cdk/v2/guide/permissions.html#permissions-grants) over written IAM policies.
+    - Use [blueprints](https://docs.aws.amazon.com/cdk/v2/guide/blueprints.html) to apply consistent logging, retention, and other policies.
+    - Bundle runtime code and assets with infrastructure code.
+        - Use constructs like [`PythonFunction`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-lambda-python-alpha-readme.html), [`NodejsFunction`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_lambda_nodejs.NodejsFunction.html), [`DockerImageAsset`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_ecr_assets.DockerImageAsset.html), and [`BucketDeployment`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_s3_deployment.BucketDeployment.html).
+        - Pass environment variables through the CDK constructs.
+    - Use [`cdk.json`](../cdk.json) for configurations.
+
+### Backend
+
+- Use TypeScript and/or Python for runtime code.
+- Use AWS open-source libraries like [Powertools](https://docs.powertools.aws.dev/lambda/python/latest/) and [aws-lambda](https://www.npmjs.com/package/@types/aws-lambda).
+- Use Amazon [Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/what-is-amazon-cognito.html) for authentication/credentials.
+
+### Frontend
+
+- Use TypeScript, Vite, and React.
+    - Use React Router for client-side routing.
+- Use React Context or Zustand for state management.
+- Use Tailwind (v4) for styling.
+- Use Framer Motion for animations.
+- Use [Amplify](https://docs.amplify.aws/react/build-a-backend/) libraries for Cognito authentication, API/storage requests, etc.
+    - Use Cognito Identity Pool to obtain AWS session credentials for [SDK](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3) calls.
+
+### Tooling
+
+- Use [Volta](https://volta.sh/)/NPM with Typescript.
+- Use [uv](https://docs.astral.sh/uv/#tools)/pip with Python.
+
+- Enforce code formatting.
+    - Use [Ruff](https://docs.astral.sh/ruff/) with Python.
+    - Use [Prettier](https://prettier.io/) with everything else.
+- Lint code.
+    - Use [ESLint](https://eslint.org/) with TypeScript.
+    - Use [Ruff](https://docs.astral.sh/ruff/) with Python.
+- Test code as necessary.
+    - Use [Jest](https://jestjs.io/) with TypeScript.
+    - Use [pytest](https://pytest.org/) with Python.
+    - Use [Playwright](https://playwright.dev/) for end-to-end testing.
+- Use [cdk-nag](https://github.com/cdklabs/cdk-nag) with infrastructure code.
+
+## Style/Structure
+
+- Avoid over-engineering.
+    - Use reputable, open-source libraries to avoid reinventing the wheel.
+- Avoid premature abstraction of code.
+    - Use single-use constants, variables, functions, etc. only when necessary for clarity.
+- Avoid repeated logic and duplicated data.
+- Break up code into logical units, keeping files from exceeding a couple hundred lines.
+- Read LLM prompts and other bulk language from text or JSON files.
+- Colocate related files.
+    - Group code by stack/page, then by construct/component, and then by file type.
+    - Put code that is imported in just one file within a sibling file or directory.
+    - Put code that is imported in at least two files within a "common" folder in the parent directory of the lowest common ancestor.
+
+    - ```
+      example/
+      ├── lib/
+      │   ├── common/
+      │   │   ├── constructs/
+      │   │   ├── blueprints.ts
+      │   │   └── utilities.ts
+      │   ├── stacks/
+      │   │   ├── backend/
+      │   │   │   ├── constructs/
+      │   │   │   │   ├── auth.ts
+      │   │   │   │   ├── api/
+      │   │   │   │   │   ├── functions/
+      │   │   │   │   │   └── index.ts
+      │   │   │   │   └── storage/
+      │   │   │   │       ├── assets/
+      │   │   │   │       └── index.ts
+      │   │   │   └── index.ts
+      │   │   └── frontend/
+      │   │       ├── app/
+      │   │       │   ├── public/
+      │   │       │   ├── src/
+      │   │       │   │   ├── common/
+      │   │       │   │   │   ├── components/
+      │   │       │   │   │   ├── stores/
+      │   │       │   │   │   └── utilities/
+      │   │       │   │   ├── pages/
+      │   │       │   │   │   ├── Example/
+      │   │       │   │   │   │   ├── common/
+      │   │       │   │   │   │   ├── components/
+      │   │       │   │   │   │   ├── services/
+      │   │       │   │   │   │   └── index.tsx
+      │   │       │   │   │   ├── Home/
+      │   │       │   │   │   └── Login/
+      │   │       │   │   ├── App.tsx
+      │   │       │   │   └── index.tsx
+      │   │       │   ├── index.html
+      │   │       │   └── package.json
+      │   │       └── index.ts
+      │   └── stage.ts
+      └── package.json
+      ```
+
+- Keep all files in the monorepository.
+    - Configure workspaces in [`package.json`](../package.json).
+- Don't keep unused code, dependencies, etc. in the repository.
+
+- Do not fabricate data unless given permission.
+- Use try-catch blocks sparingly, only to handle expected errors.
+- When throwing errors, provide meaningful error messages and preserve the stack trace.
+
+## Distribution/Deployment
+
+- Keep the demo self-contained.
+    - Do not reach out to external resources like public S3 buckets or APIs.
+- The demo should fully deploy and destroy with the standard [CDK commands](https://docs.aws.amazon.com/cdk/v2/guide/cli.html#cli-deploy).
+    - Avoid requiring manual scripts or commands to be run.
+
+## Security
+
+- Only use AWS-managed domains.
+- Ensure the website uses HTTPS and enforces TLS 1.2+ for communication in transit.
+- Protect authentication and APIs with AWS WAF ACLs.
+- Ensure buckets, tables, etc. use managed encryption.
+- Ensure sensitive records have a short time-to-live (TTL).
+- Add appropriate [guardrails](https://aws.amazon.com/bedrock/guardrails/) to models.
+- Pass API keys, table/bucket names, etc. through environment variables or AWS Secrets Manager secrets. Do not hardcode them.
+- Avoid logging sensitive data to the console.
+    - Use development-mode logging.
+- Keep dependencies decently up-to-date and secure.
+- Do not allow users to upload content.
+- Validate user inputs.
+- Ensure the application can be run for different users in parallel, with proper data segregation and isolation.
+
+## Compliance
+
+- Only use content with permissive open-source licenses.
+- Follow [AWS Responsible AI](https://aws.amazon.com/ai/responsible-ai/) guidelines.
+
+## UI/UX, Accessibility, and Internationalization
+
+- Implement [responsive website design](https://www.figma.com/resource-library/responsive-website-design/).
+    - The UI should display well vertically and horizontally across various screen sizes.
+- Use at least high definition (HD) resolution.
+- Ensure buttons and text are viewable from afar.
+- Use ARIA attributes for dynamic components (dialogs, tabs, etc.)
+- Allow for easy theme changes.
+    - Use [Tailwind theme variables](https://tailwindcss.com/docs/theme).
+- Allow for easy language changes.
+    - Support right-to-left (RTL) for applicable languages.
+    - Use [i18n](https://react.i18next.com/).
+    - Organize translation files under `src/locales/{en,zh,es,fr,pt,ja,ko}/`.
+
+## Documentation
+
+- Use comments to add context to complex logic.
+    - Do not add comments to otherwise obvious/simple code.
+- Maintain an up-to-date [README](../README.demo.md).
+    - Include an [architecture diagram](../architecture.drawio.png) with accurate and current Amazon/AWS service names and [icons](https://aws.amazon.com/architecture/icons/), alongside corresponding descriptions and design decisions.
+    - Include pricing info for each AWS service used.
 
 <!-- @export {"id": "kit", "deleteFile": true} -->
