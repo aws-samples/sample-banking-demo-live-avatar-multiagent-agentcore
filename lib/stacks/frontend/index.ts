@@ -115,6 +115,7 @@ export class FrontendDeployment extends Stack {
             assets: [
                 {
                     path: path.join(__dirname, "app"),
+                    exclude: ["dist", "node_modules"],
                 },
             ],
             destinationBucket: websiteBucket,
