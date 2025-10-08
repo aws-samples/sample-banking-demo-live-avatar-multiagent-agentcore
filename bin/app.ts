@@ -1,6 +1,6 @@
 import { App, Tags } from "aws-cdk-lib";
-// @export {"deleteLines": 1}
 import { getPropertyInjectors } from "../lib/common/blueprints";
+// @export {"deleteLines": 1}
 import { Pipeline } from "../lib/stacks/pipeline";
 import { ApplicationStage } from "../lib/stage";
 
