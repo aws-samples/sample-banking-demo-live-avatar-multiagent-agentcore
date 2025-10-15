@@ -14,7 +14,7 @@ import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import { NodejsBuild } from "deploy-time-build";
 import * as path from "path";
-import { FunctionRuntimeInjector } from "../../common/blueprints";
+import { FunctionPlatformInjector } from "../../common/blueprints";
 import { LoggingBucket } from "../../common/constructs/s3";
 import { Stack } from "../../common/constructs/stack";
 
@@ -48,7 +48,7 @@ export class Frontend extends Stack {
                 },
             ],
         });
-        PropertyInjectors.of(cloudfrontWebAcl).add(new FunctionRuntimeInjector());
+        PropertyInjectors.of(cloudfrontWebAcl).add(new FunctionPlatformInjector());
 
         const distribution = new Distribution(this, "distribution", {
             defaultRootObject: "index.html",

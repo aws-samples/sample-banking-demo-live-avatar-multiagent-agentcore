@@ -307,7 +307,7 @@ The stack prefix and stage for the app are determined by a context variable pass
 
 See [bin/app.ts](../../bin/app.ts) for more context.
 
-<!-- @export {"deleteLines": 30} -->
+<!-- @export {"deleteLines": 31} -->
 
 ### Pipeline Stack
 
@@ -318,6 +318,7 @@ This stack is only deployed to the `dev` account via the CLI when the **pipeline
 It sets up all the necessary resources and permissions for the GitLab runner to upload zipped code from commits to Amazon S3, kicking off the CodePipeline.
 
 - An Amazon S3 source bucket to which the GitLab runner will upload the zipped code.
+    - The GitLab runner will also publish SAST scan reports to the [Probe dashboard](https://probe.aws.dev/).
 - An Amazon CloudTrail trail that tracks write events in the source bucket to trigger the pipeline.
 - An AWS IAM role that will be assumed by the [GitCI Credential vendor](https://gitlab.pages.aws.dev/docs/Platform/aws-credential-vendor.html), allowing it access to the source bucket.
 - An AWS pipeline construct for synthesizing the infrastructure then deploying it to each stage.

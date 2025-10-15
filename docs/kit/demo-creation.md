@@ -89,7 +89,7 @@ The starter kit uses `cdk.json` to centrally track and manage CDK configurations
 
 ### Dev Profile
 
-23. Navigate to <https://integ.ep.federate.a2z.com/profiles>.
+23. Navigate to the [Integration](https://integ.ep.federate.a2z.com/profiles) profiles.
 
 If you are not on the core GenAI Labs team, follow these [instructions](./federate-profile-creation.md) to create a dev Integration profile then skip to [Prod Profile](#prod-profile). Otherwise, you can continue and clone our team's profile.
 
@@ -117,12 +117,12 @@ If you are not on the core GenAI Labs team, follow these [instructions](./federa
     https://kppinker-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     ```
 
-32. Turn the **Client Secret** switch on.
+32. Turn the **Client Secret** switch on then click **Next**.
 
     ![federate-oidc-details](images/federate-oidc-details.png)
 
-33. Click **Next**.
-34. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
+33. On the **Discovery and Permissions Configuration** page, select **The application is a company-wide collaboration tool** then click **Next**.
+34. Skip over the **Claim Configuration** page by clicking **Next** again.
 35. On the **Service Profile Overview** page, click **Submit**.
 36. Copy the generated client secret key. **_Keep it safe_**.
     > [I lost the Federate client secret key. Now what?](./federate-key-recovery.md)
@@ -138,8 +138,7 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
 40. Enter the **client ID** you provided in [step 30](#dev-profile).
 41. Verify the **Service Name** matches the one you provided in [step 26](#dev-profile).
 42. Check the box titled **Unfabric guidelines** then click **Next**.
-43. Verify the **Client ID** is matches the one you previously provided.
-44. Update the **Redirect URI** for the prod account using the following format `https://[PROD_STAGE]-[PROJECT_IDENTIFIER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+43. Update the **Redirect URI** for the prod account using the following format `https://[PROD_STAGE]-[PROJECT_IDENTIFIER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
     - The project identifier, account number, and region should reflect the prod account in your [`cdk.json` file](../../cdk.json).
     - Ex:
 
@@ -147,8 +146,9 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
     https://prod-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     ```
 
-45. Turn the **Client Secret** switch on then click **Next**.
-46. Skip over the **Discovery and Permissions Configuration** and **Claim Configuration** by clicking **Next** twice.
+44. Turn the **Client Secret** switch on then click **Next**.
+45. On the **Discovery and Permissions Configuration** page, select **The application is a company-wide collaboration tool** then click **Next**.
+46. Skip over the **Claim Configuration** page by clicking **Next** again.
 47. On the **Service Profile Overview** page, click **Submit** then copy the generated client secret key. **_Keep it safe_**.
     > [I lost the Federate client secret key. Now what?](./federate-key-recovery.md)
 
@@ -189,19 +189,10 @@ From now on, **_do not_** work and push changes on the `main` branch. Always wor
 
 ## Verify Pipelines
 
-64. Navigate back to your demo's GitLab page.
-65. Check the status of your GitLab pipeline by by clicking **Build** then **Pipelines** from the side menu.
-
-    ![git-cicd-pipeline](images/git-cicd-pipeline.png)
-    - There are three stages of the GitLab pipeline:
-        1. Scan: this stage will publish your code's SAST scan reports to the [Probe dashboard](https://probe.aws.dev/).
-            - Find your project here and notice how the static code analysis has been automated using the GitLab runner.
-        2. Prepare: this stage will create environment variables using your [`cdk.json` file](../../cdk.json).
-        3. Deploy: this stage will compress the code base into a zip format, get cross-account credentials via AWS Credential Vendor, then upload the zip file to Amazon S3, kicking of the CodePipeline.
-
-66. Once the **zip-deploy** stage succeeds, navigate to the dev account's [AWS Management Console](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/) to verify that the pipeline is in-progress.
-67. Once the pipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontend**.
-68. Click the **Outputs** tab then the CloudFront **url** to visit your new frontend React app.
+64. Navigate back to your demo's GitLab page then check the status of your GitLab pipeline.
+65. Once the pipeline succeeds, as indicated by a green checkmark, navigate to the dev account's [CodePipeline console](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/) to verify that the CodePipeline is in-progress.
+66. Once the CodePipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontend**.
+67. Click the **Outputs** tab then the CloudFront **url** to visit your new frontend React app.
 
     ![react-login](images/react-login.png)
 

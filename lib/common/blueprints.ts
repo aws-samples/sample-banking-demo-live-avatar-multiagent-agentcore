@@ -1,5 +1,11 @@
 import { InjectionContext, IPropertyInjector, RemovalPolicy } from "aws-cdk-lib";
-import { Function, FunctionProps, Runtime, RuntimeFamily } from "aws-cdk-lib/aws-lambda";
+import {
+    Architecture,
+    Function,
+    FunctionProps,
+    Runtime,
+    RuntimeFamily,
+} from "aws-cdk-lib/aws-lambda";
 import { LogGroup, LogGroupProps, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { BlockPublicAccess, Bucket, BucketProps } from "aws-cdk-lib/aws-s3";
 
@@ -34,7 +40,7 @@ export class FunctionLogGroupInjector implements IPropertyInjector {
     }
 }
 
-export class FunctionRuntimeInjector implements IPropertyInjector {
+export class FunctionPlatformInjector implements IPropertyInjector {
     public readonly constructUniqueId: string;
 
     constructor() {
@@ -43,9 +49,13 @@ export class FunctionRuntimeInjector implements IPropertyInjector {
 
     public inject(originalProps: FunctionProps): FunctionProps {
         return {
+            architecture: Architecture.ARM_64,
             ...originalProps,
             ...(originalProps.runtime.family === RuntimeFamily.NODEJS && {
                 runtime: Runtime.NODEJS_22_X,
+            }),
+            ...(originalProps.runtime.family === RuntimeFamily.PYTHON && {
+                runtime: Runtime.PYTHON_3_12,
             }),
         };
     }
@@ -60,10 +70,10 @@ export class BucketInjector implements IPropertyInjector {
 
     public inject(originalProps: BucketProps, context: InjectionContext): BucketProps {
         return {
-            autoDeleteObjects: true,
             ...(originalProps?.serverAccessLogsBucket && {
                 serverAccessLogsPrefix: `${context.id}/`,
             }),
+            autoDeleteObjects: true,
             ...originalProps,
             ...((originalProps?.autoDeleteObjects ?? true) && {
                 removalPolicy: RemovalPolicy.DESTROY,

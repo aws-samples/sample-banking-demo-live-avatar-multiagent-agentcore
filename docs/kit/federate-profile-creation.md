@@ -32,18 +32,15 @@
     ![federate-oidc-details](images/federate-oidc-details.png)
 
 13. Click **Next**.
-14. Under **Permissions**, add an allowed group by clicking **Add group**.
-15. For **Group type**, select **POSIX Groups**.
-16. For **Group name**, search for then select `all-aws-employees`.
-17. Click **Next**.
-18. Click **Add claim** then select **User attribute**.
-19. Select **Email** for **Directory attribute** then enter `Email` for **Claim name** then click **Apply**.
-20. Repeat steps 18-19, modifying the specific attributes, to make **Default claims** look like the following:
+14. Under **Permissions**, select **The application is a company-wide collaboration tool** then click **Next**.
+15. Click **Add claim** then select **User attribute**.
+16. Select **Email** for **Directory attribute** then enter `Email` for **Claim name** then click **Apply**.
+17. Repeat steps 15-16, modifying the specific attributes, to make **Default claims** look like the following:
 
     ![federate-default-claims](images/federate-default-claims.png)
 
-21. Click **Next** then **Submit**.
-22. Copy the generated client secret key. **_Keep it safe_**.
+18. Click **Next** then **Submit**.
+19. Copy the generated client secret key. **_Keep it safe_**.
     > [I lost the Federate client secret key. Now what?](./federate-key-recovery.md)
-23. The Integration profile expires after 30 days. Set a recurring calendar invite to renew it.
+20. The Integration profile expires after 30 days. Set a recurring calendar invite to renew it.
     - Follow these [instructions](./federate-profile-renewal.md) to renew it.
