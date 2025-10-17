@@ -21,9 +21,8 @@ export class Backend extends Stack {
 
         this.environmentVariables = {
             VITE_REGION: this.region!,
-            VITE_STAGE: Stage.of(this)?.stageName || "unknown",
-            VITE_BUILD_TIMESTAMP: new Date().toISOString(),
-            VITE_BUILD_VERSION: process.env.npm_package_version || "0.0.0",
+            VITE_STAGE: Stage.of(this)?.stageName || "",
+            VITE_BUILD_VERSION: process.env.npm_package_version || "",
             VITE_CALLBACK_URL: urls[0],
             VITE_USER_POOL_ID: auth.userPool.userPoolId,
             ...(auth.userPoolDomain && {

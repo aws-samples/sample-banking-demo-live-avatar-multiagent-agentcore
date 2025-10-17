@@ -4,7 +4,7 @@
 
 ### Infrastructure
 
-- Use serverless [managed services](https://aws.amazon.com/managed-services/) like AWS Lambda, Fargate for Amazon ECS, DynamoDB, and Aurora DSQL.
+- Use serverless [managed services](https://aws.amazon.com/managed-services/) like AWS AppSync Events, Lambda, Fargate for Amazon ECS, API Gateway, DynamoDB, and Aurora DSQL.
 - Use [Graviton](https://aws.amazon.com/ec2/graviton/) processors (ARM64).
 - Use the AWS CDK in TypeScript for infrastructure as code (IaC), following [best practices](https://docs.aws.amazon.com/prescriptive-guidance/latest/best-practices-cdk-TypeScript-iac/introduction.html).
     - Use [L2/L3 constructs](https://docs.aws.amazon.com/cdk/v2/guide/constructs.html#constructs-lib-levels) from `aws-cdk-lib` and [`generative-ai-cdk-constructs`](https://awslabs.github.io/generative-ai-cdk-constructs/) over L1/CloudFormation resources.
@@ -110,6 +110,7 @@
 - Don't keep unused code, dependencies, etc. in the repository.
 
 - Do not fabricate data unless given permission.
+- Use named imports over namespace imports.
 - Use try-catch blocks sparingly, only to handle expected errors.
 - When throwing errors, provide meaningful error messages and preserve the stack trace.
 
