@@ -13,12 +13,13 @@
     - Bundle runtime code and assets with infrastructure code.
         - Use constructs like [`PythonFunction`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-lambda-python-alpha-readme.html), [`NodejsFunction`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_lambda_nodejs.NodejsFunction.html), [`DockerImageAsset`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_ecr_assets.DockerImageAsset.html), and [`BucketDeployment`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_s3_deployment.BucketDeployment.html).
         - Pass environment variables through the CDK constructs.
-    - Use [`cdk.json`](../cdk.json) for configurations.
+    - Use [`cdk.json`](../../cdk.json) for configurations.
 
 ### Backend
 
 - Use TypeScript and/or Python for runtime code.
-- Use AWS open-source libraries like [Powertools](https://docs.powertools.aws.dev/lambda/python/latest/) and [aws-lambda](https://www.npmjs.com/package/@types/aws-lambda).
+- Use AWS open-source libraries like [Powertools](https://docs.aws.amazon.com/lambda/latest/dg/powertools-for-lambda.html) and [aws-lambda](https://www.npmjs.com/package/@types/aws-lambda).
+    - These libraries are preinstalled in [`package.json`](../../package.json).
 - Use Amazon [Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/what-is-amazon-cognito.html) for authentication/credentials.
 
 ### Frontend
@@ -106,7 +107,7 @@
       ```
 
 - Keep all files in the monorepository.
-    - Configure workspaces in [`package.json`](../package.json).
+    - Configure workspaces in [`package.json`](../../package.json).
 - Don't keep unused code, dependencies, etc. in the repository.
 
 - Do not fabricate data unless given permission.
@@ -160,8 +161,8 @@
 
 - Use comments to add context to complex logic.
     - Do not add comments to otherwise obvious/simple code.
-- Maintain an up-to-date [README](../README.demo.md).
-    - Include an [architecture diagram](../architecture.drawio.png) with accurate and current Amazon/AWS service names and [icons](https://aws.amazon.com/architecture/icons/), alongside corresponding descriptions and design decisions.
+- Maintain an up-to-date [README](../../README.demo.md).
+    - Include an [architecture diagram](../../architecture.drawio.png) with accurate and current Amazon/AWS service names and [icons](https://aws.amazon.com/architecture/icons/), alongside corresponding descriptions and design decisions.
     - Include pricing info for each AWS service used.
 
 <!-- @export {"id": "kit", "deleteFile": true} -->

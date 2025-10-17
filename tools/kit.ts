@@ -430,7 +430,7 @@ const deployStacks = async (
     if (stacks) {
         if (action === "deploy") {
             await executeCommand(
-                `npm run cdk deploy ${stacks} -- --concurrency 4 --profile ${getProfile(stage)} -c stage=${stage}`
+                `npm run cdk deploy ${stacks} -- --concurrency 4 --profile ${getProfile(stage)} -c stage=${stage} ${stage !== "prod" ? "--no-rollback" : ""}`
             );
         } else if (action === "hotswap") {
             await executeCommand(
