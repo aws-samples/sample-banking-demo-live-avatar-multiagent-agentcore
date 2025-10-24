@@ -161,8 +161,7 @@ If you created a prod account in the [`cdk.json` file](../../cdk.json), please c
 51. Second, select **Configure Secret**, then enter `federateSecret` followed by the Federate client secret key from the [previous section](#federate-profiles).
 52. Third, select **Bootstrap Account**.
 53. Select **Back**, then repeat steps 50-52 for **prod** and your sandbox account(s) if applicable.
-54. Finally, select **Back**, **dev**, **Deploy CDK Stack(s)**, then **no**, wait for the stacks to list, then select the stack ending in **pipeline** by pressing the spacebar followed by **Enter**.
-    - This deploys the pipeline to the dev account.
+54. Finally, select **Back**, **dev**, then **Deploy Pipeline Stack**.
 
 - See the [kit documentation](./kit.md#kit-cli) to learn more about the Demo Starter Kit CLI.
 

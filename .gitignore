@@ -1,14 +1,12 @@
-*.d.ts
-!vite-env.d.ts
+.DS_STORE
+.vscode
+
+.venv
 node_modules
 
-# CDK asset staging directory
+__pycache__
+dist
 .cdk.staging
 cdk.out
 
-.DS_STORE
-dist
-dist/*
-
-.venv
-.vscode
+*.env

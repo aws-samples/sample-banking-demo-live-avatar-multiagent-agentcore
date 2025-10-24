@@ -111,19 +111,19 @@ const prompt = {
 
 const executeCommand = <T extends boolean = false>(
     command: string,
-    saveOutput?: T
+    save?: T
 ): Promise<T extends true ? string : void> => {
-    if (!saveOutput) console.info(`\n${blueBright("Executing command:")} ${command}\n`);
+    if (!save) console.info(`\n${blueBright("Executing command:")} ${command}\n`);
 
     return new Promise((resolve, reject) => {
         const childProcess = spawn(command, [], {
-            stdio: saveOutput ? "pipe" : "inherit",
+            stdio: save ? "pipe" : "inherit",
             shell: true,
             env: { ...process.env },
         });
 
         let output = "";
-        if (saveOutput) {
+        if (save) {
             childProcess.stdout?.on("data", (data) => {
                 output += data.toString();
             });
@@ -135,7 +135,7 @@ const executeCommand = <T extends boolean = false>(
         childProcess.on("close", (code) => {
             if (code === 0) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                resolve(saveOutput ? (output as any) : undefined);
+                resolve(save ? (output as any) : undefined);
             } else {
                 reject(new Error(`Command exited with code ${code}.`));
             }
@@ -279,6 +279,7 @@ const configureCredentials = async (stage: string, method?: string) => {
         method ||
         (await prompt.select("credential method", [
             "AWS Developer Account",
+            "Isengard CLI",
             "IAM Identity Center",
             "Short-term Credentials",
         ]));
@@ -291,10 +292,58 @@ const configureCredentials = async (stage: string, method?: string) => {
             await executeCommand(
                 `ada credentials update --profile=${profile} --account=${getAccountDetail(stage, "number")} --provider=isengard --role=Admin --once`
             );
+        } else if (credentialType === "Isengard CLI") {
+            const temporaryFile = `/tmp/isengard-credentials.txt`;
+            await executeCommand(`script -q ${temporaryFile} isengardcli credentials`);
+            for (const line of readFileSync(temporaryFile, "utf-8").split("\n")) {
+                const match = line.match(/export\s+(AWS_\w+)=(.+)/);
+                if (match) {
+                    const key = match[1].toLowerCase();
+                    const value = match[2].trim();
+                    await executeCommand(
+                        `aws configure set ${key} ${value} --profile ${profile}`,
+                        true
+                    );
+                }
+            }
+            await executeCommand(`rm ${temporaryFile}`, true);
         }
         printSuccess(`Configured ${stage} credentials profile "${profile}"!`);
     } catch (error) {
         throw new Error(`Failed to configure ${stage} credentials profile "${profile}".`, {
+            cause: error,
+        });
+    }
+};
+
+const defaultCredentials = async (stage: string): Promise<void> => {
+    const profile = getProfile(stage);
+    try {
+        const keys = ["aws_access_key_id", "aws_secret_access_key", "aws_session_token", "region"];
+        for (const key of keys) {
+            try {
+                const value = await executeCommand(
+                    `aws configure get ${key} --profile ${profile}`,
+                    true
+                );
+                if (value.trim()) {
+                    await executeCommand(
+                        `aws configure set ${key} "${value.trim()}" --profile default`,
+                        true
+                    );
+                }
+            } catch {
+                // key might not exist
+                continue;
+            }
+        }
+        if (await checkCredentials("default")) {
+            printSuccess("Set default credentials!");
+        } else {
+            throw new Error();
+        }
+    } catch (error) {
+        throw new Error("Failed to set default credentials.", {
             cause: error,
         });
     }
@@ -437,6 +486,17 @@ const deployStacks = async (
                 `npm run cdk deploy ${stacks} -- --hotswap --profile ${getProfile(stage)} -c stage=${stage}`
             );
         }
+    }
+};
+
+const deployPipelineStack = async (): Promise<void> => {
+    const stage = PresetStage.Dev;
+    if (cdkContext.pipeline) {
+        await executeCommand(
+            `npm run cdk deploy -- -e ${cdkContext.projectId}-pipeline --profile ${getProfile(stage)} -c stage=${stage}`
+        );
+    } else {
+        printWarning('Ensure "pipeline" is set to "true" in the CDK configuration file.');
     }
 };
 
@@ -659,13 +719,15 @@ const destroyStacks = async (stage: string): Promise<void> => {
 
 enum Actions {
     CONFIGURE_CREDS = "Configure Credentials 🪪",
+    DEFAULT_CREDS = "Default Credentials 🛂",
     CONFIGURE_SECRET = "Configure Secret 🔒",
     BOOTSTRAP_ACCOUNT = "Bootstrap Account 🥾",
     SYNTHESIZE_STACKS = "Synthesize CDK Stacks 🗂️",
     DEPLOY_STACKS = "Deploy CDK Stack(s) 🚀",
     HOTSWAP_STACKS = "Hotswap CDK Stack(s) 🔥",
-    DEPLOY_FRONTEND = "Deploy Frontend 🖥️",
-    REFRESH_FRONTEND = "Refresh Local Environment 📦",
+    DEPLOY_PIPELINE = "Deploy Pipeline Stack 🅿️",
+    DEPLOY_FRONTEND = "Deploy Frontend Stack 🖥️",
+    REFRESH_FRONTEND = "Refresh Frontend Environment 📦",
     TEST_FRONTEND = "Test Frontend Locally 💻",
     MANAGE_USER = "Manage Cognito User 👤",
     DESTROY_STACKS = "Destroy CDK Stack(s) 🗑️",
@@ -695,6 +757,14 @@ program
     )
     .action(async (stage, options) => {
         await configureCredentials(await getStageOption(stage), options.method);
+    });
+
+program
+    .command("default-credentials")
+    .description(Actions.DEFAULT_CREDS)
+    .argument(stageArgument)
+    .action(async (stage) => {
+        await defaultCredentials(await getStageOption(stage));
     });
 
 program
@@ -742,6 +812,13 @@ program
     });
 
 program
+    .command("deploy-pipeline")
+    .description(Actions.DEPLOY_PIPELINE)
+    .action(async () => {
+        await deployPipelineStack();
+    });
+
+program
     .command("deploy-frontend")
     .description(Actions.DEPLOY_FRONTEND)
     .argument(stageArgument)
@@ -780,8 +857,13 @@ if (process.argv.length === 2) {
 
             while (true) {
                 try {
+                    const availableActions = Object.values(Actions).filter(
+                        (action) =>
+                            action !== Actions.DEPLOY_PIPELINE ||
+                            (stage === PresetStage.Dev && cdkContext.pipeline)
+                    );
                     const selection = await prompt
-                        .select(`action for ${stage}`, Object.values(Actions))
+                        .select(`action for ${stage}`, availableActions)
                         .catch(() => Actions.BACK);
 
                     if (selection === Actions.BACK) {
@@ -793,6 +875,9 @@ if (process.argv.length === 2) {
                     switch (selection) {
                         case Actions.CONFIGURE_CREDS:
                             await configureCredentials(stage);
+                            break;
+                        case Actions.DEFAULT_CREDS:
+                            await defaultCredentials(stage);
                             break;
                         case Actions.CONFIGURE_SECRET:
                             await configureSecret(stage);
@@ -808,6 +893,9 @@ if (process.argv.length === 2) {
                             break;
                         case Actions.HOTSWAP_STACKS:
                             await deployStacks(stage, "hotswap");
+                            break;
+                        case Actions.DEPLOY_PIPELINE:
+                            await deployPipelineStack();
                             break;
                         case Actions.DEPLOY_FRONTEND:
                             await deployFrontendStack(stage);

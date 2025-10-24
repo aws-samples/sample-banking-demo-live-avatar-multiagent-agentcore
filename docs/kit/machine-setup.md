@@ -124,7 +124,7 @@ Docker is known to consume a lot of disk space and doesn't auto remove older ima
 
 ## AWS Developer Account (ADA)
 
-We use [ADA](https://w.amazon.com/bin/view/DevAccount/Docs) via the CLI to manage Isengard account credentials.
+We use [ADA](https://w.amazon.com/bin/view/DevAccount/Docs) via the CLI to manage Isengard account credentials. Alternatively, you may use the [Isengard CLI](https://w.amazon.com/bin/view/Isengard-cli/Documentation/README#HINSTALLATION).
 
 23. Use Builder Toolbox to install ADA by running the command `toolbox install ada`.
 24. To confirm the installation, run the command `ada`.

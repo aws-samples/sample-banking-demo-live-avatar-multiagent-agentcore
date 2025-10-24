@@ -101,6 +101,16 @@ npm run kit -- configure-credentials [stage] [option]
 
 - `-m`, `--method`: Credential method (AWS Developer Account, IAM Identity Center, Short-term Credentials)
 
+### Default Credentials
+
+This operation will copy the selected account's credentials profile to the default credentials profile.
+
+- Useful for running AWS CLI commands without specifying a profile.
+
+```bash
+npm run kit -- default-credentials [stage]
+```
+
 ### Configure Secret
 
 This operation will help you configure an [AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html) secret in the selected account.
@@ -166,7 +176,17 @@ npm run kit -- hotswap [stage] [option]
 
 - `--all`: Hotswap all stacks without prompting
 
-### Deploy Frontend
+### Deploy Pipeline Stack
+
+This operation deploys the [pipeline stack](../../lib/stacks/pipeline.ts) to the dev account.
+
+- Only available when **pipeline** is set to `true` in the CDK configuration file.
+
+```bash
+npm run kit -- deploy-pipeline
+```
+
+### Deploy Frontend Stack
 
 This operation deploys the [frontend deployment stack](../../lib/stacks/frontend/index.ts) by itself using the `-e` flag for quicker deployment.
 
@@ -176,7 +196,7 @@ This operation deploys the [frontend deployment stack](../../lib/stacks/frontend
 npm run kit -- deploy-frontend [stage]
 ```
 
-### Refresh Local Environment
+### Refresh Frontend Environment
 
 This operation is invoked by the [next operation](#test-frontend-locally) automatically, but it can also be run by itself if you just want to:
 
