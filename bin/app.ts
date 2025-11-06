@@ -1,7 +1,5 @@
 import { App, Tags } from "aws-cdk-lib";
 import { getPropertyInjectors } from "../lib/common/blueprints";
-// @export {"deleteLines": 1}
-import { Pipeline } from "../lib/stacks/pipeline";
 import { ApplicationStage } from "../lib/stage";
 
 const app = new App({
@@ -11,21 +9,15 @@ const app = new App({
 const projectId = app.node.tryGetContext("projectId");
 if (projectId) Tags.of(app).add("projectId", projectId);
 
-const stage = app.node.tryGetContext("stage") || "dev";
+const stage = app.node.tryGetContext("stage");
 const account = app.node.tryGetContext("accounts")?.[stage];
 const properties = {
     env: {
-        account: account?.number,
+        account: account?.id,
         region: account?.region,
     },
 };
 
-// @export {"deleteLines": 4}
-if (app.node.tryGetContext("pipeline") && stage === "dev") {
-    // this stack must be named pipeline
-    new Pipeline(app, "pipeline", properties);
-} else {
-    new ApplicationStage(app, stage, properties);
-    // @export {"deleteLines": 1}
-}
+new ApplicationStage(app, stage || "dev", properties);
+
 app.synth();

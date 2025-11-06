@@ -21,7 +21,7 @@ These instructions will walk you through creating a personal CTI, Team, and Bind
     ![cti-create-resolver](images/cti-create-resolver.png)
 
 4. Click **Save**.
-5. Click **Create a new CTI** towards the bottom right of page.
+5. Click **Create a new CTI** towards the bottom right of the page.
 6. Enter/select the following parameters:
 
     **New Category**: **No**
@@ -45,7 +45,7 @@ These instructions will walk you through creating a personal CTI, Team, and Bind
 
 ## Team
 
-It's recommended you use Firefox here as there appears to be issues with the Teams page on Chrome.
+It's recommended you use Firefox here as there appear to be issues with the Teams page on Chrome.
 
 11. Navigate to [Teams](https://permissions.amazon.com/a/team/).
 12. Enter a **Team Name** using the following format `[ALIAS]-team`.
@@ -67,7 +67,7 @@ It's recommended you use Firefox here as there appears to be issues with the Tea
 24. On the **Preview Difference**, click **Next**.
 25. Check **confirm and acknowledge** box then click **Update rule**.
 
-Note: Users are now required to have a non-empty posix group associated with the bindle owning team. If you are seeing an error that says "posix group doesn't exist", it's likely because there are no people in posix group that you created or changes are taking some time to propagate.
+Note: Users are now required to have a non-empty POSIX group associated with the bindle owning team. If you are seeing an error that says "POSIX group doesn't exist", it's likely because there are no people in the POSIX group that you created or changes are taking some time to propagate.
 
 ## Bindle
 
@@ -76,7 +76,7 @@ Note: Users are now required to have a non-empty posix group associated with the
     - Isengard accounts require a team-owned bindle.
 28. Enter a **Bindle name** using the following format `[ALIAS]-team`.
 29. Enter a **Description** using the following format `[ALIAS]-team bindle`.
-30. Enter the team you created in the [last section](#create-a-team) for **Owning team**.
+30. Enter the team you created in the [last section](#team) for **Owning team**.
 31. Select **Use Team CLI** then click **Submit**.
 
-You now have a new personal Bindle you can use for Isengard!
+You now have a new personal Bindle!

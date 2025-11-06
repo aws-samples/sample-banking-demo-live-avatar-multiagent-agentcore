@@ -61,71 +61,32 @@ git config credential.helper store
 
 ## Docker
 
-### Docker Desktop
-
 13. If you are a Mac or Windows user, install the Docker Desktop application from [here](https://www.docker.com/).
     - The Docker CLI is pre-installed for Cloud Desktop users.
-
-- **_Do not sign in/up in Docker Desktop_** or ACME will automatically uninstall it. Read more [here](https://docs.hub.amazon.dev/containers/docker/#docker-desktop).
-
-### Docker Engine
-
-Docker is known to consume a lot of disk space and doesn't auto remove older images & accrues a lot of logs by default. Mac and Windows users can use the below configuration to save precious disk space.
-
-14. If you are a Mac or Windows user, open Docker Desktop.
-15. Click on the gear icon ⚙️ in top right corner.
-16. Select **Docker Engine** on the left side then copy & paste the following configuration:
-
-    ```json
-    {
-        "builder": {
-            "gc": {
-                "defaultKeepStorage": "20GB",
-                "enabled": true
-            }
-        },
-        "experimental": false,
-        "log-driver": "json-file",
-        "log-format": "text",
-        "log-level": "info",
-        "log-opts": {
-            "cache-compress": "true",
-            "cache-disabled": "false",
-            "cache-max-file": "5",
-            "cache-max-size": "20m",
-            "env": "os,customer",
-            "labels": "somelabel",
-            "max-file": "5",
-            "max-size": "10m"
-        },
-        "max-concurrent-downloads": 1
-    }
-    ```
-
-17. Click **Apply & restart**
+    - **_Do not sign in to Docker Desktop_** or ACME will automatically uninstall it. Read more [here](https://docs.hub.amazon.dev/containers/docker/#docker-desktop).
 
 ## Kiro
 
-18. Install Kiro, Amazon's AI IDE, using these [instructions](https://kiro.dev/docs/getting-started/installation/).
+14. Install Kiro, Amazon's AI IDE, using these [instructions](https://kiro.dev/docs/getting-started/installation/).
 
 ## Playwright MCP Extension
 
-19. Follow the [instructions](https://github.com/microsoft/playwright-mcp/tree/main/extension) to install the Playwright MCP Chrome Extension.
+15. Follow the [instructions](https://github.com/microsoft/playwright-mcp/tree/main/extension) to install the Playwright MCP Chrome Extension.
 
 <!-- @export {"deleteLines": 17} -->
 
 ## Builder Toolbox
 
-20. Run the `mwinit` command
+16. Run the `mwinit` command
     - `mwinit -f` on Mac/Windows.
     - `winit -o` on Cloud Desktop.
-21. Navigate to [BuilderHub](https://docs.hub.amazon.dev/dev-setup/laptop-or-ws/) then click the link for your machine's **setup**.
-22. Follow the instructions on that page to **Install Builder Toolbox**.
+17. Navigate to [BuilderHub](https://docs.hub.amazon.dev/dev-setup/laptop-or-ws/) then click the link for your machine's **setup**.
+18. Follow the instructions on that page to **Install Builder Toolbox**.
 
 ## AWS Developer Account (ADA)
 
 We use [ADA](https://w.amazon.com/bin/view/DevAccount/Docs) via the CLI to manage Isengard account credentials. Alternatively, you may use the [Isengard CLI](https://w.amazon.com/bin/view/Isengard-cli/Documentation/README#HINSTALLATION).
 
-23. Use Builder Toolbox to install ADA by running the command `toolbox install ada`.
-24. To confirm the installation, run the command `ada`.
+19. Use Builder Toolbox to install ADA by running the command `toolbox install ada`.
+20. To confirm the installation, run the command `ada`.
     - You should see information on usage, available commands, flags, etc.

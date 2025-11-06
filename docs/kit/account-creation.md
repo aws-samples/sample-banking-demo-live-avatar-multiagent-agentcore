@@ -2,25 +2,20 @@
 
 # Isengard Account Creation
 
-If you are creating a brand new demo, create new dev/prod accounts using the instructions below. If your demo has already been created, skip to [Sandbox Account Creation](#sandbox-account).
-
-[TOC]
-
-## Dev Account
-
 1. Navigate to [Merlon](https://iad.merlon.amazon.dev/create-account/aws).
 2. Under **Business Accountability**, ensure the **AWS (Isengard)** option is selected.
 3. Enter an **Account Name** using the following format `[DEMO_NAME]-[STAGE]`.
-    - Ex: `marketing-email-generator-dev`
+    - Ex: `marketing-email-generator-prod` or `marketing-email-generator-kppinker`
 4. Enter an **Account Email** using the following format `[EMAIL]+[DEMO_NAME]-[STAGE]@amazon.com`.
-    - If you are on the core GenAI Labs team, use the `aws-genai-labs` email. Otherwise, you may use another email.
-    - Ex: `aws-genai-labs+marketing-email-generator-dev@amazon.com`
+    - If you are on the core Technical Product Marketing team, use the `aws-genai-labs` email. Otherwise, you may use another email.
+    - Ex: `aws-genai-labs+marketing-email-generator-prod@amazon.com`
     * Adding a `+` qualifier to your email will create a unique email address for each new demo.
 5. Enter a short **Account Description** for your demo then click **Next**.
 6. Under **Bindle For Account**, search for then select your team or personal bindle.
     - You may need to [create a personal bindle](./bindle-creation.md#bindle) if you do not have a bindle to select.
-    - If you are on the core GenAI Labs team, select `AWS-GenAI-Labs-Demo` (this should refer to the bindle ID `amzn1.bindle.resource.hs5yvj2a2rcp3cph4zqq`).
+    - If you are on the core Technical Product Marketing team, select `AWS-GenAI-Labs-Demo` (this should refer to the bindle ID `amzn1.bindle.resource.hs5yvj2a2rcp3cph4zqq`).
 7. Click **Next**. Leave the **Account Classification** as **Non-Production** and **Account Type** as **Individual**.
+    - Even if this is a "prod" account, marking it as such will require [additional overhead and approvals](https://w.amazon.com/bin/view/AWS_IT_Security/Isengard/Using_Isengard/Manage_AWS_Accounts/Account_Creation/#HWhatisthedifferencebetweenProductionvsNon-Productionaccounts3F).
 8. Under **Owning CTI**, select your personal CTI properties.
     - You will need to [create a personal CTI](./bindle-creation.md#cti-and-resolver-group) if you do not have one already.
 9. Click **Next**. On the **Optional Details** page, leave all the boxes unchecked then click **Next** again.
@@ -47,39 +42,10 @@ If you are creating a brand new demo, create new dev/prod accounts using the ins
 
     **POSIX Groups**: `aws-genai-labs-demo`
 
-16. Optionally, you can add non-GenAI Labs team members to this role by entering their alias in **Search employees**.
+16. Optionally, you can add other team members to this role by entering their alias in **Search employees**.
 
     ![isengard-admin-role](images/isengard-admin-role.png)
 
 17. Click **Save X Changes**.
 
 18. Optionally, create a **Read Only** role from the **One Click Roles** dropdown with the same parameters above.
-
-## Prod Account
-
-Follow steps 1-18 in [Dev Account Creation](#dev-account) to create a production account. The following steps require special attention:
-
-3. Enter an **Account Name** using the following format `[DEMO_NAME]-[STAGE]`.
-    - Ex: `marketing-email-generator-prod`
-4. Enter an **Account Email** using the following format `[EMAIL]+[DEMO_NAME]-[STAGE]@amazon.com`.
-    - If you are on the core GenAI Labs team, use the `aws-genai-labs` email. Otherwise, you may use another email.
-    - Ex: `aws-genai-labs+marketing-email-generator-prod@amazon.com`
-
-<!-- prettier-ignore -->
-7. Leave the **Account Classification** as **Non-Production** and **Account Type** as **Individual**.
-    - Even though this is a "prod" account, marking it as such will require [additional overhead and approvals](https://w.amazon.com/bin/view/AWS_IT_Security/Isengard/Using_Isengard/Manage_AWS_Accounts/Account_Creation/#HWhatisthedifferencebetweenProductionvsNon-Productionaccounts3F).
-
-## Sandbox Account
-
-If your demo pod has more than one builder, use a personal sandbox account to develop features independently.
-
-You can use an existing personal account or follow steps 1-18 in [Dev Account Creation](#dev-account) to create a new sandbox account. The following steps require special attention:
-
-3. Enter an **Account Name** using the following format `[DEMO_NAME]-[ALIAS]`.
-    - Ex: `marketing-email-generator-tamjay`
-4. Enter an **Account Email** using the following format `[ALIAS]+[DEMO_NAME]@amazon.com`.
-    - Ex: `tamjay+marketing-email-generator@amazon.com`
-
-<!-- prettier-ignore -->
-6. Under **Bindle For Account**, search for then select your personal bindle.
-    - You will need to [create a personal bindle](./bindle-creation.md#bindle) if you do not have one already.

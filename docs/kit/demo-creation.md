@@ -8,191 +8,155 @@ These instructions will walk you through creating a brand new demo. This is a on
 
 ## AWS Account(s)
 
-You are required to have at least one account to develop a demo. A single prod account and one sandbox account per builder are optional, but encouraged.
-
-- Follow these [instructions](./account-creation.md) to create new Isengard accounts if needed.
-
-You can use existing Isengard accounts provided you have access to an **Admin** console role for each account.
-
-- Follow steps 11-18 [here](./account-creation.md#dev-account) to add an admin role.
+1. Have at least one AWS account with access to its **Admin** console role.
+    - A separate staging and prod account are optional, but encouraged.
+    - Follow these [instructions](./account-creation.md) to create a brand new Isengard account or add an admin role if needed.
 
 ## GitLab Repository
 
 ### Fork It
 
-1. Navigate to the Demo Starter Kit [GitLab page](https://gitlab.aws.dev/genai-labs/templates/demo-starter-kit) then click **Fork**.
+2. Navigate to the Demo Starter Kit [GitLab page](https://gitlab.aws.dev/genai-labs/templates/demo-starter-kit) then click **Fork**.
 
     ![git-fork](images/git-fork.png)
 
-2. Enter a **Project name** using the following format `[DEMO_NAME]` and ensure the **Project slug** updates accordingly.
+3. Enter a **Project name** using the following format `[DEMO_NAME]` and ensure the **Project slug** updates accordingly.
     - Ex: `marketing-email-generator`
-3. Under **Project URL**, **select a namespace**.
-    - If you are on the core GenAI Labs team, select `genai-labs/demo-assets`. Otherwise, you may use your alias or another namespace.
-    - This is a **_very important step and non-reversible_**.
-4. Enter your demo name for the **Project description**.
-5. Under **Branches to include**, select **Only the default branch `main`**.
-6. Under **Visibility level**, select the **Internal** option.
-    - This is a **_very important step_** so AWS employees outside your team can view the project.
+4. Under **Project URL**, **select a namespace**.
+    - If you are on the core Technical Product Marketing team, select `genai-labs/demo-assets`. Otherwise, you may use your alias or another namespace.
+5. Enter your demo name for the **Project description**.
+6. Under **Branches to include**, select **Only the default branch `main`**.
+7. Under **Visibility level**, select the **Internal** option.
 
     ![git-fork](images/git-fork-details.png)
 
-7. Click **Fork project**.
-8. From your demo's new GitLab page, click **Settings** then **Merge requests**.
-9. Under **Target project**, select **This project**, then click **Save changes**.
+8. Click **Fork project**.
+9. From your demo's new GitLab page, click **Settings** then **Merge requests**.
+10. Under **Target project**, select **This project**, then click **Save changes**.
 
 ### Clone It
 
-10. From your demo's new GitLab page, click the **Code** dropdown and click the copy icon to copy the SSH URL.
+11. From your demo's new GitLab page, click the **Code** dropdown and click the copy icon to copy the SSH URL.
 
     ![git-clone-copy](images/git-clone-copy.png)
 
-11. Open a terminal then navigate to the directory where you want to clone the files by running the command `cd [new directory]`.
-12. To clone the files, run the command `git clone [copied URL]`.
+12. Open a terminal then navigate to the directory where you want to clone the files by running the command `cd [new directory]`.
+13. To clone the files, run the command `git clone [copied URL]`.
     - Git automatically creates a folder with the repository name and downloads the files there.
 
 ## Configuration Files
 
-The starter kit uses `cdk.json` to centrally track and manage CDK configurations.
-
-- See the [kit documentation](./kit.md#configuration-file) for more details.
-
-13. Open the project folder in your IDE of choice then open [`cdk.json`](../../cdk.json).
-14. Update **projectId** with a unique identifier less than 15 characters that best reflects your project name.
+14. Open the project folder in your IDE of choice then open [`cdk.json`](../../cdk.json).
+    - The starter kit uses `cdk.json` to centrally track and manage CDK configurations.
+        - See the [kit documentation](./kit.md#configuration-file) for more details.
+15. Update **projectId** with a unique identifier less than 15 characters that best reflects your project name.
     - Use a shorthand name separated by a `-`. Do not use any other special characters such as `! , & * @ # < > ?`.
     - Ex: `email-generator`
-15. Update **gitlab** **group** if you created your GitLab project under a different group\*.
-16. Update **gitlab** **project** with your GitLab project's name\*.
-    - This should be the same name you provided for [step 2](#fork-it).
-    - Ex: `retail-marketing-email-generator`
-17. Set **pipeline** to `true` to trigger a pipeline with GitLab commits\*\*.
-    - We **_strongly recommend_** setting this property to `true`, even if there is no prod account configured. If you set this property to `false`, you must manually deploy the app using the CLI.
-18. Set **midway** to `true` to enable [Federate/Midway authentication](https://integ.ep.federate.a2z.com/help), allowing Amazon employees to access your demo\*\*.
-    - We **_strongly recommend_** setting this property to `true`, even if your demo may not initially need Midway.
-19. Update the account configuration with at least one **dev** account, including the account **number** and **region** for each account.
-    - Accounts with user aliases are automatically considered sandbox accounts and can be added or removed anytime.
-    - We **_strongly recommend_** using `us-west-2` for GenAI demos given service availability.
-20. **Save** `cdk.json`.
-21. Open [`package.json`](../../package.json) then edit the following:
+16. Update the **accounts** configuration with your accounts from [step 1](#aws-accounts).
+    - You must provide the account **ID** and **region**.
+    - If you are on the core Technical Product Marketing team, set **midway** to `true` to enable Midway authentication for that account.
+    - Set **prod** to `true` to mark that account for production.
+17. **Save** `cdk.json`.
+18. Open [`package.json`](../../package.json) then edit the following:
 
-    **name**: Type the project identifier you provided in step 14.
+    **name**: Type the project identifier you provided in step 15.
 
-    **description**: Type the demo name you provided in [step 4](#fork-it).
+    **description**: Type the demo name you provided in [step 5](#fork-it).
 
-22. **Save** `package.json`.
+19. **Save** `package.json`.
 
-<br>\* This property is optional if **pipeline** is false.<br />
-\*\* This property can be toggled later, even after setting up the demo.
+## [Federate](https://ep.federate.a2z.com/help/FAQ#what-is-amazon-federate) Profile(s)
 
-## Federate Profile(s)
+If you are on the core Technical Product Marketing team and enabled Midway for an account in the [`cdk.json` file](../../cdk.json), please continue. Otherwise you may skip to the [next section](#configuration-commands).
 
-[Federate](https://ep.federate.a2z.com/help/FAQ#what-is-amazon-federate) has an [Integration](https://integ.ep.federate.a2z.com/profiles) and [Production](https://ep.federate.a2z.com/profiles) environment where service profiles are managed separately. If your demo has both dev and prod stages, you must create two separate profiles in those respective environments. Sandbox accounts will use the dev/Integration profile for providing access to the demo.
+### Integration Profile
 
-### Dev Profile
-
-23. Navigate to the [Integration](https://integ.ep.federate.a2z.com/profiles) profiles.
-
-If you are not on the core GenAI Labs team, follow these [instructions](./federate-profile-creation.md) to create a dev Integration profile then skip to [Prod Profile](#prod-profile). Otherwise, you can continue and clone our team's profile.
-
-24. Search for then select the profile named `start-kit-test`.
-25. After selecting the profile, click the **Actions** dropdown then click **Clone Service Profile**.
+20. Navigate to the Federate [Integration](https://integ.ep.federate.a2z.com/profiles) profiles.
+21. Search for then select the profile named `start-kit-test`.
+22. After selecting the profile, click the **Actions** dropdown then click **Clone Service Profile**.
 
     ![federate-clone-profile](images/federate-clone-profile.png)
 
-26. Enter a **Service Name** using the following format `genai-labs-[PROJECT_IDENTIFIER]`.
-    - The project identifier should exactly match the **projectId** in your [`cdk.json` file](../../cdk.json).
-    - Ex: `genai-labs-email-generator`
-27. Check the box titled **Unfabric guidelines**.
-28. Check the box titled **Integ Environment restrictions**.
-29. Leave all other options to their defaults and click **Next**.
-30. Enter a **Client ID** that exactly matches the **projectId** in your [`cdk.json` file](../../cdk.json).
-    - This is **_extremely important_** as the Client ID **_cannot be edited_** after the profile has been created.
+23. Enter a **Service Name** that exactly matches the **projectId** in your [`cdk.json` file](../../cdk.json).
     - Ex: `email-generator`
-31. Enter **Redirect URIs** using the following format `https://[STAGE]-[PROJECT_IDENTIFIER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
-    - The project identifier, account numbers, and regions should reflect your [`cdk.json` file](../../cdk.json).
-    - If you are configuring sandbox account(s), then you need to add URI(s) on a new line.
+24. Check the box titled **Unfabric guidelines**.
+25. Check the box titled **Integ Environment restrictions**.
+26. Leave all other options at their defaults and click **Next**.
+27. Enter a **Client ID** that exactly matches the **Service Name** and **projectId**.
+28. Enter **Redirect URIs** using the following format `https://[STAGE]-[PROJECT_IDENTIFIER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+    - The stage, project identifier, and region should reflect the non-prod account(s) in your [`cdk.json` file](../../cdk.json).
+    - If you are configuring multiple accounts, then you need to add URI(s) on a new line.
     - Ex:
 
     ```
-    https://dev-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
+    https://staging-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     https://kppinker-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     ```
 
-32. Turn the **Client Secret** switch on then click **Next**.
+29. Turn the **Client Secret** switch on then click **Next**.
 
     ![federate-oidc-details](images/federate-oidc-details.png)
 
-33. On the **Discovery and Permissions Configuration** page, select **The application is a company-wide collaboration tool** then click **Next**.
-34. Skip over the **Claim Configuration** page by clicking **Next** again.
-35. On the **Service Profile Overview** page, click **Submit**.
-36. Copy the generated client secret key. **_Keep it safe_**.
+30. On the **Discovery and Permissions Configuration** page, select **The application is a company-wide collaboration tool** then click **Next**.
+31. Skip over the **Claim Configuration** page by clicking **Next** again.
+32. On the **Service Profile Overview** page, click **Submit**.
+33. Copy the generated client secret key.
     > [I lost the Federate client secret key. Now what?](./federate-key-recovery.md)
-37. The Integration profile expires after 30 days. Set a recurring calendar invite to renew it.
+34. The Integration profile expires after 30 days. Set a recurring calendar invite to renew it.
     - Follow these [instructions](./federate-profile-renewal.md) to renew it.
 
-### Prod Profile
+### Production Profile
 
-If you created a prod account in the [`cdk.json` file](../../cdk.json), please continue. Otherwise you may skip to the [next section](#configuration-scripts).
+If you marked an account for production in the [`cdk.json` file](../../cdk.json), please continue. Otherwise you may skip to the [next section](#configuration-commands).
 
-38. Navigate to the [Production](https://ep.federate.a2z.com/drafts) drafts.
-39. Click **Import from Integ**.
-40. Enter the **client ID** you provided in [step 30](#dev-profile).
-41. Verify the **Service Name** matches the one you provided in [step 26](#dev-profile).
-42. Check the box titled **Unfabric guidelines** then click **Next**.
-43. Update the **Redirect URI** for the prod account using the following format `https://[PROD_STAGE]-[PROJECT_IDENTIFIER].auth.[PROD_ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
-    - The project identifier, account number, and region should reflect the prod account in your [`cdk.json` file](../../cdk.json).
+35. Navigate to the [Production](https://ep.federate.a2z.com/drafts) drafts.
+36. Click **Import from Integ**.
+37. Enter the **client ID** you provided in [step 27](#integration-profile).
+38. Check the box titled **Unfabric guidelines** then click **Next**.
+39. Update the **Redirect URI** for the prod account using the following format `https://[STAGE]-[PROJECT_IDENTIFIER].auth.[ACCOUNT_REGION].amazoncognito.com/oauth2/idpresponse`.
+    - The stage, project identifier, and region should reflect the prod account in your [`cdk.json` file](../../cdk.json).
     - Ex:
 
     ```
     https://prod-email-generator.auth.us-west-2.amazoncognito.com/oauth2/idpresponse
     ```
 
-44. Turn the **Client Secret** switch on then click **Next**.
-45. On the **Discovery and Permissions Configuration** page, select **The application is a company-wide collaboration tool** then click **Next**.
-46. Skip over the **Claim Configuration** page by clicking **Next** again.
-47. On the **Service Profile Overview** page, click **Submit** then copy the generated client secret key. **_Keep it safe_**.
+40. Turn the **Client Secret** switch on then click **Next**.
+41. On the **Discovery and Permissions Configuration** page, select **The application is a company-wide collaboration tool** then click **Next**.
+42. Skip over the **Claim Configuration** page by clicking **Next** again.
+43. On the **Service Profile Overview** page, click **Submit** then copy the generated client secret key and provide it to your fellow builders.
     > [I lost the Federate client secret key. Now what?](./federate-key-recovery.md)
 
 ## Configuration Commands
 
-48. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm install`.
-    - It may take a couple minutes to complete. Great time for a ☕!
-49. To configure the demo, we will use the [kit CLI](./kit.md#kit-cli). Run the command `npm run kit`.
-50. First, select **dev**, then **AWS Developer Account**.
-51. Second, select **Configure Secret**, then enter `federateSecret` followed by the Federate client secret key from the [previous section](#federate-profiles).
-52. Third, select **Bootstrap Account**.
-53. Select **Back**, then repeat steps 50-52 for **prod** and your sandbox account(s) if applicable.
-54. Finally, select **Back**, **dev**, then **Deploy Pipeline Stack**.
+44. To install the starter kit/project dependencies, open a terminal at the root directory then run the command `npm install`.
+45. To configure the demo, we will use the kit CLI. Run the command `npm run kit`.
+    - See the [kit documentation](./kit.md#kit-cli) to learn more about the Demo Starter Kit CLI.
+46. Select an account then authenticate with your preferred method.
+47. After authenticating, select **Bootstrap Account**.
+48. If you enabled Midway for the account, select **Configure Secret** then enter `federateSecret` followed by the appropriate Federate client secret key from the [previous section](#federate-profiles).
+    - If Midway is not enabled, you can select **Manage Cognito User** then **Create User** to get a login.
+49. Select **Back**, then repeat steps 46-48 for other accounts if applicable.
 
-- See the [kit documentation](./kit.md#kit-cli) to learn more about the Demo Starter Kit CLI.
+## Code Deployment
+
+50. Select **Back** then the account into which you would like to deploy the infrastructure.
+51. Select **Deploy CDK Stack(s)**.
+52. Once the deployment finishes, find the output titled **URL**. Visit that URL to see your frontend React app.
+
+    ![react-login](images/react-login.png)
 
 ## Code Check-In
 
-The starter kit comes pre-built with a commit CLI to improve the quality of Git commits.
+53. From the root directory, run the command `git add -A && npm run commit`.
+54. For **Select the type of change that you're committing**, select **chore**.
+55. For **What is the scope of this change**, enter `app`.
+56. For **Write a short, imperative tense description of the change**, enter `initial code commit`.
+57. For **Provide a longer description of the change**, press **Enter** to skip.
+58. For **Are there any breaking changes?** press **Enter** to indicate **N**.
 
-55. From the root directory, run the command `git add -A && npm run commit`.
-56. For **Select the type of change that you're committing**, select **chore**.
-57. For **What is the scope of this change**, enter `app`.
-58. For **Write a short, imperative tense description of the change**, enter `initial code commit`.
-59. For **Provide a longer description of the change**, press **Enter** to skip.
-60. For **Are there any breaking changes?** press **Enter** to indicate **N**.
-
-61. If the commit hooks powered by Husky fail, you will need to repeat steps 55-60.
+59. If the commit hooks powered by Husky fail, you will need to repeat steps 53-58.
     - See the [kit documentation](./kit.md#hooks) to learn more about the commit hooks.
-62. If the commit hooks succeed, you can push the committed files to your repository with the command `git push origin main`.
-    - Pushing to main will trigger a pipeline execution.
-
-From now on, **_do not_** work and push changes on the `main` branch. Always work on a feature branch then submit a merge request via GitLab to merge changes to `main`.
-
-63. From the root directory, run `git checkout -B feat/[ALIAS]` to create a new dev branch for yourself with your alias.
-    - Ex: `git checkout -B feat/tamjay`
-
-## Verify Pipelines
-
-64. Navigate back to your demo's GitLab page then check the status of your GitLab pipeline.
-65. Once the pipeline succeeds, as indicated by a green checkmark, navigate to the dev account's [CodePipeline console](https://console.aws.amazon.com/codesuite/codepipeline/pipelines/) to verify that the CodePipeline is in-progress.
-66. Once the CodePipeline completes, open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home?#/stacks/) then click the stack ending in **frontend**.
-67. Click the **Outputs** tab then the CloudFront **url** to visit your new frontend React app.
-
-    ![react-login](images/react-login.png)
+60. If the commit hooks succeed, you can push the committed files to your repository with the command `git push origin main`.
 
 🎉 Congratulations! You have successfully created your brand new demo!

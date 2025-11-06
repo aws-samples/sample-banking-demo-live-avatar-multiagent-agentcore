@@ -4,12 +4,12 @@ import archiver from "archiver";
 import { bold, greenBright } from "chalk";
 import { execSync } from "child_process";
 import { Command } from "commander";
-import * as fs from "fs";
+import { createWriteStream, existsSync, readFileSync } from "fs";
 
 const exportZip = async (ids: string[] = []) => {
     const zipName = "export.zip";
 
-    const output = fs.createWriteStream(zipName);
+    const output = createWriteStream(zipName);
     const archive = archiver("zip", { zlib: { level: 9 } });
     archive.pipe(output);
 
@@ -21,7 +21,7 @@ const exportZip = async (ids: string[] = []) => {
         .split("\n")
         .filter(
             (file) =>
-                fs.existsSync(file) &&
+                existsSync(file) &&
                 !ignorePatterns.some((pattern) =>
                     pattern.endsWith("/") ? file.startsWith(pattern) : file === pattern
                 )
@@ -33,7 +33,7 @@ const exportZip = async (ids: string[] = []) => {
             continue;
         }
 
-        const lines = fs.readFileSync(file, "utf-8").split("\n");
+        const lines = readFileSync(file, "utf-8").split("\n");
         let shouldDelete = false;
 
         for (let i = lines.length - 1; i >= 0; i--) {
