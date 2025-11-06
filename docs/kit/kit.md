@@ -46,7 +46,7 @@ The **projectId** property must be less than 15 characters long and not use any 
 - Creating a prefix for stack names and generated resource names, supporting multiple demo deployments in the same account.
 - Tagging all CDK resources in the project.
 
-<!-- @export {"deleteLines": 8 -->
+<!-- @export {"deleteLines": 8} -->
 
 - Linking Federate profiles to the Amazon Cognito domain URL.
     - See the [Federate constructs](#federate-constructs) for more context.
