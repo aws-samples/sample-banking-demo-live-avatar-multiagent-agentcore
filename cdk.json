@@ -19,29 +19,27 @@
         "@export": { "deleteLines": 25 },
         "projectId": "PROJECT-IDENTIFIER",
         "accounts": {
-            "dev": {
-                "number": "AWS_ACCOUNT_ID",
-                "region": "AWS_REGION"
+            "staging": {
+                "id": "AWS_ACCOUNT_ID",
+                "region": "AWS_REGION",
+                "midway": true
             },
             "prod": {
-                "number": "AWS_ACCOUNT_ID",
-                "region": "AWS_REGION"
+                "id": "AWS_ACCOUNT_ID",
+                "region": "AWS_REGION",
+                "midway": true,
+                "prod": true
             },
             "ALIAS_1": {
-                "number": "AWS_ACCOUNT_ID",
-                "region": "AWS_REGION"
+                "id": "AWS_ACCOUNT_ID",
+                "region": "AWS_REGION",
+                "midway": true
             },
             "ALIAS_2": {
-                "number": "AWS_ACCOUNT_ID",
+                "id": "AWS_ACCOUNT_ID",
                 "region": "AWS_REGION"
             }
         },
-        "midway": true,
-        "gitlab": {
-            "group": "genai-labs/demo-assets",
-            "project": "GITLAB-PROJECT-NAME"
-        },
-        "pipeline": true,
 
         "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
         "@aws-cdk/core:checkSecretUsage": true,

@@ -14,31 +14,28 @@ The starter kit uses [`cdk.json`](../../cdk.json) to centrally track and manage 
 {
     "projectId": "PROJECT-IDENTIFIER",
     "accounts": {
-        "dev": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
+        "staging": {
+            "id": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION",
+            "midway": true
         },
         "prod": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
+            "id": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION",
+            "midway": true,
+            "prod": true
         },
         "ALIAS_1": {
-            "number": "AWS_ACCOUNT_ID",
-            "region": "AWS_REGION"
+            "id": "AWS_ACCOUNT_ID",
+            "region": "AWS_REGION",
+            "midway": true
         },
         "ALIAS_2": {
-            "number": "AWS_ACCOUNT_ID",
+            "id": "AWS_ACCOUNT_ID",
             "region": "AWS_REGION"
         }
         // more aliases if needed
-    },
-    "@export": { "deleteLines": 6 },
-    "pipeline": true,
-    "gitlab": {
-        "group": "genai-labs/demo-assets",
-        "project": "GITLAB-PROJECT-NAME"
-    },
-    "midway": true
+    }
 }
 ```
 
@@ -48,24 +45,15 @@ The **projectId** property must be less than 15 characters long and not use any 
 
 - Creating a prefix for stack names and generated resource names, supporting multiple demo deployments in the same account.
 - Tagging all CDK resources in the project.
-    - See the [stack construct](../../lib/common/constructs/stack.ts) for more context.
 
-<!-- @export {"deleteLines": 15} -->
+<!-- @export {"deleteLines": 8 -->
 
 - Linking Federate profiles to the Amazon Cognito domain URL.
     - See the [Federate constructs](#federate-constructs) for more context.
 
-### GitLab Group/Project
-
-If **pipeline** is `false`, the **gitlab** **group** and **gitlab** **project** properties are optional. These properties are used to give the GitLab runner the necessary permissions to write to Amazon S3, which triggers the pipeline. See the [pipeline stack](#pipeline-stack) for more details.
-
-### Pipeline
-
-When **pipeline** is set to `true`, the CLI will allow for the deployment of a [pipeline](https://docs.aws.amazon.com/cdk/v2/guide/cdk_pipeline.html) to the account labeled "dev" in the CDK configuration file. See the [pipeline stack](#pipeline-stack) and [kit CLI](#kit-cli) for more details.
-
 ### Midway
 
-Setting **midway** to `true` enables [Federate/Midway authentication](https://integ.ep.federate.a2z.com/help), allowing Amazon employees to access your demo. You can also use Federate to limit access to your demo to particular teams and/or users.
+Setting **midway** to `true` enables [Federate/Midway authentication](https://integ.ep.federate.a2z.com/help), allowing Amazon employees to access the demo in that account. You can also use Federate to limit access to your demo to particular teams and/or users.
 
 ## Kit CLI
 
@@ -79,7 +67,7 @@ npm run kit
 
 ![cli-welcome](images/cli-welcome.png)
 
-The kit CLI can be also used in headless mode by directly providing the operation, stage, and, if applicable, option(s) as command line arguments.
+The kit CLI can also be used in headless mode by directly providing the operation, stage, and, if applicable, option(s) as command line arguments.
 
 ```bash
 npm run kit -- --help
@@ -116,7 +104,6 @@ npm run kit -- default-credentials [stage]
 This operation will help you configure an [AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html) secret in the selected account.
 
 - The secret name you provide is prefixed with the stage and project ID in the CDK configuration file.
-- If the secret is available in the dev account, it will be copied to sandbox accounts.
 
 ```bash
 npm run kit -- configure-secret [stage] [options]
@@ -129,7 +116,7 @@ npm run kit -- configure-secret [stage] [options]
 
 ### Bootstrap Account
 
-This operation will bootstrap the selected account in the region configured and `us-east-1`, including setting trust relationships with dev and termination protection for prod accounts.
+This operation will bootstrap the selected account in the region configured and `us-east-1` as well as enable termination protection for prod accounts.
 
 ```bash
 npm run kit -- bootstrap [stage]
@@ -150,8 +137,6 @@ npm run kit -- synth [stage]
 This operation will deploy your CDK code to the selected account.
 
 - If you elect to not just deploy all stacks, the operation will allow you to select exactly which stacks you would like to deploy to the selected account.
-    - Note that stacks in the dev account will be prefixed with the pipeline stack name.
-        - Ex: `start-kit-test-pipeline/dev/start-kit-test-frontend`
 
 * Stack dependencies will also be deployed alongside the selected stacks to ensure functionality.
 * The operation uses the `--concurrency` flag to deploy stacks in parallel for faster deployment.
@@ -175,16 +160,6 @@ npm run kit -- hotswap [stage] [option]
 #### Option
 
 - `--all`: Hotswap all stacks without prompting
-
-### Deploy Pipeline Stack
-
-This operation deploys the [pipeline stack](../../lib/stacks/pipeline.ts) to the dev account.
-
-- Only available when **pipeline** is set to `true` in the CDK configuration file.
-
-```bash
-npm run kit -- deploy-pipeline
-```
 
 ### Deploy Frontend Stack
 
@@ -227,10 +202,6 @@ This operation will get the user pool ID from the `.env` file then give you the 
 ### Destroy CDK Stack(s)
 
 This operation will destroy your stacks in the selected account.
-
-- Note that stacks in the dev account will be prefixed with the pipeline stack name.
-    - Ex: `start-kit-test-pipeline/dev/start-kit-test-frontend`
-    - See [pipeline stack](#pipeline-stack) for more details.
 
 - Use this operation with **_extreme caution_** as the CDK stacks destroyed with this operation cannot be recovered and may leave your application broken when using dependent stacks.
 - There are certain limitations with this operation due to how CDK is designed:
@@ -308,7 +279,7 @@ The commit CLI is provided by [Commitizen](https://commitizen-tools.github.io/co
 
 Commit hooks, powered by [Husky](https://typicode.github.io/husky/), will run automatically after the commit CLI:
 
-- The pre-commit hook will run code formatting and quality checks, stopping you from committing bad code that might block the pipeline.
+- The pre-commit hook will run code formatting and quality checks.
     - [lint-staged](https://github.com/lint-staged/lint-staged) will format and lint staged files.
         - Formatting and linting will be handled by [Prettier](https://prettier.io/) and [ESLint](https://eslint.org/) for TypeScript and [Ruff](https://docs.astral.sh/ruff/) for Python.
     - See [pre-commit](../../.husky/pre-commit), [package.json](../../package.json), [eslint.config.ts](../../eslint.config.ts), and [.prettierrc](../../.prettierrc) for more context.
@@ -317,7 +288,7 @@ Commit hooks, powered by [Husky](https://typicode.github.io/husky/), will run au
 
 <!-- @export {"deleteLines": 3} -->
 
-Some aspects of the starter kit infrastructure are specific to internal Amazon authentication/security requirements. Use the [export CLI](#export-cli) to remove the [pipeline](#pipeline-stack) stack and [Federate](#federate-constructs) constructs before sharing publicly.
+Some aspects of the starter kit infrastructure are specific to internal Amazon authentication/security requirements. Use the [export CLI](#export-cli) to remove the [Federate constructs](#federate-constructs) before sharing publicly.
 
 ### App
 
@@ -327,32 +298,14 @@ The stack prefix and stage for the app are determined by a context variable pass
 
 See [bin/app.ts](../../bin/app.ts) for more context.
 
-<!-- @export {"deleteLines": 31} -->
-
-### Pipeline Stack
-
-![arch-pipeline](./images/arch-pipeline.drawio.png)
-
-This stack is only deployed to the `dev` account via the CLI when the **pipeline** property is set to `true` in the CDK configuration file.
-
-It sets up all the necessary resources and permissions for the GitLab runner to upload zipped code from commits to Amazon S3, kicking off the CodePipeline.
-
-- An Amazon S3 source bucket to which the GitLab runner will upload the zipped code.
-    - The GitLab runner will also publish SAST scan reports to the [Probe dashboard](https://probe.aws.dev/).
-- An Amazon CloudTrail trail that tracks write events in the source bucket to trigger the pipeline.
-- An AWS IAM role that will be assumed by the [GitCI Credential vendor](https://gitlab.pages.aws.dev/docs/Platform/aws-credential-vendor.html), allowing it access to the source bucket.
-- An AWS pipeline construct for synthesizing the infrastructure then deploying it to each stage.
-    - A dev stage that deploys the [application stage](../../lib/stage.ts) to the dev account in the [`cdk.json` file](../../cdk.json).
-    - If configured, a prod stage that deploys the application stage to the prod account in the CDK configuration file.
-
-See [pipeline.ts](../../lib/stacks/pipeline.ts) and [.gitlab-ci.yml](../../.gitlab-ci.yml) for more context.
+<!-- @export {"deleteLines": 14} -->
 
 ### Federate Constructs
 
 These custom constructs set the necessary properties for creating a Federate-compatible Cognito User Pool and User Pool Client.
 
 - The Federate secret is imported from AWS Secrets Manager.
-    - The stage, whether prod or not, determines which secret is used.
+    - The stage determines which secret and issuer URL is used.
 - The project identifier is used as the **clientId** and as a prefix in the User Pool Domain URL to align with the [redirect URIs we set up in Federate](./demo-creation.md#federate-profiles).
 - Callback URLs reference the CloudFront distribution and `http://localhost:3000` for local development.
 

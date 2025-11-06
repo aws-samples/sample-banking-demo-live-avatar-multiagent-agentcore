@@ -21,6 +21,10 @@ function getProfile(scope: Construct) {
     return `${Stage.of(scope)!.stageName}-${scope.node.getContext("projectId")}`;
 }
 
+function getAccountDetail(scope: Construct, detail: string) {
+    return scope.node.getContext("accounts")[Stage.of(scope)!.stageName]?.[detail];
+}
+
 export class FederateUserPool extends UserPool {
     public addDomain(id: string, options?: UserPoolDomainOptions): UserPoolDomain {
         return super.addDomain(id, {
@@ -34,7 +38,7 @@ export class FederateUserPool extends UserPool {
         super(scope, id, {
             ...props,
             removalPolicy: RemovalPolicy.DESTROY,
-            customAttributes: scope.node.tryGetContext("midway")
+            customAttributes: getAccountDetail(scope, "midway")
                 ? {
                       posix: new StringAttribute({
                           mutable: true,
@@ -50,7 +54,7 @@ export class FederateUserPool extends UserPool {
 
 export class FederateUserPoolClient extends UserPoolClient {
     constructor(scope: Construct, id: string, props: UserPoolClientProps) {
-        const midway = scope.node.tryGetContext("midway");
+        const midway = getAccountDetail(scope, "midway");
         super(scope, id, {
             ...props,
             authFlows: midway
@@ -87,10 +91,9 @@ export class FederateUserPoolClient extends UserPoolClient {
                                   `${getProfile(scope)}-federateSecret`
                               ).unsafeUnwrap(),
                               attributeRequestMethod: OidcAttributeRequestMethod.GET,
-                              issuerUrl:
-                                  Stage.of(scope)!.stageName === "prod"
-                                      ? "https://idp.federate.amazon.com"
-                                      : "https://idp-integ.federate.amazon.com",
+                              issuerUrl: getAccountDetail(scope, "prod")
+                                  ? "https://idp.federate.amazon.com"
+                                  : "https://idp-integ.federate.amazon.com",
                           }).providerName
                       ),
                   ]

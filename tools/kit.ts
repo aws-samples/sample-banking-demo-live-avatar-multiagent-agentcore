@@ -23,16 +23,10 @@ import { blueBright, bold, greenBright, magentaBright, redBright, yellowBright }
 import { spawn } from "child_process";
 import { Command } from "commander";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import * as path from "path";
-import * as yaml from "yaml";
+import { join } from "path";
+import { parse, stringify } from "yaml";
 
-const cdkContext = JSON.parse(
-    readFileSync(path.join(__dirname, "..", "cdk.json"), "utf-8")
-).context;
-enum PresetStage {
-    Dev = "dev",
-    Prod = "prod",
-}
+const cdkContext = JSON.parse(readFileSync(join(__dirname, "..", "cdk.json"), "utf-8")).context;
 
 // #region helper functions
 
@@ -154,16 +148,12 @@ const getCredentials = (stage: string) => {
     return fromIni({ profile: getProfile(stage), ignoreCache: true });
 };
 
-const getAccountDetail = (stage: string, detail: "number" | "region"): string => {
-    return cdkContext.accounts[stage][detail];
+const getAccountDetail = (stage: string, detail: "id" | "region" | "prod"): string => {
+    return cdkContext.accounts[stage]?.[detail];
 };
 
 const getStackPrefix = (stage: string): string => {
-    let stackPrefix = `${stage}/${cdkContext.projectId}`;
-    if (cdkContext.pipeline && stage === PresetStage.Dev) {
-        stackPrefix = `${cdkContext.projectId}-pipeline/${stackPrefix}`;
-    }
-    return stackPrefix;
+    return `${stage}/${cdkContext.projectId}`;
 };
 
 const getEnvironmentVariables = async (stage: string) => {
@@ -197,8 +187,8 @@ const selectStacks = async (
     all: boolean = false
 ): Promise<string | undefined> => {
     if (
-        stage === "prod" &&
-        !(await prompt.confirm(`Are you sure you want to ${action} prod stacks?`))
+        getAccountDetail(stage, "prod") &&
+        !(await prompt.confirm(`Are you sure you want to ${action} ${stage} stacks?`))
     ) {
         return;
     }
@@ -224,11 +214,7 @@ const selectStacks = async (
     const stacks = await prompt.multiSelect(`stacks to ${action}`, [
         ...stackString
             .split("\n")
-            .filter(
-                (item) =>
-                    item.startsWith(getStackPrefix(stage)) ||
-                    item === `${cdkContext.projectId}-pipeline`
-            )
+            .filter((item) => item.startsWith(getStackPrefix(stage)))
             .map((item) => item.replace(/\s*\(.*?\)\s*$/, "").trim()),
     ]);
     return stacks.map((stack) => `"${stack}"`).join(" ");
@@ -290,7 +276,7 @@ const configureCredentials = async (stage: string, method?: string) => {
             await executeCommand(`aws configure --profile ${profile}`);
         } else if (credentialType === "AWS Developer Account") {
             await executeCommand(
-                `ada credentials update --profile=${profile} --account=${getAccountDetail(stage, "number")} --provider=isengard --role=Admin --once`
+                `ada credentials update --profile=${profile} --account=${getAccountDetail(stage, "id")} --provider=isengard --role=Admin --once`
             );
         } else if (credentialType === "Isengard CLI") {
             const temporaryFile = `/tmp/isengard-credentials.txt`;
@@ -390,27 +376,8 @@ const configureSecret = async (
         };
         if (secretValueInput) {
             secretValue = secretValueInput;
-        } else if (Object.values(PresetStage).includes(stage as PresetStage)) {
-            secretValue = await getSecretValue();
         } else {
-            try {
-                printInfo("Copying dev secret...");
-                await ensureCredentials(PresetStage.Dev);
-                secretValue = (
-                    await new SecretsManagerClient({
-                        region: getAccountDetail(PresetStage.Dev, "region"),
-                        credentials: getCredentials(PresetStage.Dev),
-                    }).send(
-                        new GetSecretValueCommand({
-                            SecretId: `${getProfile(PresetStage.Dev)}-${secretName}`,
-                        })
-                    )
-                ).SecretString!;
-            } catch (error) {
-                if (!(error instanceof ResourceNotFoundException)) throw error;
-                printWarning("Failed to copy dev secret.");
-                secretValue = await getSecretValue();
-            }
+            secretValue = await getSecretValue();
         }
 
         const secretProperties: Partial<UpdateSecretCommandInput> = {
@@ -442,18 +409,15 @@ const bootstrapAccount = async (stage: string) => {
     const account = cdkContext.accounts[stage];
 
     const bootstrapRegion = async (region: string) => {
-        const isProd = stage === PresetStage.Prod;
         printInfo(
-            `Bootstrapping${isProd ? ", enabling termination protection and setting up trust with dev account for" : ""} ${stage} account in ${region}...`
+            `Bootstrapping${account.prod ? " and enabling termination protection for" : ""} ${stage} account in ${region}...`
         );
         try {
             await executeCommand(
-                `npm run cdk bootstrap aws://${account.number}/${region} -- ` +
+                `npm run cdk bootstrap aws://${account.id}/${region} -- ` +
                     "--cloudformation-execution-policies arn:aws:iam::aws:policy/AdministratorAccess " +
                     `--profile ${getProfile(stage)}` +
-                    (isProd
-                        ? ` --termination-protection --trust ${getAccountDetail(PresetStage.Dev, "number")}`
-                        : "")
+                    (account.prod ? ` --termination-protection` : "")
             );
             printSuccess(`Bootstrapped ${stage} account in ${region}!`);
         } catch (error) {
@@ -479,7 +443,7 @@ const deployStacks = async (
     if (stacks) {
         if (action === "deploy") {
             await executeCommand(
-                `npm run cdk deploy ${stacks} -- --concurrency 4 --profile ${getProfile(stage)} -c stage=${stage} ${stage !== "prod" ? "--no-rollback" : ""}`
+                `npm run cdk deploy ${stacks} -- --concurrency 4 --profile ${getProfile(stage)} -c stage=${stage} ${!getAccountDetail(stage, "prod") ? "--no-rollback" : ""}`
             );
         } else if (action === "hotswap") {
             await executeCommand(
@@ -489,21 +453,10 @@ const deployStacks = async (
     }
 };
 
-const deployPipelineStack = async (): Promise<void> => {
-    const stage = PresetStage.Dev;
-    if (cdkContext.pipeline) {
-        await executeCommand(
-            `npm run cdk deploy -- -e ${cdkContext.projectId}-pipeline --profile ${getProfile(stage)} -c stage=${stage}`
-        );
-    } else {
-        printWarning('Ensure "pipeline" is set to "true" in the CDK configuration file.');
-    }
-};
-
 const deployFrontendStack = async (stage: string): Promise<void> => {
     if (
-        stage === "prod" &&
-        !(await prompt.confirm("Are you sure you want to deploy prod frontend?"))
+        getAccountDetail(stage, "prod") &&
+        !(await prompt.confirm(`Are you sure you want to deploy ${stage} frontend?`))
     ) {
         return;
     }
@@ -523,7 +476,7 @@ const createLocalEnvironment = async (stage: string) => {
     try {
         // create environment file
         writeFileSync(
-            path.join(frontendPath, ".env"),
+            join(frontendPath, ".env"),
             Object.entries(environmentVariables)
                 .map(([key, value]) => `${key}=${value}`)
                 .join("\n")
@@ -537,7 +490,7 @@ const createLocalEnvironment = async (stage: string) => {
     // create/update GraphQL config yaml
     const graphApiId = environmentVariables["CODEGEN_GRAPH_API_ID"];
     if (graphApiId) {
-        const configPath = path.join(frontendPath, ".graphqlconfig.yml");
+        const configPath = join(frontendPath, ".graphqlconfig.yml");
         let graphqlConfig = {
             projects: {
                 "Codegen Project": {
@@ -561,13 +514,13 @@ const createLocalEnvironment = async (stage: string) => {
         let successMessage = "Created GraphQL config file!";
         try {
             if (existsSync(configPath)) {
-                graphqlConfig = yaml.parse(readFileSync(configPath, "utf-8"));
+                graphqlConfig = parse(readFileSync(configPath, "utf-8"));
                 graphqlConfig.projects["Codegen Project"].extensions.amplify.apiId = graphApiId;
                 graphqlConfig.projects["Codegen Project"].extensions.amplify.region = region;
                 successMessage = "Updated GraphQL config file!";
             }
 
-            writeFileSync(configPath, yaml.stringify(graphqlConfig));
+            writeFileSync(configPath, stringify(graphqlConfig));
             printSuccess(successMessage);
             await executeCommand(`AWS_PROFILE=${getProfile(stage)} npm run -w frontend generate`);
         } catch (error) {
@@ -725,7 +678,6 @@ enum Actions {
     SYNTHESIZE_STACKS = "Synthesize CDK Stacks 🗂️",
     DEPLOY_STACKS = "Deploy CDK Stack(s) 🚀",
     HOTSWAP_STACKS = "Hotswap CDK Stack(s) 🔥",
-    DEPLOY_PIPELINE = "Deploy Pipeline Stack 🅿️",
     DEPLOY_FRONTEND = "Deploy Frontend Stack 🖥️",
     REFRESH_FRONTEND = "Refresh Frontend Environment 📦",
     TEST_FRONTEND = "Test Frontend Locally 💻",
@@ -812,13 +764,6 @@ program
     });
 
 program
-    .command("deploy-pipeline")
-    .description(Actions.DEPLOY_PIPELINE)
-    .action(async () => {
-        await deployPipelineStack();
-    });
-
-program
     .command("deploy-frontend")
     .description(Actions.DEPLOY_FRONTEND)
     .argument(stageArgument)
@@ -857,13 +802,8 @@ if (process.argv.length === 2) {
 
             while (true) {
                 try {
-                    const availableActions = Object.values(Actions).filter(
-                        (action) =>
-                            action !== Actions.DEPLOY_PIPELINE ||
-                            (stage === PresetStage.Dev && cdkContext.pipeline)
-                    );
                     const selection = await prompt
-                        .select(`action for ${stage}`, availableActions)
+                        .select(`action for ${stage}`, Object.values(Actions))
                         .catch(() => Actions.BACK);
 
                     if (selection === Actions.BACK) {
@@ -893,9 +833,6 @@ if (process.argv.length === 2) {
                             break;
                         case Actions.HOTSWAP_STACKS:
                             await deployStacks(stage, "hotswap");
-                            break;
-                        case Actions.DEPLOY_PIPELINE:
-                            await deployPipelineStack();
                             break;
                         case Actions.DEPLOY_FRONTEND:
                             await deployFrontendStack(stage);

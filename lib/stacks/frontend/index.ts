@@ -13,7 +13,7 @@ import { Bucket } from "aws-cdk-lib/aws-s3";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 import { NodejsBuild } from "deploy-time-build";
-import * as path from "path";
+import { join } from "path";
 import { FunctionPlatformInjector } from "../../common/blueprints";
 import { LoggingBucket } from "../../common/constructs/s3";
 import { Stack } from "../../common/constructs/stack";
@@ -114,7 +114,7 @@ export class FrontendDeployment extends Stack {
         const staticWebsiteBuild = new NodejsBuild(this, "staticWebsiteBuild", {
             assets: [
                 {
-                    path: path.join(__dirname, "app"),
+                    path: join(__dirname, "app"),
                     exclude: ["dist", "node_modules"],
                 },
             ],
