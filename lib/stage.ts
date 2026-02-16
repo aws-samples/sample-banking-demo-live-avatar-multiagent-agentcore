@@ -1,24 +1,38 @@
 import { Aspects, Stage, StageProps } from "aws-cdk-lib";
 import { AwsSolutionsChecks, NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
-import { Backend } from "./stacks/backend";
+import { Auth } from "./stacks/auth";
 import { Frontend, FrontendDeployment } from "./stacks/frontend";
 
 export class ApplicationStage extends Stage {
     constructor(scope: Construct, id: string, props?: StageProps) {
         super(scope, id, props);
 
-        const frontend = new Frontend(this, "frontend");
+        const frontend = new Frontend(this, "Frontend");
 
-        const backend = new Backend(this, "backend", {
+        const auth = new Auth(this, "Auth", {
             urls: frontend.urls,
         });
 
-        // this stack must be named frontendDeployment
-        new FrontendDeployment(this, "frontendDeployment", {
+        const environmentVariables = {
+            VITE_REGION: this.region!,
+            VITE_STAGE: this.stageName || "",
+            VITE_BUILD_VERSION: process.env.npm_package_version || "",
+            VITE_CALLBACK_URL: frontend.urls[0],
+            VITE_USER_POOL_ID: auth.userPool.userPoolId,
+            ...(auth.userPoolDomain && {
+                VITE_USER_POOL_DOMAIN_URL: auth.userPoolDomain.baseUrl().replace("https://", ""),
+            }),
+            VITE_USER_POOL_CLIENT_ID: auth.userPoolClient.userPoolClientId,
+            VITE_IDENTITY_POOL_ID: auth.identityPool.identityPoolId,
+        };
+
+        // this stack must be named FrontendDeployment
+        new FrontendDeployment(this, "FrontendDeployment", {
             websiteBucket: frontend.websiteBucket,
             distribution: frontend.distribution,
-            environmentVariables: backend.environmentVariables,
+            websiteAsset: frontend.websiteAsset,
+            environmentVariables,
         });
 
         NagSuppressions.addResourceSuppressions(

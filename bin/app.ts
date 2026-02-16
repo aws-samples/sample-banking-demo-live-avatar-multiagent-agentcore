@@ -1,9 +1,9 @@
 import { App, Tags } from "aws-cdk-lib";
-import { getPropertyInjectors } from "../lib/common/blueprints";
+import { PROPERTY_INJECTORS } from "../lib/common/blueprints";
 import { ApplicationStage } from "../lib/stage";
 
 const app = new App({
-    propertyInjectors: getPropertyInjectors(),
+    propertyInjectors: PROPERTY_INJECTORS,
 });
 
 const projectId = app.node.tryGetContext("projectId");

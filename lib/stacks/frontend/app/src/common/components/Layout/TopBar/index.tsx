@@ -1,5 +1,5 @@
-import { TopNavigation } from "@cloudscape-design/components";
-import { getCurrentUser, signOut } from "aws-amplify/auth";
+import TopNavigation from "@cloudscape-design/components/top-navigation";
+import { fetchAuthSession, signOut } from "aws-amplify/auth";
 import { useEffect, useState } from "react";
 import AboutModal from "./AboutModal";
 
@@ -9,12 +9,9 @@ const TopBar = () => {
 
     useEffect(() => {
         const getEmail = async () => {
-            const user = await getCurrentUser();
-            if (user.username.startsWith("Amazon")) {
-                setEmail(`${user.username.split("_")[1]}@amazon.com`);
-            } else {
-                setEmail(user.signInDetails?.loginId || user.username);
-            }
+            const session = await fetchAuthSession();
+            const payload = session.tokens?.idToken?.payload;
+            setEmail((payload?.email as string) || "");
         };
         getEmail();
     }, []);

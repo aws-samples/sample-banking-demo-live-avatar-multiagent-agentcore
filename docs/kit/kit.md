@@ -77,7 +77,7 @@ See [kit.ts](../../tools/kit.ts) for more context.
 
 ### Configure Credentials
 
-This operation will configure credentials using AWS Developer Account (ADA), IAM Identity Center, or short-term credentials.
+This operation will configure credentials using one of the supported credential methods.
 
 - Profiles are created with the naming convention `{stage}-{projectId}`.
 
@@ -87,7 +87,7 @@ npm run kit -- configure-credentials [stage] [option]
 
 #### Option
 
-- `-m`, `--method`: Credential method (AWS Developer Account, IAM Identity Center, Short-term Credentials)
+- `-m`, `--method`: Credential method (AWS Developer Account, Isengard CLI, AWS Login, IAM Identity Center, Short-term Credentials)
 
 ### Default Credentials
 
@@ -116,7 +116,7 @@ npm run kit -- configure-secret [stage] [options]
 
 ### Bootstrap Account
 
-This operation will bootstrap the selected account in the region configured and `us-east-1` as well as enable termination protection for prod accounts.
+This operation will bootstrap the selected account in the region configured and `us-east-1`.
 
 ```bash
 npm run kit -- bootstrap [stage]
@@ -137,9 +137,7 @@ npm run kit -- synth [stage]
 This operation will deploy your CDK code to the selected account.
 
 - If you elect to not just deploy all stacks, the operation will allow you to select exactly which stacks you would like to deploy to the selected account.
-
-* Stack dependencies will also be deployed alongside the selected stacks to ensure functionality.
-* The operation uses the `--concurrency` flag to deploy stacks in parallel for faster deployment.
+- For non-prod accounts, the `--no-rollback` flag is used to speed up iteration.
 
 ```bash
 npm run kit -- deploy [stage] [option]
@@ -184,19 +182,18 @@ npm run kit -- refresh-frontend [stage]
 
 ### Test Frontend Locally
 
-This operation will [refresh the local environment](#refresh-local-environment) then output a link to a [local server](http://localhost:3000/) for testing changes to your frontend React app.
+This operation will [refresh the frontend environment](#refresh-frontend-environment) then output a link to a [local server](http://localhost:3000/) for testing changes to your frontend React app.
 
+- This operation is only available in interactive mode.
 - Assuming there are no breaking changes, you should be able to see your changes reflected in the terminal and browser immediately.
 - After you **press enter to continue**, the operation will kill the local server so future changes don't clutter the terminal.
 
 ### Manage Cognito User
 
-This operation will get the user pool ID from the `.env` file then give you the option to create or delete a Cognito user in that user pool.
+This operation will get the user pool ID from the deployed CloudFormation stack outputs then give you the option to create or delete a Cognito user in that user pool.
 
-- When creating a user, you will be asked to enter an email address. A temporary password will be emailed to this address, enabling you to log in to the frontend application.
-
-    ![react-login](./images/react-login.png)
-    - You can use the **Reset Password** option to set a new password for the user if needed.
+- This operation is only available in interactive mode.
+- When creating a user, you will be asked to enter an email address. You can optionally set a permanent password immediately, or a temporary password will be emailed to the address, enabling you to log in to the frontend application.
     - Note that you cannot delete Amazon Federate users.
 
 ### Destroy CDK Stack(s)
@@ -306,9 +303,9 @@ These custom constructs set the necessary properties for creating a Federate-com
 
 - The Federate secret is imported from AWS Secrets Manager.
     - The stage determines which secret and issuer URL is used.
-- The project identifier is used as the **clientId** and as a prefix in the User Pool Domain URL to align with the [redirect URIs we set up in Federate](./demo-creation.md#federate-profiles).
+- The project identifier is used as the **clientId** and as a prefix in the User Pool Domain URL to align with the [redirect URIs we set up in Federate](https://w.amazon.com/bin/view/AWS-Marketing-Demo-Engineering/Federate-Tutorial).
 - Callback URLs reference the CloudFront distribution and `http://localhost:3000` for local development.
 
 You can simply replace the standard `UserPool` construct with `FederateUserPool` and the standard `UserPoolClient` construct with `FederateUserPoolClient` to add Midway authorization.
 
-See [federate.ts](../../lib/common/constructs/federate.ts) for more context.
+See [federate](../../lib/common/constructs/federate/index.ts) for more context.

@@ -18,9 +18,7 @@ Modules that are unique to a certain CDK construct or React component are coloca
 - Another S3 bucket is used for storing access logs.
 - A CloudFront-scoped AWS Web Application Firewall (WAF) web access control list (ACL) protects the CloudFront distribution with the following managed rules: AWSManagedRulesCommonRuleSet, AWSManagedRulesAmazonIpReputationList, and AWSManagedRulesBotControlRuleSet.
 
-#### [Backend Stack](./lib/stacks/backend/index.ts)
-
-##### [Auth](./lib/stacks/backend/constructs/auth.ts)
+#### [Auth Stack](./lib/stacks/auth.ts)
 
 - An Amazon Cognito UserPool, UserPoolClient, and IdentityPool are used for authentication.
 - A regional web ACL is created to protect Cognito and APIs.
