@@ -12,7 +12,7 @@ import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
-import { NodejsBuild } from "deploy-time-build";
+import { AssetConfig, NodejsBuild } from "deploy-time-build";
 import { join } from "path";
 import { FunctionPlatformInjector } from "../../common/blueprints";
 import { LoggingBucket } from "../../common/constructs/s3";
@@ -21,18 +21,19 @@ import { Stack } from "../../common/constructs/stack";
 export class Frontend extends Stack {
     public readonly websiteBucket: Bucket;
     public readonly distribution: Distribution;
+    public readonly websiteAsset: AssetConfig;
     public readonly urls: string[];
 
     constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
 
-        const loggingBucket = new LoggingBucket(this, "loggingBucket");
+        const loggingBucket = new LoggingBucket(this, "LoggingBucket");
 
-        const websiteBucket = new Bucket(this, "websiteBucket", {
+        const websiteBucket = new Bucket(this, "WebsiteBucket", {
             serverAccessLogsBucket: loggingBucket,
         });
 
-        const cloudfrontWebAcl = new CloudfrontWebAcl(this, "cloudfrontWebAcl", {
+        const cloudfrontWebAcl = new CloudfrontWebAcl(this, "CloudfrontWebAcl", {
             managedRules: [
                 {
                     vendor: "AWS",
@@ -50,7 +51,7 @@ export class Frontend extends Stack {
         });
         PropertyInjectors.of(cloudfrontWebAcl).add(new FunctionPlatformInjector());
 
-        const distribution = new Distribution(this, "distribution", {
+        const distribution = new Distribution(this, "Distribution", {
             defaultRootObject: "index.html",
             defaultBehavior: {
                 origin: S3BucketOrigin.withOriginAccessControl(websiteBucket),
@@ -88,13 +89,14 @@ export class Frontend extends Stack {
             },
         ]);
 
-        new CfnOutput(this, "url", {
-            value: distribution.distributionDomainName,
-            description: "CloudFront URL",
-        });
+        const websiteAsset: AssetConfig = {
+            path: join(__dirname, "app"),
+            exclude: ["dist", "node_modules"],
+        };
 
         this.websiteBucket = websiteBucket;
         this.distribution = distribution;
+        this.websiteAsset = websiteAsset;
         this.urls = [`https://${distribution.distributionDomainName}`, "http://localhost:3000"];
     }
 }
@@ -102,6 +104,7 @@ export class Frontend extends Stack {
 interface FrontendDeploymentProps extends StackProps {
     websiteBucket: Bucket;
     distribution: Distribution;
+    websiteAsset: AssetConfig;
     environmentVariables: Record<string, string>;
 }
 
@@ -109,15 +112,10 @@ export class FrontendDeployment extends Stack {
     constructor(scope: Construct, id: string, props: FrontendDeploymentProps) {
         super(scope, id, props);
 
-        const { websiteBucket, distribution, environmentVariables } = props;
+        const { websiteBucket, distribution, websiteAsset, environmentVariables } = props;
 
-        const staticWebsiteBuild = new NodejsBuild(this, "staticWebsiteBuild", {
-            assets: [
-                {
-                    path: join(__dirname, "app"),
-                    exclude: ["dist", "node_modules"],
-                },
-            ],
+        const staticWebsiteBuild = new NodejsBuild(this, "StaticWebsiteBuild", {
+            assets: [websiteAsset],
             destinationBucket: websiteBucket,
             outputSourceDirectory: "dist",
             buildCommands: ["npm install", "npm run build"],
@@ -137,7 +135,7 @@ export class FrontendDeployment extends Stack {
             true
         );
 
-        new CfnOutput(this, "environmentVariables", {
+        new CfnOutput(this, "EnvironmentVariables", {
             value: JSON.stringify(environmentVariables),
         });
     }

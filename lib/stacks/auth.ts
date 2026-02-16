@@ -1,7 +1,6 @@
-import { Duration } from "aws-cdk-lib";
+import { Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
 import {
     AccountRecovery,
-    ClientAttributes,
     FeaturePlan,
     UserPool,
     UserPoolClient,
@@ -15,15 +14,16 @@ import { CfnWebACL, CfnWebACLAssociation } from "aws-cdk-lib/aws-wafv2";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
 // @export {"deleteLines": 1}
-import { FederateUserPool, FederateUserPoolClient } from "../../../common/constructs/federate";
-import { createManagedRules } from "../../../common/utilities";
+import { FederateUserPool, FederateUserPoolClient } from "../common/constructs/federate";
+import { Stack } from "../common/constructs/stack";
+import { createManagedRules } from "../common/utilities";
 
-interface AuthProps {
+interface AuthProps extends StackProps {
     urls: string[];
     hydrationFunction?: Function;
 }
 
-export class Auth extends Construct {
+export class Auth extends Stack {
     public readonly userPool: UserPool;
     public readonly userPoolDomain?: UserPoolDomain;
     public readonly userPoolClient: UserPoolClient;
@@ -31,16 +31,22 @@ export class Auth extends Construct {
     public readonly regionalWebAclArn: string;
 
     constructor(scope: Construct, id: string, props: AuthProps) {
-        super(scope, id);
+        super(scope, id, props);
 
         const { urls, hydrationFunction } = props;
 
         // @export {"replace": "FederateUserPool", "with": "UserPool"}
-        const userPool = new FederateUserPool(this, "userPool", {
+        const userPool = new FederateUserPool(this, "UserPool", {
             // @export {"replace": "false,", "with": "true,"}
             selfSignUpEnabled: false,
             signInAliases: {
                 email: true,
+            },
+            signInPolicy: {
+                allowedFirstAuthFactors: {
+                    password: true,
+                    emailOtp: true,
+                },
             },
             autoVerify: {
                 email: true,
@@ -63,6 +69,7 @@ export class Auth extends Construct {
             lambdaTriggers: {
                 postConfirmation: hydrationFunction,
             },
+            removalPolicy: RemovalPolicy.DESTROY,
         });
         NagSuppressions.addResourceSuppressions(userPool, [
             {
@@ -75,31 +82,26 @@ export class Auth extends Construct {
             },
         ]);
 
-        new UserPoolGroup(this, "adminUserPoolGroup", {
+        new UserPoolGroup(this, "AdminUserPoolGroup", {
             userPool,
             groupName: "Admin",
         });
 
-        new UserPoolGroup(this, "usersUserPoolGroup", {
+        new UserPoolGroup(this, "UsersUserPoolGroup", {
             userPool,
             groupName: "Users",
         });
 
         const tokenValidity = Duration.hours(8);
         // @export {"replace": "FederateUserPoolClient", "with": "UserPoolClient"}
-        const userPoolClient = new FederateUserPoolClient(this, "userPoolClient", {
+        const userPoolClient = new FederateUserPoolClient(this, "UserPoolClient", {
             userPool,
-            generateSecret: false,
             refreshTokenValidity: tokenValidity,
             accessTokenValidity: tokenValidity,
             idTokenValidity: tokenValidity,
-            readAttributes: new ClientAttributes().withStandardAttributes({
-                email: true,
-            }),
             authFlows: {
-                adminUserPassword: true,
-                custom: true,
                 userSrp: true,
+                user: true,
             },
             oAuth: {
                 callbackUrls: urls,
@@ -107,7 +109,7 @@ export class Auth extends Construct {
             },
         });
 
-        const identityPool = new IdentityPool(this, "identityPool", {
+        const identityPool = new IdentityPool(this, "IdentityPool", {
             allowUnauthenticatedIdentities: false,
             authenticationProviders: {
                 userPools: [
@@ -126,7 +128,7 @@ export class Auth extends Construct {
             })
         );
 
-        const regionalWebAcl = new CfnWebACL(this, "regionalWebAcl", {
+        const regionalWebAcl = new CfnWebACL(this, "RegionalWebAcl", {
             defaultAction: { allow: {} },
             scope: "REGIONAL",
             visibilityConfig: {
@@ -196,14 +198,14 @@ export class Auth extends Construct {
         });
         const regionalWebAclArn = regionalWebAcl.attrArn;
 
-        new CfnWebACLAssociation(this, "userPoolWebAclAssociation", {
+        new CfnWebACLAssociation(this, "UserPoolWebAclAssociation", {
             resourceArn: userPool.userPoolArn,
             webAclArn: regionalWebAclArn,
         });
 
         this.userPool = userPool;
         // @export {"deleteLines": 1}
-        this.userPoolDomain = userPool.addDomain("userPoolDomain");
+        this.userPoolDomain = userPool.addDomain("UserPoolDomain");
         this.userPoolClient = userPoolClient;
         this.identityPool = identityPool;
         this.regionalWebAclArn = regionalWebAclArn;

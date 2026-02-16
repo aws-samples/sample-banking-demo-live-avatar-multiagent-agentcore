@@ -1,10 +1,10 @@
-# AWS Technical Product Marketing Demo Guidelines
+# AWS Marketing Demo Guidelines
 
 ## Technology Stack
 
 ### Infrastructure
 
-- Use serverless [managed services](https://aws.amazon.com/managed-services/) like AWS AppSync Events, Lambda, Fargate for Amazon ECS, API Gateway, DynamoDB, and Aurora DSQL.
+- Use serverless managed services like AWS AppSync Events, Lambda, Fargate for Amazon ECS, API Gateway, DynamoDB, and Aurora DSQL.
 - Use [Graviton](https://aws.amazon.com/ec2/graviton/) processors (ARM64).
 - Use the AWS CDK in TypeScript for infrastructure as code (IaC), following [best practices](https://docs.aws.amazon.com/prescriptive-guidance/latest/best-practices-cdk-TypeScript-iac/introduction.html).
     - Use [L2/L3 constructs](https://docs.aws.amazon.com/cdk/v2/guide/constructs.html#constructs-lib-levels) from `aws-cdk-lib` and [`generative-ai-cdk-constructs`](https://awslabs.github.io/generative-ai-cdk-constructs/) over L1/CloudFormation resources.
@@ -34,7 +34,7 @@
 
 ### Tooling
 
-- Use [Volta](https://volta.sh/)/NPM with Typescript.
+- Use [Volta](https://volta.sh/)/NPM with TypeScript.
 - Use [uv](https://docs.astral.sh/uv/#tools)/pip with Python.
 
 - Enforce code formatting.
@@ -58,9 +58,9 @@
 - Avoid repeated logic and duplicated data.
 - Break up code into logical units, keeping files from exceeding a couple hundred lines.
 - Read LLM prompts and other bulk language from text or JSON files.
-- Colocate related files.
+- Collocate related files.
     - Group code by stack/page, then by construct/component, and then by file type.
-    - Put code that is imported in just one file within a sibling file or directory.
+    - Put code that is imported into just one file within a sibling file or directory.
     - Put code that is imported in at least two files within a "common" folder in the parent directory of the lowest common ancestor.
 
     - ```
@@ -71,15 +71,14 @@
       │   │   ├── blueprints.ts
       │   │   └── utilities.ts
       │   ├── stacks/
+      │   │   ├── auth.ts
+      │   │   ├── storage/
+      │   │   │   ├── assets/
+      │   │   │   └── index.ts
       │   │   ├── backend/
-      │   │   │   ├── constructs/
-      │   │   │   │   ├── auth.ts
-      │   │   │   │   ├── api/
-      │   │   │   │   │   ├── functions/
-      │   │   │   │   │   └── index.ts
-      │   │   │   │   └── storage/
-      │   │   │   │       ├── assets/
-      │   │   │   │       └── index.ts
+      │   │   │   ├── api/
+      │   │   │   │   ├── functions/
+      │   │   │   │   └── index.ts
       │   │   │   └── index.ts
       │   │   └── frontend/
       │   │       ├── app/
@@ -116,6 +115,8 @@
 - Use intermediate variables and assign to instance properties at the end of the constructor.
 - Use try-catch blocks sparingly, only to handle expected errors.
 - Provide meaningful error messages and preserve the stack trace when throwing errors.
+- Use comments to add context to complex logic.
+    - Do not add comments to otherwise obvious/simple code.
 
 ## Distribution/Deployment
 
@@ -123,6 +124,7 @@
     - Do not reach out to external resources like public S3 buckets or APIs.
 - The demo should fully deploy and destroy with the standard [CDK commands](https://docs.aws.amazon.com/cdk/v2/guide/cli.html#cli-deploy).
     - Avoid requiring manual scripts or commands to be run.
+- Ensure the demo does not require redeployment to reset it.
 
 ## Security
 
@@ -138,33 +140,39 @@
 - Keep dependencies decently up-to-date and secure.
 - Do not allow users to upload content.
 - Validate user inputs.
-- Ensure the application can be run for different users in parallel, with proper data segregation and isolation.
+- Allow the user to manually refresh Cognito credentials.
 
 ## Compliance
 
+- Ensure content is aligned with AWS messaging.
+- Only use generated or approved public data.
 - Only use content with permissive open-source licenses.
 - Follow [AWS Responsible AI](https://aws.amazon.com/ai/responsible-ai/) guidelines.
 
 ## UI/UX, Accessibility, and Internationalization
 
+- Avoid taking freeform input.
+- Ensure the application can be run for different users in parallel.
+- Ensure the application can be quickly and easily restarted.
 - Implement [responsive website design](https://www.figma.com/resource-library/responsive-website-design/).
     - The UI should display well vertically and horizontally across various screen sizes.
+- Include support for a single display.
 - Use at least high definition (HD) resolution.
 - Ensure buttons and text are viewable from afar.
+- Ensure all links and QR codes go to expected locations.
 - Use ARIA attributes for dynamic components (dialogs, tabs, etc.)
 - Allow for easy theme changes.
     - Use [Tailwind theme variables](https://tailwindcss.com/docs/theme).
 - Allow for easy language changes.
     - Support right-to-left (RTL) for applicable languages.
-    - Use [i18n](https://react.i18next.com/).
+    - Use [react-i18next](https://react.i18next.com/).
     - Organize translation files under `src/locales/{en,zh,es,fr,pt,ja,ko}/`.
+- Ensure that all spelling, grammar, and punctuation are correct.
 
-## Documentation
+## Assets
 
-- Use comments to add context to complex logic.
-    - Do not add comments to otherwise obvious/simple code.
 - Maintain an up-to-date [README](../../README.demo.md).
-    - Include an [architecture diagram](../../architecture.drawio.png) with accurate and current Amazon/AWS service names and [icons](https://aws.amazon.com/architecture/icons/), alongside corresponding descriptions and design decisions.
+    - Include a [architecture diagram](../../architecture.drawio.png) with accurate and current Amazon/AWS service names and [icons](https://aws.amazon.com/architecture/icons/), alongside corresponding descriptions and design decisions.
     - Include pricing info for each AWS service used.
 
 <!-- @export {"id": "kit", "deleteFile": true} -->

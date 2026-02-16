@@ -1,6 +1,6 @@
 <!-- @export {"deleteFile": true} -->
 
-# AWS Technical Product Marketing Demo Starter Kit
+# AWS Marketing Demo Starter Kit
 
 ![cli-welcome](./docs/kit/images/cli-welcome.png)
 
@@ -16,7 +16,7 @@ To ensure your Mac, Windows, or Cloud Desktop machine is properly set up for use
 
 ## Demo Creation
 
-If your developer machine has been properly set up and you are creating a brand new demo, start [here](./docs/kit/demo-creation.md).
+If your developer machine has been properly set up and you are creating a brand new demo, start [here](https://w.amazon.com/bin/view/AWS-Marketing-Demo-Engineering/Demo-Starter-Kit#demo-creation).
 
 If your demo has already been created and you are looking to set up the project, skip to the [next section](#demo-setup).
 
@@ -24,7 +24,7 @@ If your demo has already been created and you are looking to set up the project,
 
 ## Demo Setup
 
-If your developer machine has been properly set up, your demo has already been created, and you are looking to set up the project, start [here](./docs/kit/demo-setup.md).
+If your developer machine has been properly set up, your demo has already been created, and you are looking to set up the project, start [here](https://w.amazon.com/bin/view/AWS-Marketing-Demo-Engineering/Demo-Starter-Kit#demo-setup).
 
 ## Documentation
 

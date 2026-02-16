@@ -5,6 +5,7 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
 import {
     AdminCreateUserCommand,
     AdminDeleteUserCommand,
+    AdminSetUserPasswordCommand,
     CognitoIdentityProviderClient,
     ListUsersCommand,
     ListUsersCommandOutput,
@@ -164,7 +165,7 @@ const getEnvironmentVariables = async (stage: string) => {
             credentials: getCredentials(stage),
         }).send(
             new DescribeStacksCommand({
-                StackName: `${stage}-${cdkContext.projectId}-frontendDeployment`,
+                StackName: `${stage}-${cdkContext.projectId}-FrontendDeployment`,
             })
         );
         outputs = response.Stacks?.[0].Outputs;
@@ -172,11 +173,11 @@ const getEnvironmentVariables = async (stage: string) => {
         throw new Error("Failed to get environment variables.", { cause: error });
     }
     const environmentVariablesOutput = outputs?.find(
-        (output) => output.OutputKey === "environmentVariables"
+        (output) => output.OutputKey === "EnvironmentVariables"
     )?.OutputValue;
     if (!environmentVariablesOutput) {
         throw new Error(
-            "Failed to find environment variables. Make sure the environmentVariables CloudFormation output exists."
+            "Failed to find environment variables. Make sure the EnvironmentVariables CloudFormation output exists."
         );
     } else return JSON.parse(environmentVariablesOutput) as Record<string, string>;
 };
@@ -266,17 +267,18 @@ const configureCredentials = async (stage: string, method?: string) => {
         (await prompt.select("credential method", [
             "AWS Developer Account",
             "Isengard CLI",
+            "AWS Login",
             "IAM Identity Center",
             "Short-term Credentials",
         ]));
     try {
-        if (credentialType === "IAM Identity Center") {
-            await executeCommand(`aws configure sso --profile ${profile}`);
-        } else if (credentialType === "Short-term Credentials") {
+        if (credentialType === "Short-term Credentials") {
             await executeCommand(`aws configure --profile ${profile}`);
-        } else if (credentialType === "AWS Developer Account") {
+        } else if (credentialType === "IAM Identity Center") {
+            await executeCommand(`aws configure sso --profile ${profile}`);
+        } else if (credentialType === "AWS Login") {
             await executeCommand(
-                `ada credentials update --profile=${profile} --account=${getAccountDetail(stage, "id")} --provider=isengard --role=Admin --once`
+                `aws login --profile ${profile} <<< "${getAccountDetail(stage, "region")}"`
             );
         } else if (credentialType === "Isengard CLI") {
             const temporaryFile = `/tmp/isengard-credentials.txt`;
@@ -293,6 +295,10 @@ const configureCredentials = async (stage: string, method?: string) => {
                 }
             }
             await executeCommand(`rm ${temporaryFile}`, true);
+        } else if (credentialType === "AWS Developer Account") {
+            await executeCommand(
+                `ada credentials update --profile=${profile} --account=${getAccountDetail(stage, "id")} --provider=isengard --role=Admin --once`
+            );
         }
         printSuccess(`Configured ${stage} credentials profile "${profile}"!`);
     } catch (error) {
@@ -409,15 +415,12 @@ const bootstrapAccount = async (stage: string) => {
     const account = cdkContext.accounts[stage];
 
     const bootstrapRegion = async (region: string) => {
-        printInfo(
-            `Bootstrapping${account.prod ? " and enabling termination protection for" : ""} ${stage} account in ${region}...`
-        );
+        printInfo(`Bootstrapping ${stage} account in ${region}...`);
         try {
             await executeCommand(
                 `npm run cdk bootstrap aws://${account.id}/${region} -- ` +
                     "--cloudformation-execution-policies arn:aws:iam::aws:policy/AdministratorAccess " +
-                    `--profile ${getProfile(stage)}` +
-                    (account.prod ? ` --termination-protection` : "")
+                    `--profile ${getProfile(stage)}`
             );
             printSuccess(`Bootstrapped ${stage} account in ${region}!`);
         } catch (error) {
@@ -443,7 +446,7 @@ const deployStacks = async (
     if (stacks) {
         if (action === "deploy") {
             await executeCommand(
-                `npm run cdk deploy ${stacks} -- --concurrency 4 --profile ${getProfile(stage)} -c stage=${stage} ${!getAccountDetail(stage, "prod") ? "--no-rollback" : ""}`
+                `npm run cdk deploy ${stacks} -- --profile ${getProfile(stage)} -c stage=${stage} ${!getAccountDetail(stage, "prod") ? "--no-rollback" : ""}`
             );
         } else if (action === "hotswap") {
             await executeCommand(
@@ -463,7 +466,7 @@ const deployFrontendStack = async (stage: string): Promise<void> => {
 
     await createLocalBuild();
     await executeCommand(
-        `npm run cdk deploy -- -e ${getStackPrefix(stage)}-frontendDeployment --profile ${getProfile(stage)} -c stage=${stage}`
+        `npm run cdk deploy -- -e ${getStackPrefix(stage)}-FrontendDeployment --profile ${getProfile(stage)} -c stage=${stage}`
     );
 };
 
@@ -588,6 +591,9 @@ const manageUser = async (stage: string) => {
     switch (manageUserOperation) {
         case UserManagementActions.CREATE_USER: {
             const email = await prompt.input("Enter an email address:");
+            const setPassword = await prompt.confirm(
+                "Would you like to just set a password now? Otherwise, a temporary password will be emailed to you."
+            );
             try {
                 await cognitoClient.send(
                     new AdminCreateUserCommand({
@@ -597,9 +603,23 @@ const manageUser = async (stage: string) => {
                             { Name: "email", Value: email },
                             { Name: "email_verified", Value: "true" },
                         ],
+                        MessageAction: setPassword ? "SUPPRESS" : undefined,
                     })
                 );
-                printSuccess(`Created user!\nEmailed temporary password to ${email}.`);
+                if (setPassword) {
+                    const password = await prompt.input("Enter a permanent password:", true);
+                    await cognitoClient.send(
+                        new AdminSetUserPasswordCommand({
+                            UserPoolId: userPoolId,
+                            Username: email,
+                            Password: password,
+                            Permanent: true,
+                        })
+                    );
+                }
+                printSuccess(
+                    `Created user!${!setPassword ? `\nEmailed temporary password to ${email}.` : ""}`
+                );
             } catch (error) {
                 throw new Error("Failed to create user.", { cause: error });
             }
@@ -705,7 +725,7 @@ program
     .argument(stageArgument)
     .option(
         "-m, --method <method>",
-        "credential method (AWS Developer Account, IAM Identity Center, Short-term Credentials)"
+        "credential method (AWS Developer Account, Isengard CLI, AWS Login, IAM Identity Center, Short-term Credentials)"
     )
     .action(async (stage, options) => {
         await configureCredentials(await getStageOption(stage), options.method);
@@ -788,7 +808,7 @@ if (!cdkContext.accounts) {
 if (process.argv.length === 2) {
     console.clear();
     console.log(bold(magentaBright("Welcome to the Demo Starter Kit!")));
-    console.log(bold(magentaBright("Created by AWS Technical Product Marketing 🧪")));
+    console.log(bold(magentaBright("Created by AWS Marketing Demo Engineering 🧪")));
 
     (async () => {
         while (true) {

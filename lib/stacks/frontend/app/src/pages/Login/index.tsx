@@ -2,13 +2,17 @@
 import { Authenticator, Button, Divider, Flex } from "@aws-amplify/ui-react";
 // @export {"deleteLines": 2}
 import { signInWithRedirect } from "aws-amplify/auth";
-import Amazicon from "./assets/amazicon.svg";
+import Amazicon from "./amazicon.svg";
 
 const Login = () => {
     return (
         <Authenticator
             // @export {"replace": "true", "with": "false"}
             hideSignUp={true}
+            passwordless={{
+                hiddenAuthMethods: ["SMS_OTP", "WEB_AUTHN"],
+                preferredAuthMethod: "PASSWORD",
+            }}
             variation="modal"
             // socialProviders={["amazon"]}
             // @export {"deleteLines": 19}

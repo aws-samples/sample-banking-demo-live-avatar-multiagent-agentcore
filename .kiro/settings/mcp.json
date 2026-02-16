@@ -19,17 +19,20 @@
                 "aws___search_documentation"
             ]
         },
-        "cdk": {
+        "aws-iac": {
             "command": "uvx",
-            "args": ["awslabs.cdk-mcp-server@latest"],
+            "args": ["awslabs.aws-iac-mcp-server@latest"],
+            "env": {
+                "FASTMCP_LOG_LEVEL": "ERROR"
+            },
             "disabled": false,
             "autoApprove": [
-                "CDKGeneralGuidance",
-                "ExplainCDKNagRule",
-                "CheckCDKNagSuppressions",
-                "GetAwsSolutionsConstructPattern",
-                "SearchGenAICDKConstructs",
-                "LambdaLayerDocumentationProvider"
+                "search_cdk_documentation",
+                "read_iac_documentation_page",
+                "search_cdk_samples_and_constructs",
+                "cdk_best_practices",
+                "troubleshoot_cloudformation_deployment",
+                "check_cloudformation_template_compliance"
             ]
         },
         "strands-agents": {
@@ -89,18 +92,23 @@
                 "browser_wait_for"
             ]
         },
+        "aws-diagram": {
+            "command": "uvx",
+            "args": ["awslabs.aws-diagram-mcp-server"],
+            "env": {
+                "FASTMCP_LOG_LEVEL": "ERROR"
+            },
+            "disabled": true,
+            "autoApprove": ["generate_diagram", "get_diagram_examples", "list_icons"]
+        },
         "synthetic-data": {
             "command": "uvx",
             "args": ["awslabs.syntheticdata-mcp-server"],
             "env": {
                 "FASTMCP_LOG_LEVEL": "ERROR"
             },
-            "disabled": false,
-            "autoApprove": [
-                "get_data_gen_instructions",
-                "validate_and_save_data",
-                "load_to_storage"
-            ]
+            "disabled": true,
+            "autoApprove": ["get_data_gen_instructions", "validate_and_save_data"]
         }
     }
 }

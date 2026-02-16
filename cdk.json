@@ -16,14 +16,9 @@
         ]
     },
     "context": {
-        "@export": { "deleteLines": 25 },
+        "@export": { "deleteLines": 20 },
         "projectId": "PROJECT-IDENTIFIER",
         "accounts": {
-            "staging": {
-                "id": "AWS_ACCOUNT_ID",
-                "region": "AWS_REGION",
-                "midway": true
-            },
             "prod": {
                 "id": "AWS_ACCOUNT_ID",
                 "region": "AWS_REGION",

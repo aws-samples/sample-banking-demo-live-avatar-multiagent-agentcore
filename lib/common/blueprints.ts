@@ -84,6 +84,8 @@ export class BucketInjector implements IPropertyInjector {
     }
 }
 
-export function getPropertyInjectors(): IPropertyInjector[] {
-    return [new LogGroupInjector(), new FunctionLogGroupInjector(), new BucketInjector()];
-}
+export const PROPERTY_INJECTORS: IPropertyInjector[] = [
+    new LogGroupInjector(),
+    new FunctionLogGroupInjector(),
+    new BucketInjector(),
+];
