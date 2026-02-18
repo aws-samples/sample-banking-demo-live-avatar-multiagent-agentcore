@@ -8,8 +8,3 @@ npm run cdk synth -- --quiet
 
 echo "\nBuilding frontend...\n"
 npm run -w frontend build
-
-echo "\nChecking with remote repository...\n"
-git fetch origin
-git pull origin main --ff-only
-git status

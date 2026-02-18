@@ -607,15 +607,22 @@ const manageUser = async (stage: string) => {
                     })
                 );
                 if (setPassword) {
-                    const password = await prompt.input("Enter a permanent password:", true);
-                    await cognitoClient.send(
-                        new AdminSetUserPasswordCommand({
-                            UserPoolId: userPoolId,
-                            Username: email,
-                            Password: password,
-                            Permanent: true,
-                        })
-                    );
+                    while (true) {
+                        const password = await prompt.input("Enter a permanent password:", true);
+                        try {
+                            await cognitoClient.send(
+                                new AdminSetUserPasswordCommand({
+                                    UserPoolId: userPoolId,
+                                    Username: email,
+                                    Password: password,
+                                    Permanent: true,
+                                })
+                            );
+                            break;
+                        } catch (error) {
+                            printWarning((error as Error).message);
+                        }
+                    }
                 }
                 printSuccess(
                     `Created user!${!setPassword ? `\nEmailed temporary password to ${email}.` : ""}`

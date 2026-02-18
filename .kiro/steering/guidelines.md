@@ -109,6 +109,7 @@
     - Configure workspaces in [`package.json`](../../package.json).
 - Don't keep unused code, dependencies, etc. in the repository.
 
+- Ensure there are no linting errors.
 - Do not fabricate data unless given permission.
 - Use named imports over namespace imports.
 - Use destructuring assignment for props.

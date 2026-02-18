@@ -41,7 +41,7 @@ The starter kit uses [`cdk.json`](../../cdk.json) to centrally track and manage 
 
 ### Project Identifier
 
-The **projectId** property must be less than 15 characters long and not use any special characters other than `-`. It serves as a unique project identifier for:
+The **projectId** property must be less than 15 characters long, not use any special characters other than `-`, and not contain the reserved words `aws`, `amazon`, or `cognito`. It serves as a unique project identifier for:
 
 - Creating a prefix for stack names and generated resource names, supporting multiple demo deployments in the same account.
 - Tagging all CDK resources in the project.
@@ -136,7 +136,8 @@ npm run kit -- synth [stage]
 
 This operation will deploy your CDK code to the selected account.
 
-- If you elect to not just deploy all stacks, the operation will allow you to select exactly which stacks you would like to deploy to the selected account.
+- If you elect to not just deploy all stacks, the operation will allow you to select which stacks you would like to deploy to the selected account.
+    - Stack dependencies will also be deployed alongside the selected stacks to ensure functionality.
 - For non-prod accounts, the `--no-rollback` flag is used to speed up iteration.
 
 ```bash
