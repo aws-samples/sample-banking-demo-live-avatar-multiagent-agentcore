@@ -12,6 +12,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import {
     CreateSecretCommand,
+    GetRandomPasswordCommand,
     GetSecretValueCommand,
     ResourceNotFoundException,
     SecretsManagerClient,
@@ -603,7 +604,22 @@ const manageUser = async (stage: string) => {
                             { Name: "email", Value: email },
                             { Name: "email_verified", Value: "true" },
                         ],
-                        MessageAction: setPassword ? "SUPPRESS" : undefined,
+                        ...(setPassword
+                            ? { MessageAction: "SUPPRESS" }
+                            : {
+                                  TemporaryPassword: (
+                                      await new SecretsManagerClient({
+                                          region: getAccountDetail(stage, "region"),
+                                          credentials: getCredentials(stage),
+                                      }).send(
+                                          new GetRandomPasswordCommand({
+                                              PasswordLength: 8,
+                                              RequireEachIncludedType: true,
+                                          })
+                                      )
+                                  ).RandomPassword,
+                                  DesiredDeliveryMediums: ["EMAIL"],
+                              }),
                     })
                 );
                 if (setPassword) {
