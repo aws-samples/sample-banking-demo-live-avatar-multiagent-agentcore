@@ -1,4 +1,5 @@
 import { CloudfrontWebAcl } from "@aws/pdk/static-website";
+import { AssetConfig, NodejsBuild } from "@cdklabs/deploy-time-build";
 import { CfnOutput, PropertyInjectors, StackProps } from "aws-cdk-lib";
 import {
     AllowedMethods,
@@ -12,7 +13,6 @@ import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
-import { AssetConfig, NodejsBuild } from "deploy-time-build";
 import { join } from "path";
 import { FunctionPlatformInjector } from "../../common/blueprints";
 import { LoggingBucket } from "../../common/constructs/s3";
