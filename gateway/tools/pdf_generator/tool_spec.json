@@ -1,0 +1,245 @@
+[
+    {
+        "name": "pdf_generator",
+        "description": "Generate a formatted PDF document and upload it to S3. Returns a presigned URL for downloading. Supports two formats: 'research' (default) for comprehensive research reports with cover page, TOC, executive summary, methodology, themed findings with confidence ratings, data analysis, recommendations with priority levels, appendices, and full references; 'menu' for restaurant menus with dish photos, descriptions, prices, and dietary tags.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "format": {
+                    "type": "string",
+                    "enum": ["research", "menu"],
+                    "default": "research",
+                    "description": "Output format: 'research' for a research report, 'menu' for a restaurant menu with photos"
+                },
+                "topic": {
+                    "type": "string",
+                    "description": "The title or topic of the report (required when format=research)"
+                },
+                "report": {
+                    "type": "object",
+                    "description": "The report content object (used when format=research). Pass ALL fields from the synthesizer output — the generator renders every section.",
+                    "properties": {
+                        "subtitle": {
+                            "type": "string",
+                            "description": "Descriptive subtitle for the cover page"
+                        },
+                        "executive_summary": {
+                            "type": "string",
+                            "description": "Full executive summary (500-800 words, multiple paragraphs)"
+                        },
+                        "methodology": {
+                            "type": "object",
+                            "description": "Research methodology details",
+                            "properties": {
+                                "approach": { "type": "string" },
+                                "sources_analyzed": { "type": "string" },
+                                "limitations": { "type": "string" },
+                                "timeframe": { "type": "string" }
+                            }
+                        },
+                        "key_findings": {
+                            "type": "array",
+                            "description": "Themed findings with detailed analysis and sub-findings",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "theme": { "type": "string", "description": "Theme name" },
+                                    "finding": {
+                                        "type": "string",
+                                        "description": "2-3 sentence summary"
+                                    },
+                                    "confidence": {
+                                        "type": "string",
+                                        "enum": ["high", "medium", "low"]
+                                    },
+                                    "detailed_analysis": {
+                                        "type": "string",
+                                        "description": "500-1000 words of in-depth analysis"
+                                    },
+                                    "sub_findings": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "point": { "type": "string" },
+                                                "evidence": { "type": "string" },
+                                                "implication": { "type": "string" }
+                                            }
+                                        }
+                                    },
+                                    "implications": { "type": "string" },
+                                    "sources": { "type": "array", "items": { "type": "string" } }
+                                }
+                            }
+                        },
+                        "data_analysis": {
+                            "type": "object",
+                            "description": "Quantitative and qualitative data analysis",
+                            "properties": {
+                                "quantitative": { "type": "array", "items": { "type": "string" } },
+                                "qualitative": { "type": "array", "items": { "type": "string" } },
+                                "trends": { "type": "array", "items": { "type": "string" } },
+                                "comparative": { "type": "array", "items": { "type": "string" } }
+                            }
+                        },
+                        "supporting_evidence": {
+                            "type": "object",
+                            "description": "Evidence organized by source type",
+                            "properties": {
+                                "knowledge_base": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                },
+                                "web_sources": { "type": "array", "items": { "type": "string" } },
+                                "cross_referenced": {
+                                    "type": "array",
+                                    "items": { "type": "string" }
+                                }
+                            }
+                        },
+                        "conflicts_and_uncertainties": {
+                            "type": "string",
+                            "description": "Areas of disagreement or uncertainty"
+                        },
+                        "conclusions": {
+                            "type": "string",
+                            "description": "Full conclusions (multiple paragraphs)"
+                        },
+                        "recommendations": {
+                            "type": "array",
+                            "description": "Detailed recommendations with priority and guidance",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "title": { "type": "string" },
+                                    "rationale": { "type": "string" },
+                                    "priority": {
+                                        "type": "string",
+                                        "enum": ["high", "medium", "low"]
+                                    },
+                                    "implementation_guidance": { "type": "string" },
+                                    "expected_impact": { "type": "string" }
+                                }
+                            }
+                        },
+                        "limitations_and_future_research": {
+                            "type": "string",
+                            "description": "Research limitations and future directions"
+                        },
+                        "appendices": {
+                            "type": "array",
+                            "description": "Additional supporting material",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "title": { "type": "string" },
+                                    "content": { "type": "string" }
+                                }
+                            }
+                        },
+                        "citations": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Full citation references"
+                        },
+                        "images": {
+                            "type": "array",
+                            "description": "Images to embed in the report (generated by Nova Canvas)",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "s3_key": {
+                                        "type": "string",
+                                        "description": "S3 key for the image (preferred for reliable embedding)"
+                                    },
+                                    "image_url": {
+                                        "type": "string",
+                                        "description": "Presigned URL for the image (fallback)"
+                                    },
+                                    "caption": {
+                                        "type": "string",
+                                        "description": "Image caption describing the visualization"
+                                    },
+                                    "placement_hint": {
+                                        "type": "string",
+                                        "description": "Where to place the image: 'after_executive_summary', 'section:<theme_name>', or 'appendix'"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Menu title (used when format=menu)"
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "User ID to tag the generated PDF with for per-user KB scoping (optional)"
+                },
+                "menu": {
+                    "type": "object",
+                    "description": "Menu content with sections and items (required when format=menu)",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Restaurant or menu title"
+                        },
+                        "sections": {
+                            "type": "array",
+                            "description": "Menu sections (e.g., Appetizers, Entrees, Desserts)",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "description": "Section name"
+                                    },
+                                    "items": {
+                                        "type": "array",
+                                        "description": "Dishes in this section",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string",
+                                                    "description": "Dish name"
+                                                },
+                                                "description": {
+                                                    "type": "string",
+                                                    "description": "Dish description"
+                                                },
+                                                "price": {
+                                                    "type": "string",
+                                                    "description": "Price (e.g., $24.00)"
+                                                },
+                                                "dietary": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    },
+                                                    "description": "Dietary tags (GF, V, VG, DF)"
+                                                },
+                                                "s3_key": {
+                                                    "type": "string",
+                                                    "description": "S3 key for the dish photo (preferred for reliable embedding)"
+                                                },
+                                                "image_url": {
+                                                    "type": "string",
+                                                    "description": "Presigned URL for the dish photo (fallback)"
+                                                }
+                                            },
+                                            "required": ["name"]
+                                        }
+                                    }
+                                },
+                                "required": ["name", "items"]
+                            }
+                        }
+                    }
+                }
+            },
+            "required": []
+        }
+    }
+]

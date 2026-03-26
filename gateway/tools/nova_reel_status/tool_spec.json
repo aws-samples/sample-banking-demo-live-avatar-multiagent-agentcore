@@ -1,0 +1,16 @@
+[
+    {
+        "name": "nova_reel_status",
+        "description": "Check the status of an asynchronous Nova Reel video generation job. Returns the current status and a presigned URL if the video is complete.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "invocation_arn": {
+                    "type": "string",
+                    "description": "The invocation ARN returned by nova_reel_generate when the job was submitted"
+                }
+            },
+            "required": ["invocation_arn"]
+        }
+    }
+]

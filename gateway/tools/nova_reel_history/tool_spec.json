@@ -1,0 +1,20 @@
+[
+    {
+        "name": "nova_reel_history",
+        "description": "Retrieve the video generation history for a session. Returns metadata, current job statuses, and fresh presigned URLs for completed videos.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "The session identifier to retrieve video history for"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of videos to return (optional, default = 10)"
+                }
+            },
+            "required": ["session_id"]
+        }
+    }
+]

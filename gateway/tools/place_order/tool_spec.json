@@ -1,0 +1,47 @@
+[
+    {
+        "name": "place_order",
+        "description": "Place a food or drink order at Ocean View Bistro. Use this when a user wants to order menu items.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "description": "List of menu items to order",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Name of the menu item"
+                            },
+                            "quantity": {
+                                "type": "integer",
+                                "description": "Quantity to order",
+                                "default": 1
+                            },
+                            "modifications": {
+                                "type": "string",
+                                "description": "Any modifications (e.g., 'no onions', 'extra sauce')"
+                            }
+                        },
+                        "required": ["name"]
+                    }
+                },
+                "special_instructions": {
+                    "type": "string",
+                    "description": "Special instructions for the entire order"
+                },
+                "guest_name": {
+                    "type": "string",
+                    "description": "Name of the guest placing the order"
+                },
+                "table_number": {
+                    "type": "string",
+                    "description": "Table number for dine-in orders"
+                }
+            },
+            "required": ["items"]
+        }
+    }
+]

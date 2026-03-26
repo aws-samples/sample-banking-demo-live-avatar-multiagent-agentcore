@@ -1,0 +1,26 @@
+[
+    {
+        "name": "data_sources",
+        "description": "Query public data sources for background research. Supports Wikipedia (encyclopedic summaries) and arXiv (academic papers). No API keys required.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "enum": ["wikipedia", "arxiv"],
+                    "description": "Data source to query: 'wikipedia' for encyclopedic background, 'arxiv' for academic papers and citations"
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Search query for the data source"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "default": 5,
+                    "description": "Maximum number of results to return (1-10)"
+                }
+            },
+            "required": ["source", "query"]
+        }
+    }
+]

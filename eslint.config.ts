@@ -3,7 +3,15 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default [
-    { ignores: ["**/dist", "**/cdk.out"] },
+    {
+        ignores: [
+            "**/dist",
+            "**/cdk.out",
+            "**/node_modules",
+            "**/*.d.ts",
+            "lib/stacks/frontend/app/**",
+        ],
+    },
     ...tseslint.configs.recommended,
     {
         files: ["**/*.{ts,tsx}"],

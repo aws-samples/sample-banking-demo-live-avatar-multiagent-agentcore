@@ -1,0 +1,40 @@
+[
+    {
+        "name": "nova_canvas_generate",
+        "description": "Generate a brand new image from a text prompt using Amazon Nova Canvas. The image is saved to S3 and a presigned URL is returned. Supports optional style, dimensions, and negative prompts.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "The text prompt describing the image to generate"
+                },
+                "width": {
+                    "type": "integer",
+                    "description": "Image width in pixels (optional, default = 512)"
+                },
+                "height": {
+                    "type": "integer",
+                    "description": "Image height in pixels (optional, default = 512)"
+                },
+                "style": {
+                    "type": "string",
+                    "description": "Style preset for the image, e.g. '3d animated family film', 'design sketch', 'flat vector illustration', 'graphic novel', 'maximalism', 'midcentury retro', 'soft digital painting' (optional)"
+                },
+                "negative_prompt": {
+                    "type": "string",
+                    "description": "What to avoid in the generated image (optional)"
+                },
+                "session_id": {
+                    "type": "string",
+                    "description": "Session identifier for organizing images (optional)"
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "User identifier for tracking image ownership (optional)"
+                }
+            },
+            "required": ["prompt"]
+        }
+    }
+]

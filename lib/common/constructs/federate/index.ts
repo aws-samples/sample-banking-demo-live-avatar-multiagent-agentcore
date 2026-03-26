@@ -102,8 +102,9 @@ export class FederateUserPoolClient extends UserPoolClient {
                                   clientSecret: SecretValue.secretsManager(
                                       `${getProfile(scope)}-federateSecret`
                                   ).unsafeUnwrap(),
+                                  scopes: ["openid"],
                                   attributeRequestMethod: OidcAttributeRequestMethod.GET,
-                                  issuerUrl: "https://idp.federate.amazon.com",
+                                  issuerUrl: "https://idp-integ.federate.amazon.com",
                               }).providerName
                           ),
                       ]

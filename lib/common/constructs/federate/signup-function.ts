@@ -16,10 +16,17 @@ const secretsClient = new SecretsManagerClient();
 
 export const handler = async (event: PreSignUpTriggerEvent) => {
     const { request, userName, triggerSource, userPoolId } = event;
-    const { email } = request.userAttributes;
+    let { email } = request.userAttributes;
     let username = userName;
 
     if (triggerSource === "PreSignUp_ExternalProvider") {
+        if (!email) {
+            const [, alias] = userName.split("_");
+            if (alias) {
+                email = `${alias}@amazon.com`;
+            }
+        }
+
         const listUsersResponse = await cognitoClient.send(
             new ListUsersCommand({
                 UserPoolId: userPoolId,

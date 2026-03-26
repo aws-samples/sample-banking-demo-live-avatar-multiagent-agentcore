@@ -1,6 +1,6 @@
 {
-    "name": "PROJECT-IDENTIFIER",
-    "description": "PROJECT-DESCRIPTION",
+    "name": "gartner-appdev-2026",
+    "description": "Gartner AppDev 2026 Research Agent Demo",
     "version": "5.0.0",
     "author": "AWS Marketing Demo Engineering",
     "license": "Apache License Version 2.0",

@@ -1,0 +1,25 @@
+[
+    {
+        "name": "save_memory",
+        "description": "Save a piece of information to the user's memory graph in Neptune Analytics. Use this to remember facts, preferences, or context about the user for future conversations.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "description": "The user identifier to associate this memory with"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The information to save as a memory"
+                },
+                "memory_type": {
+                    "type": "string",
+                    "description": "The type of memory: 'fact', 'preference', or 'context' (optional, default = 'fact')",
+                    "enum": ["fact", "preference", "context"]
+                }
+            },
+            "required": ["user_id", "content"]
+        }
+    }
+]

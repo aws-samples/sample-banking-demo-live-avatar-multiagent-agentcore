@@ -1,0 +1,24 @@
+[
+    {
+        "name": "recall_memories",
+        "description": "Retrieve saved memories from the user's Neptune Analytics memory graph. Optionally filter by a search query to find specific facts, preferences, or context.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "description": "The user identifier to retrieve memories for"
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Optional search query to filter memories by content (optional)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of memories to return (optional, default = 10)"
+                }
+            },
+            "required": ["user_id"]
+        }
+    }
+]

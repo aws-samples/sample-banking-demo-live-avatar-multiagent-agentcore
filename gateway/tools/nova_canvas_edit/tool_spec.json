@@ -1,0 +1,33 @@
+[
+    {
+        "name": "nova_canvas_edit",
+        "description": "Edit an existing image using Amazon Nova Canvas. Supports inpainting (modify a region), outpainting (extend the image), background removal, and generating image variations. Provide the source image URL and edit instructions.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "image_url": {
+                    "type": "string",
+                    "description": "URL of the source image to edit (presigned S3 URL or public URL)"
+                },
+                "edit_prompt": {
+                    "type": "string",
+                    "description": "Instructions for how to edit the image (required for all edit types except background_removal)"
+                },
+                "edit_type": {
+                    "type": "string",
+                    "description": "Type of edit to perform: 'inpainting', 'outpainting', 'background_removal', or 'variation' (optional, default = 'inpainting')",
+                    "enum": ["inpainting", "outpainting", "background_removal", "variation"]
+                },
+                "session_id": {
+                    "type": "string",
+                    "description": "Session identifier for organizing images (optional)"
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "User identifier for tracking image ownership (optional)"
+                }
+            },
+            "required": ["image_url"]
+        }
+    }
+]

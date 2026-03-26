@@ -1,0 +1,24 @@
+[
+    {
+        "name": "kb_search",
+        "description": "Search an Amazon Bedrock Knowledge Base for relevant documents using hybrid vector and keyword search. Returns formatted results with citations from ingested PDFs and documents.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query to find relevant documents in the knowledge base"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return (optional, default = 5)"
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "User ID to scope results. Returns user's own docs + shared base docs. (optional)"
+                }
+            },
+            "required": ["query"]
+        }
+    }
+]

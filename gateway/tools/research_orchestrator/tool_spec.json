@@ -1,0 +1,22 @@
+{
+    "name": "research_orchestrator",
+    "description": "Orchestrate a multi-agent research pipeline: planner decomposes the query, researcher gathers findings, synthesizer analyzes results, and pdf_writer generates a report.",
+    "inputSchema": {
+        "json": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The research query to investigate"
+                },
+                "output_format": {
+                    "type": "string",
+                    "enum": ["pdf", "text", "json"],
+                    "description": "Desired output format for the research report",
+                    "default": "pdf"
+                }
+            },
+            "required": ["query"]
+        }
+    }
+}

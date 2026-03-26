@@ -17,23 +17,33 @@
     },
     "context": {
         "@export": { "deleteLines": 20 },
-        "projectId": "PROJECT-IDENTIFIER",
+        "projectId": "gartner-appdev",
         "accounts": {
-            "prod": {
-                "id": "AWS_ACCOUNT_ID",
-                "region": "AWS_REGION",
-                "midway": true,
-                "prod": true
-            },
-            "ALIAS_1": {
-                "id": "AWS_ACCOUNT_ID",
-                "region": "AWS_REGION",
+            "dev": {
+                "id": "710562346591",
+                "region": "us-east-1",
                 "midway": true
-            },
-            "ALIAS_2": {
-                "id": "AWS_ACCOUNT_ID",
-                "region": "AWS_REGION"
             }
+        },
+        "stackNameBase": "gartner-appdev-2026",
+        "adminUserEmail": null,
+        "features": {
+            "avatar": true,
+            "knowledge_base": true,
+            "kb_backend": "s3-vectors",
+            "neptune": false,
+            "episodic_memory": true,
+            "agentcore_policy": false,
+            "agentcore_evaluations": false,
+            "server_side_tools": true,
+            "durable_functions": false,
+            "guardrails": true
+        },
+        "models": {
+            "orchestrator": "us.anthropic.claude-sonnet-4-6",
+            "avatar_sonic": "amazon.nova-2-sonic-v1:0",
+            "avatar_tool_selector": "amazon.nova-2-lite-v1:0",
+            "kb_embedding": "amazon.nova-2-multimodal-embeddings-v1:0"
         },
 
         "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
@@ -95,6 +105,8 @@
         "@aws-cdk/aws-lambda-nodejs:sdkV3ExcludeSmithyPackages": true,
         "@aws-cdk/aws-stepfunctions-tasks:fixRunEcsTaskPolicy": true,
         "@aws-cdk/aws-ec2:bastionHostUseAmazonLinux2023ByDefault": true,
-        "@aws-cdk/aws-route53-targets:userPoolDomainNameMethodWithoutCustomResource": true
+        "@aws-cdk/aws-route53-targets:userPoolDomainNameMethodWithoutCustomResource": true,
+        "@aws-cdk/aws-lambda:useCdkManagedLogGroup": true,
+        "@aws-cdk/core:aspectPrioritiesMutating": true
     }
 }

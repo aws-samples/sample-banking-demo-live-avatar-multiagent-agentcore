@@ -23,5 +23,5 @@
         "resolveJsonModule": true,
         "noEmit": true
     },
-    "exclude": ["node_modules", "cdk.out"]
+    "exclude": ["node_modules", "cdk.out", "lib/stacks/frontend/app"]
 }

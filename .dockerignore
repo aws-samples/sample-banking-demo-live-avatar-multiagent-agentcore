@@ -1,0 +1,11 @@
+node_modules/
+cdk.out/
+.venv/
+venv/
+*.js
+*.d.ts
+test/
+tools/
+lib/stacks/frontend/
+.git/
+.husky/

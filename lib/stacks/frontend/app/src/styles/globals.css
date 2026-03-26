@@ -1,0 +1,139 @@
+@import "@cloudscape-design/global-styles/index.css";
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+    --app-bg: #ffffff;
+    --app-bg-alt: #fafafa;
+    --app-border: rgba(0, 0, 0, 0.08);
+    --app-text: #1a1a1a;
+    --app-text-secondary: #545b64;
+    --app-user-bubble: #1f2937;
+    --app-user-bubble-text: #ffffff;
+    --app-input-bg: rgba(255, 255, 255, 0.8);
+    --app-tab-active-bg: #1f2937;
+    --app-tab-active-text: #ffffff;
+    --app-tab-inactive-text: #4b5563;
+    --app-tab-hover-bg: #f3f4f6;
+
+    /* Glassmorphic tokens */
+    --glass-bg: rgba(255, 255, 255, 0.65);
+    --glass-bg-strong: rgba(255, 255, 255, 0.85);
+    --glass-blur: blur(16px);
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+    --glass-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+    --glass-shadow-input: 0 2px 12px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
+    --card-shadow: 0 2px 16px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.03);
+    --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.awsui-dark-mode {
+    --app-bg: #0f1b2d;
+    --app-bg-alt: #192534;
+    --app-border: rgba(255, 255, 255, 0.08);
+    --app-text: #d1d5db;
+    --app-text-secondary: #9ca3af;
+    --app-user-bubble: #354150;
+    --app-user-bubble-text: #e5e7eb;
+    --app-input-bg: rgba(25, 37, 52, 0.8);
+    --app-tab-active-bg: #01a88d;
+    --app-tab-active-text: #ffffff;
+    --app-tab-inactive-text: #9ca3af;
+    --app-tab-hover-bg: #232f3e;
+
+    /* Glassmorphic tokens (dark) */
+    --glass-bg: rgba(15, 27, 45, 0.7);
+    --glass-bg-strong: rgba(25, 37, 52, 0.85);
+    --glass-blur: blur(16px);
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), 0 1px 4px rgba(0, 0, 0, 0.15);
+    --glass-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
+    --glass-shadow-input: 0 2px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    --card-shadow: 0 2px 16px rgba(0, 0, 0, 0.2), 0 1px 4px rgba(0, 0, 0, 0.12);
+    --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+@theme inline {
+    --color-brand-dark: hsl(197, 37%, 24%);
+    --color-brand-teal: hsl(173, 58%, 39%);
+    --color-brand-lime: hsl(43, 74%, 66%);
+    --color-brand-yellow: hsl(27, 87%, 67%);
+    --color-brand-orange: hsl(12, 76%, 61%);
+}
+
+@keyframes fade-in-up {
+    0% {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in-up {
+    animation: fade-in-up 2s ease-out;
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.8);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.6);
+        opacity: 0;
+    }
+}
+
+.animate-pulse-ring {
+    animation: pulse-ring 1.2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* ── Glassmorphic Cloudscape overrides ─────────────────────────── */
+
+/* Elevate all Cloudscape Containers with floating shadow */
+[class*="awsui_root_"][class*="awsui_variant-default_"],
+[class*="awsui_root_"][class*="awsui_variant-stacked_"] {
+    box-shadow: var(--card-shadow) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 12px !important;
+    transition:
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
+}
+
+[class*="awsui_root_"][class*="awsui_variant-default_"]:hover,
+[class*="awsui_root_"][class*="awsui_variant-stacked_"]:hover {
+    box-shadow: var(--card-shadow-hover) !important;
+}
+
+/* Expandable sections inside containers keep softer edges */
+[class*="awsui_root_"][class*="awsui_variant-container_"] {
+    box-shadow: var(--card-shadow) !important;
+    border-radius: 12px !important;
+}
+
+/* Glass panel utility */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+}
+
+.glass-panel-strong {
+    background: var(--glass-bg-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow-lg);
+}
+
+/* Vibrant header gradient (AWS dark navy → teal) */
+[class*="awsui_header_"][class*="awsui_visual-context_top-navigation"] {
+    background: linear-gradient(135deg, #232f3e 0%, #1a4b6e 50%, #01a88d 100%) !important;
+}

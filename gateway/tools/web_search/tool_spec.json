@@ -1,0 +1,20 @@
+[
+    {
+        "name": "web_search",
+        "description": "Search the web for up-to-date information using Amazon Nova grounding. Returns search results with URLs and snippets for current events, documentation, and general web content.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query to find information on the web"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return (optional, default = 5)"
+                }
+            },
+            "required": ["query"]
+        }
+    }
+]
