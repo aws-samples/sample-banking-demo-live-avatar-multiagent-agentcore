@@ -50,25 +50,40 @@ def _presign_s3_uri(s3_uri: str, page: int | None = None) -> str | None:
 
 
 def _retrieve_and_generate(knowledge_base_id: str, query: str, max_results: int, user_id: str = "") -> str:
-    """Query Bedrock Knowledge Base using RetrieveAndGenerate.
+    """Query Bedrock Knowledge Base using Retrieve.
 
-    When user_id is provided, filters results to show:
+    When user_id is provided, applies server-side Bedrock filtering to show:
     - Documents tagged with this user_id (user's own generated research)
     - Documents without a user_id tag (shared base documents)
+
+    S3 Vectors indexes all metadata as filterable by default. Bedrock translates
+    orAll/equals/notExists to S3 Vectors' native $or/$eq/$exists operators.
     """
     vector_config: dict = {
         "numberOfResults": max_results,
         "overrideSearchType": "SEMANTIC",
     }
 
-    # Per-user filtering: show user's docs + shared (untagged) base docs
+    # Input validation: reject obviously invalid user_id values
+    if user_id and (not isinstance(user_id, str) or len(user_id) > 256):
+        logger.warning("kb_search: invalid user_id rejected: %r", user_id)
+        user_id = ""
+
+    # Server-side per-user isolation (fail-closed)
     if user_id:
+        # User's own docs + shared (untagged) docs
         vector_config["filter"] = {
             "orAll": [
                 {"equals": {"key": "user_id", "value": user_id}},
                 {"notExists": {"key": "user_id"}},
             ]
         }
+    else:
+        # Fail-closed: only shared (untagged) documents when no user_id
+        vector_config["filter"] = {"notExists": {"key": "user_id"}}
+        logger.warning("kb_search: no user_id provided, returning shared docs only")
+
+    logger.info(f"Retrieving from KB {knowledge_base_id} with filter: {vector_config.get('filter', 'none')}")
 
     response = bedrock_agent.retrieve(
         knowledgeBaseId=knowledge_base_id,
@@ -77,6 +92,10 @@ def _retrieve_and_generate(knowledge_base_id: str, query: str, max_results: int,
     )
 
     results = response.get("retrievalResults", [])
+
+    logger.info(
+        f"Retrieved {len(results)} results, metadata keys: {[list(r.get('metadata', {}).keys()) for r in results[:3]]}"
+    )
 
     # Filter out Bedrock's internal permission-check files
     results = [

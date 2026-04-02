@@ -16,10 +16,6 @@
                 "session_id": {
                     "type": "string",
                     "description": "Session identifier for organizing videos (optional)"
-                },
-                "user_id": {
-                    "type": "string",
-                    "description": "User identifier for tracking video ownership (optional)"
                 }
             },
             "required": ["prompt"]

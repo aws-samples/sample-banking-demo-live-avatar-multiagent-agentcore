@@ -108,13 +108,15 @@ def create_avatar_agent(
     tools: list,
     persona: str = DEFAULT_PERSONA,
     voice_id: str = DEFAULT_VOICE_ID,
+    sensitivity: str = "MEDIUM",
 ) -> tuple[BidiAgent, str]:
     """Create a BidiAgent configured for voice conversation."""
     logger.info(
-        "[AVATAR] Creating BidiNovaSonicModel: model=%s, region=%s, voice=%s",
+        "[AVATAR] Creating BidiNovaSonicModel: model=%s, region=%s, voice=%s, sensitivity=%s",
         MODEL_ID,
         BEDROCK_REGION,
         voice_id,
+        sensitivity,
     )
 
     model = BidiNovaSonicModel(
@@ -132,7 +134,7 @@ def create_avatar_agent(
                 "temperature": 0.7,
             },
             "turn_detection": {
-                "endpointingSensitivity": "MEDIUM",
+                "endpointingSensitivity": sensitivity,
             },
         },
         client_config={
@@ -175,12 +177,16 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
     persona = websocket.query_params.get("persona", DEFAULT_PERSONA)
     voice_id = websocket.query_params.get("voice_id", DEFAULT_VOICE_ID)
     language = websocket.query_params.get("language", "en-US")
+    sensitivity = websocket.query_params.get("sensitivity", "MEDIUM").upper()
+    if sensitivity not in ("HIGH", "MEDIUM", "LOW"):
+        sensitivity = "MEDIUM"
 
     logger.info(
-        "[AVATAR] Connection params: persona=%s, voice=%s, language=%s",
+        "[AVATAR] Connection params: persona=%s, voice=%s, language=%s, sensitivity=%s",
         persona,
         voice_id,
         language,
+        sensitivity,
     )
 
     try:
@@ -195,7 +201,9 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
 
         # Step 3: Create BidiAgent with per-connection persona and voice
         logger.info("[AVATAR] Step 3: Creating BidiAgent...")
-        agent, system_prompt = create_avatar_agent(tools=[gateway_client], persona=persona, voice_id=voice_id)
+        agent, system_prompt = create_avatar_agent(
+            tools=[gateway_client], persona=persona, voice_id=voice_id, sensitivity=sensitivity
+        )
 
         # Step 4: Accept WebSocket and run bidirectional streaming
         logger.info("[AVATAR] Step 4: Accepting WebSocket and starting voice conversation...")
@@ -376,8 +384,11 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
                             )
 
                 await websocket.send_json(msg)
-            elif event_type in ("bidi_usage", "bidi_interruption"):
-                pass  # Internal metrics / interruption — silently drop
+            elif event_type == "bidi_connection_restart":
+                await websocket.send_json({"type": "connectionRefreshing"})
+                return
+            elif event_type in ("bidi_usage", "bidi_interruption", "bidi_response_start"):
+                pass  # Internal metrics / interruption / response start — silently drop
             else:
                 logger.debug("[AVATAR] Passing through unhandled event: %s", event_type)
                 await websocket.send_json(event)
@@ -385,6 +396,11 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
         await agent.run(
             inputs=[receive_wrapper],
             outputs=[send_wrapper],
+            invocation_state={
+                "session_id": session_id or "unknown",
+                "persona": persona,
+                "voice_id": voice_id,
+            },
         )
 
     except WebSocketDisconnect:

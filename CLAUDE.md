@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Multi-agent research platform built on Amazon Bedrock AgentCore + Strands Agents SDK + React 19. Two AgentCore Runtimes (orchestrator + avatar), an MCP Gateway with 16 Lambda tools, multi-agent research pipelines, Knowledge Base (S3 Vectors), AgentCore Memory, Bedrock Guardrails, and a Cloudscape + Tailwind frontend. Deployed as 4 CDK stacks.
+Multi-agent research platform built on Amazon Bedrock AgentCore + Strands Agents SDK + React 19. Two AgentCore Runtimes (orchestrator + avatar), an MCP Gateway with Lambda tools, multi-agent research pipelines, Knowledge Base (S3 Vectors), AgentCore Memory, Bedrock Guardrails, and a Cloudscape + Tailwind frontend. Deployed as 5 CDK stacks.
 
 ## Common Commands
 
@@ -27,7 +27,7 @@ npm run cdk -- <command>         # Direct CDK CLI (pinned to 2.1108.0)
 
 ## Architecture
 
-### CDK 4-Stack Pattern
+### CDK 5-Stack Pattern
 
 ```
 bin/app.ts → lib/stage.ts (ApplicationStage)
@@ -62,13 +62,14 @@ All agents run in-process within the orchestrator runtime. No HTTP between agent
 
 **Chatbot** (`mode=chatbot`): Single conversational agent with Bedrock Guardrails applied at model level.
 
-### Gateway — 16 MCP Lambda Tools
+### Gateway — MCP Lambda Tools
 
 All Lambda tools: Python 3.13, ARM64, auto-bundled with `requirements.txt` during synth.
 
 | Tool                    | Memory | Timeout | Purpose                                     |
 | ----------------------- | ------ | ------- | ------------------------------------------- |
 | `kb_search`             | 256 MB | 5 min   | Bedrock Knowledge Base hybrid search        |
+| `kb_ingest`             |        |         | S3 event → copy to KB bucket → start ingest |
 | `web_search`            | 256 MB | 5 min   | Nova Pro with web grounding                 |
 | `pdf_generator`         | 512 MB | 15 min  | ReportLab PDF generation → S3 presigned URL |
 | `nova_canvas_generate`  | 512 MB | 5 min   | Image generation via Nova Canvas            |
@@ -83,7 +84,7 @@ All Lambda tools: Python 3.13, ARM64, auto-bundled with `requirements.txt` durin
 | `retrieve_user_profile` | 128 MB | 1 min   | DynamoDB customer lookup                    |
 | `place_order`           | 256 MB | 5 min   | Order placement                             |
 | `data_sources`          | 128 MB | 30 s    | Data source listings                        |
-| `sample_tool`           | 128 MB | 5 min   | Minimal reference implementation            |
+| `sample_tool`           | 128 MB | 1 min   | Example tool template                       |
 
 Feature-gated: `research_orchestrator` (Lambda Durable Functions, `features.durable_functions`).
 
@@ -129,7 +130,7 @@ Applied globally via `App({ propertyInjectors })` in `bin/app.ts`. Never duplica
 
 ```
 bin/app.ts                          # CDK entrypoint, applies property injectors
-lib/stage.ts                        # ApplicationStage: 4 stacks + env var wiring
+lib/stage.ts                        # ApplicationStage: 5 stacks + env var wiring
 lib/common/feature-flags.ts         # Feature flags + model config from cdk.json
 lib/stacks/shared.ts                # DynamoDB, S3, KB (S3 Vectors), Neptune
 lib/stacks/auth.ts                  # Cognito, M2M client, WAF, Identity Pool
@@ -196,7 +197,7 @@ tools/export.ts                     # @export directive processor
 - **@export directives**: `tools/export.ts` processes these to strip internal code. Do not remove `// @export` or `<!-- @export -->` comments.
 - **Monorepo workspaces**: Frontend is at `lib/stacks/frontend/app`. Use `-w frontend` for frontend commands.
 - **Pre-commit hooks**: Husky + lint-staged runs Prettier/ESLint on TS and ruff on Python.
-- **Tests**: Jest with ts-jest, test files in `test/` matching `**/*.test.ts`.
+- **Tests**: Jest with ts-jest, test files expected in `test/` matching `**/*.test.ts` (directory not yet created).
 - **SSM for cross-stack refs**: Stacks communicate via SSM Parameter Store, not CloudFormation outputs.
 - **Tool handler pattern**: `gateway/tools/{name}/handler.py` receives MCP event, returns `{"content": [{"type": "text", "text": "..."}]}`.
 - **Named imports, destructuring props, intermediate constructor variables** — assign to `this.*` at end of constructor.
@@ -211,3 +212,4 @@ tools/export.ts                     # @export directive processor
 - **SSE anti-buffering**: Orchestrator monkey-patches Starlette's `StreamingResponse` to add `X-Accel-Buffering: no` header for AgentCore's nginx proxy.
 - **M2M token caching**: Cached with 60s safety margin before expiry. Uses Secrets Manager (not SSM) for client secret.
 - **Lambda cross-compilation**: Tool Lambdas with native deps use `--platform manylinux2014_aarch64 --only-binary :all:` for ARM64 bundling from macOS.
+- **Cross-stack export removal**: If you remove a resource from Shared that Backend imports (via CloudFormation exports), deploy Backend first with `--exclusively` to remove the import, then deploy Shared to drop the export. Otherwise CloudFormation will fail with "Cannot delete export ... as it is in use".

@@ -173,10 +173,6 @@
                     "type": "string",
                     "description": "Menu title (used when format=menu)"
                 },
-                "user_id": {
-                    "type": "string",
-                    "description": "User ID to tag the generated PDF with for per-user KB scoping (optional)"
-                },
                 "menu": {
                     "type": "object",
                     "description": "Menu content with sections and items (required when format=menu)",

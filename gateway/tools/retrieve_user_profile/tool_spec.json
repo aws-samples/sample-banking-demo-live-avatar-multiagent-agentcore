@@ -1,16 +1,11 @@
 [
     {
         "name": "retrieve_user_profile",
-        "description": "Retrieve a user's profile data from DynamoDB. Looks up the user by user_id or phone number and returns their full profile including preferences and account details.",
+        "description": "Retrieve the current user's profile data from DynamoDB. Returns their full profile including preferences and account details.",
         "inputSchema": {
             "type": "object",
-            "properties": {
-                "user_id": {
-                    "type": "string",
-                    "description": "The user identifier or phone number to look up"
-                }
-            },
-            "required": ["user_id"]
+            "properties": {},
+            "required": []
         }
     }
 ]

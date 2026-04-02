@@ -22,6 +22,7 @@ export default defineConfig({
                     "auth-vendor": ["react-oidc-context"],
                     "three-vendor": ["three"],
                     "flow-vendor": ["@xyflow/react"],
+                    "animation-vendor": ["animejs"],
                 },
             },
         },

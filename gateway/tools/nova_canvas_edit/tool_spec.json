@@ -21,10 +21,6 @@
                 "session_id": {
                     "type": "string",
                     "description": "Session identifier for organizing images (optional)"
-                },
-                "user_id": {
-                    "type": "string",
-                    "description": "User identifier for tracking image ownership (optional)"
                 }
             },
             "required": ["image_url"]

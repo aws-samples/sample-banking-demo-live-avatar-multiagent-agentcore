@@ -5,10 +5,6 @@
         "inputSchema": {
             "type": "object",
             "properties": {
-                "user_id": {
-                    "type": "string",
-                    "description": "The user identifier to associate this memory with"
-                },
                 "content": {
                     "type": "string",
                     "description": "The information to save as a memory"
@@ -19,7 +15,7 @@
                     "enum": ["fact", "preference", "context"]
                 }
             },
-            "required": ["user_id", "content"]
+            "required": ["content"]
         }
     }
 ]

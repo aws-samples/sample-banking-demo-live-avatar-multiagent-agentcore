@@ -603,7 +603,7 @@ export class Backend extends Stack {
                 },
                 defaultCorsPreflightOptions: {
                     allowOrigins: apigateway.Cors.ALL_ORIGINS,
-                    allowMethods: ["POST", "OPTIONS"],
+                    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
                     allowHeaders: ["Content-Type", "Authorization"],
                 },
             });

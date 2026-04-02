@@ -33,6 +33,7 @@ from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 from utils.auth import extract_user_id_from_context, get_gateway_access_token
 from utils.ssm import get_ssm_parameter
+from utils.tool_guard import UserScopeHook
 
 _SSE_HEADERS = {
     "X-Accel-Buffering": "no",
@@ -857,9 +858,39 @@ def _extract_plan_json(text: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 DEPTH_CONFIGS = {
-    "quick": {"sub_questions": "3-4", "search_budget": 15, "searches_per_q": "1-2"},
-    "standard": {"sub_questions": "5-8", "search_budget": 50, "searches_per_q": "2-3"},
-    "deep": {"sub_questions": "10-15", "search_budget": 100, "searches_per_q": "3-5"},
+    "quick": {
+        "sub_questions": "3-4",
+        "search_budget": 15,
+        "searches_per_q": "1-2",
+        "thinking_budget": 2048,
+        "max_tokens": 16384,
+        "exec_summary_words": "200-300",
+        "exec_summary_paragraphs": "2-3",
+        "finding_words": "150-300",
+        "researcher_paragraphs": "1-2",
+    },
+    "standard": {
+        "sub_questions": "5-8",
+        "search_budget": 50,
+        "searches_per_q": "2-3",
+        "thinking_budget": 10000,
+        "max_tokens": 65536,
+        "exec_summary_words": "500-800",
+        "exec_summary_paragraphs": "4-6",
+        "finding_words": "500-1000",
+        "researcher_paragraphs": "3-5",
+    },
+    "deep": {
+        "sub_questions": "10-15",
+        "search_budget": 100,
+        "searches_per_q": "3-5",
+        "thinking_budget": 16000,
+        "max_tokens": 65536,
+        "exec_summary_words": "800-1200",
+        "exec_summary_paragraphs": "6-8",
+        "finding_words": "800-1500",
+        "researcher_paragraphs": "3-5",
+    },
 }
 
 
@@ -896,7 +927,41 @@ def _apply_depth_to_phases(phases: list[dict], depth: str) -> list[dict]:
                 "2-3 searches per sub-question, 50 max total",
                 f"{cfg['searches_per_q']} searches per sub-question, {cfg['search_budget']} max total",
             )
+            # Adjust researcher paragraph depth
+            researcher_paras = cfg.get("researcher_paragraphs", "3-5")
+            prompt = prompt.replace(
+                "2-3 detailed paragraphs",
+                f"{researcher_paras} paragraphs",
+            )
+            prompt = prompt.replace(
+                "3-5 paragraphs of detailed research findings",
+                f"{researcher_paras} paragraphs of detailed research findings",
+            )
             p["prompt"] = prompt
+        elif phase["name"] == "synthesizer":
+            # Adjust synthesizer prompt for depth — quick mode should be concise
+            prompt = p["prompt"]
+            prompt = prompt.replace(
+                "500-800 words",
+                f"{cfg['exec_summary_words']} words",
+            )
+            prompt = prompt.replace(
+                "4-6 paragraphs",
+                f"{cfg['exec_summary_paragraphs']} paragraphs",
+            )
+            prompt = prompt.replace(
+                "500-1000 words",
+                f"{cfg['finding_words']} words",
+            )
+            # For quick mode, replace the "EXPAND and ORGANIZE" instruction with concise guidance
+            if depth == "quick":
+                prompt = prompt.replace(
+                    "CRITICAL: Do NOT summarize or compress the research findings. Your job is to EXPAND and\nORGANIZE them into a coherent narrative. Every data point, statistic, and quote from the\nresearcher should appear in your output.",
+                    "Be concise but thorough. Organize the research findings into a coherent narrative.\nInclude the most important data points and statistics.",
+                )
+            p["prompt"] = prompt
+            p["thinking_budget"] = cfg["thinking_budget"]
+            p["max_tokens"] = cfg["max_tokens"]
         adjusted.append(p)
     return adjusted
 
@@ -1015,24 +1080,20 @@ def _create_agent(
         region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
     )
 
-    # Append user_id context so agents can pass it to kb_search and pdf_generator
+    # Provide user context (user_id injection is handled by UserScopeHook, not prompt)
     augmented_prompt = system_prompt
     if user_id:
-        augmented_prompt += (
-            f'\n\nIMPORTANT: The current user\'s ID is "{user_id}". '
-            'When calling gateway_kb_search, include user_id="'
-            + user_id
-            + "\" so results are scoped to this user's documents plus shared base documents. "
-            'When calling gateway_pdf_generator, include user_id="'
-            + user_id
-            + '" so the generated PDF is tagged for this user.'
-        )
+        augmented_prompt += f'\n\nContext: You are assisting user "{user_id}".'
+
+    # Hook force-injects the verified user_id into all user-scoped tool calls
+    hooks = [UserScopeHook(user_id)] if user_id else []
 
     agent = Agent(
         name=f"{name.title().replace('_', '')}Agent",
         system_prompt=augmented_prompt,
         tools=[gateway_client],
         model=bedrock_model,
+        hooks=hooks,
         session_manager=session_manager,
         trace_attributes={
             "user.id": user_id,
@@ -1069,7 +1130,8 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
 
         model_id = requested_model or os.environ.get("MODEL_ID", "us.anthropic.claude-sonnet-4-6")
         print(f"[CHATBOT] Using model: {model_id}")
-        bedrock_model = _build_model(model_id, temperature=0.3)
+        guardrail_kwargs = _load_guardrail_params()
+        bedrock_model = _build_model(model_id, temperature=0.3, guardrail_latest_message=True, **guardrail_kwargs)
     except Exception as e:
         print(f"[CHATBOT] Setup failed: {e}")
         traceback.print_exc()
@@ -1527,12 +1589,17 @@ async def _run_pipeline(phases, query, user_id, session_id, requested_model="", 
         messages = phase["messages"]
         estimated_duration = phase["estimated_duration"]
         thinking_budget = phase.get("thinking_budget", 4096)
+        phase_max_tokens = phase.get("max_tokens", 65536)
 
-        print(f"[ORCHESTRATOR] === Starting phase: {agent_name} (thinking_budget={thinking_budget}) ===")
+        print(
+            f"[ORCHESTRATOR] === Starting phase: {agent_name} (thinking_budget={thinking_budget}, max_tokens={phase_max_tokens}) ==="
+        )
 
         # Build model per-phase — phases like synthesizer need a larger thinking
         # budget to reason over the full researcher output.
-        bedrock_model = _build_model(model_id, temperature=0.1, thinking_budget=thinking_budget)
+        bedrock_model = _build_model(
+            model_id, temperature=0.1, thinking_budget=thinking_budget, max_tokens=phase_max_tokens
+        )
 
         # Emit phase start
         yield {"agent_phase": {"agent": agent_name, "phase": role, "status": "start"}}

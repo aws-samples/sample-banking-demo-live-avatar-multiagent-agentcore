@@ -5,10 +5,6 @@
         "inputSchema": {
             "type": "object",
             "properties": {
-                "user_id": {
-                    "type": "string",
-                    "description": "The user identifier to retrieve memories for"
-                },
                 "query": {
                     "type": "string",
                     "description": "Optional search query to filter memories by content (optional)"
@@ -18,7 +14,7 @@
                     "description": "Maximum number of memories to return (optional, default = 10)"
                 }
             },
-            "required": ["user_id"]
+            "required": []
         }
     }
 ]
