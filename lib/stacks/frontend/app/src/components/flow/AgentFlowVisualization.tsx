@@ -23,8 +23,7 @@ const edgeTypes = { agentEdge: CustomEdge };
 const DEFAULT_AGENT_TO_PHASE: Record<string, PipelinePhase> = {
     planner: "planning",
     researcher: "research",
-    synthesizer: "synthesis",
-    pdf_writer: "report",
+    synthesizer: "synthesis & report",
     menu_designer: "design",
     menu_pdf_writer: "export",
 };
@@ -33,8 +32,7 @@ const DEFAULT_DESCRIPTIONS: Record<string, string> = {
     user: "Research query",
     planner: "Decompose query",
     researcher: "Collect findings",
-    synthesizer: "Analyze results",
-    pdf_writer: "Generate report",
+    synthesizer: "Synthesize & generate PDF",
     menu_designer: "Design menu",
     menu_pdf_writer: "Generate PDF",
 };

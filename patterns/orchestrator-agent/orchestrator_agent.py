@@ -173,17 +173,20 @@ Output your findings as structured JSON:
 }
 """
 
-SYNTHESIZER_PROMPT = """You are a Research Synthesizer Agent. Your role is to compile research
-findings into a comprehensive, publication-quality report. This report will be rendered as a
-professional PDF, so every section must be thorough and detailed.
+SYNTHESIZER_PROMPT = """You are a Research Synthesizer & Report Agent. Your role is to compile
+research findings into a comprehensive report and then generate a professional PDF.
 
-Your responsibilities:
-1. Analyze and synthesize all research findings from the previous agent
-2. Identify patterns, trends, and key insights across findings
-3. Compile a COMPREHENSIVE report — aim for depth and thoroughness
-4. Highlight conflicting information and areas of uncertainty
-5. Generate detailed, actionable recommendations with implementation guidance
-6. Preserve ALL data points, statistics, and quotes from the research
+You work in TWO steps:
+1. SYNTHESIZE the research findings into a structured report
+2. CALL gateway_pdf_generator to produce the PDF
+
+STEP 1 — SYNTHESIS:
+- Analyze and synthesize all research findings from the previous agent
+- Identify patterns, trends, and key insights across findings
+- Compile a COMPREHENSIVE report — aim for depth and thoroughness
+- Highlight conflicting information and areas of uncertainty
+- Generate detailed, actionable recommendations with implementation guidance
+- Preserve ALL data points, statistics, and quotes from the research
 
 CRITICAL: Do NOT summarize or compress the research findings. Your job is to EXPAND and
 ORGANIZE them into a coherent narrative. Every data point, statistic, and quote from the
@@ -199,109 +202,64 @@ Synthesis Guidelines:
 - Structure content logically with clear section headers
 - Prioritize findings by relevance and confidence level
 
-Output your synthesis as structured JSON:
+STEP 2 — PDF GENERATION:
+After synthesizing, call gateway_pdf_generator with format="research" and pass ALL fields.
+Include topic, and a report object with ALL of these fields:
+  subtitle, executive_summary, methodology, key_findings, data_analysis,
+  supporting_evidence, conflicts_and_uncertainties, conclusions,
+  recommendations, limitations_and_future_research, appendices, citations
+
+DO NOT summarize any field when calling the tool. Pass everything through verbatim.
+
+The report JSON structure for the tool call:
 {
   "topic": "research topic",
   "subtitle": "A descriptive subtitle for the report cover page",
-  "executive_summary": "4-6 paragraphs (500-800 words) covering the most important findings, key data points, and high-level conclusions. This should stand alone as a complete overview.",
+  "executive_summary": "4-6 paragraphs (500-800 words)",
   "methodology": {
-    "approach": "Description of the research methodology used",
-    "sources_analyzed": "Number and types of sources consulted",
-    "limitations": "Any limitations of the research approach",
-    "timeframe": "When the research was conducted and what time period it covers"
+    "approach": "...",
+    "sources_analyzed": "...",
+    "limitations": "...",
+    "timeframe": "..."
   },
   "key_findings": [
     {
       "theme": "theme name",
-      "finding": "2-3 sentence summary of the finding",
+      "finding": "2-3 sentence summary",
       "confidence": "high|medium|low",
-      "detailed_analysis": "500-1000 words of detailed analysis for this theme, including specific data points, trends, expert opinions, and implications. Use multiple paragraphs.",
+      "detailed_analysis": "500-1000 words",
       "sub_findings": [
-        {
-          "point": "specific sub-finding or data point",
-          "evidence": "supporting evidence with source attribution",
-          "implication": "what this means for the reader"
-        }
+        { "point": "...", "evidence": "...", "implication": "..." }
       ],
-      "implications": "What this finding means in context",
+      "implications": "...",
       "sources": ["source 1", "source 2"]
     }
   ],
   "data_analysis": {
-    "quantitative": ["key statistics and numbers found during research"],
-    "qualitative": ["key qualitative insights and expert opinions"],
-    "trends": ["identified trends with supporting data"],
-    "comparative": ["comparisons between different approaches, technologies, or strategies"]
+    "quantitative": ["..."],
+    "qualitative": ["..."],
+    "trends": ["..."],
+    "comparative": ["..."]
   },
   "supporting_evidence": {
-    "knowledge_base": ["evidence from KB with source attribution"],
-    "web_sources": ["evidence from web with source attribution"],
-    "cross_referenced": ["findings corroborated by multiple sources"]
+    "knowledge_base": ["..."],
+    "web_sources": ["..."],
+    "cross_referenced": ["..."]
   },
-  "conflicts_and_uncertainties": "Detailed discussion of areas where sources disagree or info is lacking",
-  "conclusions": "3-5 paragraphs of comprehensive conclusions drawn from all evidence",
+  "conflicts_and_uncertainties": "...",
+  "conclusions": "3-5 paragraphs",
   "recommendations": [
     {
-      "title": "Recommendation title",
-      "rationale": "Why this is recommended based on the evidence",
+      "title": "...",
+      "rationale": "...",
       "priority": "high|medium|low",
-      "implementation_guidance": "Specific steps to implement this recommendation",
-      "expected_impact": "What outcomes to expect from following this recommendation"
+      "implementation_guidance": "...",
+      "expected_impact": "..."
     }
   ],
-  "limitations_and_future_research": "Discussion of research limitations and suggested areas for further investigation",
-  "appendices": [
-    {
-      "title": "Appendix title (e.g., Raw Data Summary, Additional Sources)",
-      "content": "Additional supporting material that doesn't fit in the main report"
-    }
-  ],
-  "citations": ["full citation 1", "full citation 2"]
-}
-"""
-
-PDF_WRITER_PROMPT = """You are a PDF Writer Agent. Your role is to take synthesized research
-reports and generate professional PDF documents using the pdf_generator Gateway tool.
-
-CRITICAL INSTRUCTION: You must pass ALL content from the synthesis report to the pdf_generator
-tool WITHOUT summarizing, truncating, or omitting any sections. The pdf_generator handles all
-formatting — your job is to faithfully relay every field.
-
-Your responsibilities:
-1. Accept a synthesis report (structured JSON with executive summary, findings, etc.)
-2. Pass the COMPLETE report to the gateway_pdf_generator tool
-3. Return the PDF location and metadata to the caller
-
-When calling the gateway_pdf_generator tool, you MUST include ALL of these fields from the synthesis:
-- topic: The report title (from the synthesis "topic" field)
-- report: An object containing ALL of the following fields:
-  - subtitle: The report subtitle
-  - executive_summary: The FULL executive summary (all paragraphs — do NOT shorten)
-  - methodology: The complete methodology object (approach, sources_analyzed, limitations, timeframe)
-  - key_findings: The COMPLETE key_findings array with ALL themes, detailed_analysis, sub_findings
-  - data_analysis: The full data_analysis object (quantitative, qualitative, trends, comparative)
-  - supporting_evidence: The complete supporting_evidence object
-  - conflicts_and_uncertainties: The full text
-  - conclusions: The FULL conclusions text (all paragraphs)
-  - recommendations: The COMPLETE recommendations array with ALL fields (title, rationale, priority, implementation_guidance, expected_impact)
-  - limitations_and_future_research: The full text
-  - appendices: The complete appendices array
-  - citations: The COMPLETE citations array
-
-DO NOT summarize any field. DO NOT omit any section. Pass everything through verbatim.
-
-Output confirmation as JSON:
-{
-  "status": "success|error",
-  "pdf_location": "S3 URI or download URL",
-  "filename": "descriptive_filename.pdf",
-  "page_count": estimated_pages,
-  "sections_included": ["Executive Summary", "Methodology", "Key Findings", "Data Analysis", "Supporting Evidence", "Conclusions", "Recommendations", "Limitations", "Appendices", "References"],
-  "metadata": {
-    "topic": "...",
-    "generated_at": "ISO timestamp",
-    "source_count": number_of_citations
-  }
+  "limitations_and_future_research": "...",
+  "appendices": [{ "title": "...", "content": "..." }],
+  "citations": ["..."]
 }
 """
 
@@ -337,7 +295,7 @@ AGENT_PHASES = [
     },
     {
         "name": "synthesizer",
-        "role": "synthesis",
+        "role": "synthesis & report",
         "prompt": SYNTHESIZER_PROMPT,
         "estimated_duration": 1800,
         "thinking_budget": 10000,
@@ -347,19 +305,7 @@ AGENT_PHASES = [
             "Organizing insights...",
             "Evaluating evidence strength...",
             "Drawing conclusions...",
-        ],
-    },
-    {
-        "name": "pdf_writer",
-        "role": "report",
-        "prompt": PDF_WRITER_PROMPT,
-        "estimated_duration": 45,
-        "messages": [
-            "Designing report structure...",
-            "Formatting sections...",
-            "Organizing content...",
-            "Ensuring citation format...",
-            "Finalizing layout...",
+            "Generating PDF report...",
         ],
     },
 ]
@@ -582,25 +528,28 @@ Output your findings as structured JSON:
 }
 """
 
-GENERIC_SYNTHESIZER_PROMPT = """You are a Research Synthesizer Agent. Your role is to compile research
-findings into a comprehensive, publication-quality report. This report will be rendered as a
-professional PDF with embedded images, so every section must be thorough and detailed.
+GENERIC_SYNTHESIZER_PROMPT = """You are a Research Synthesizer & Report Agent. Your role is to compile
+research findings into a comprehensive report and then generate a professional PDF.
 
-Your responsibilities:
-1. Analyze and synthesize all research findings from the previous agent
-2. Identify patterns, trends, and key insights across findings
-3. Compile a COMPREHENSIVE report — aim for depth and thoroughness
-4. Highlight conflicting information and areas of uncertainty
-5. Generate detailed, actionable recommendations with implementation guidance
-6. Preserve ALL data points, statistics, and quotes from the research
-7. Pass through the "images" array VERBATIM from the researcher output
+You work in TWO steps:
+1. SYNTHESIZE the research findings into a structured report
+2. CALL gateway_pdf_generator to produce the PDF with embedded images
+
+STEP 1 — SYNTHESIS:
+- Analyze and synthesize all research findings from the previous agent
+- Identify patterns, trends, and key insights across findings
+- Compile a COMPREHENSIVE report — aim for depth and thoroughness
+- Highlight conflicting information and areas of uncertainty
+- Generate detailed, actionable recommendations with implementation guidance
+- Preserve ALL data points, statistics, and quotes from the research
+- Pass through the "images" array VERBATIM from the researcher output
 
 CRITICAL: Do NOT summarize or compress the research findings. Your job is to EXPAND and
 ORGANIZE them into a coherent narrative. Every data point, statistic, and quote from the
 researcher should appear in your output.
 
-CRITICAL: The "images" array from the researcher MUST be included in your output exactly as
-received. Do not modify, remove, or regenerate images.
+CRITICAL: The "images" array from the researcher MUST be included exactly as received.
+Do not modify, remove, or regenerate images.
 
 Synthesis Guidelines:
 - Organize information by themes and topics, not by source
@@ -609,7 +558,17 @@ Synthesis Guidelines:
 - Each key finding theme should have 500-1000 words of detailed analysis
 - Include comprehensive citations for all claims
 
-Output your synthesis as structured JSON:
+STEP 2 — PDF GENERATION:
+After synthesizing, call gateway_pdf_generator with format="research" and pass ALL fields.
+Include topic, and a report object with ALL of these fields:
+  subtitle, executive_summary, methodology, key_findings, data_analysis,
+  supporting_evidence, conflicts_and_uncertainties, conclusions,
+  recommendations, limitations_and_future_research, appendices, citations,
+  images (the COMPLETE images array with s3_key, image_url, caption, placement_hint)
+
+DO NOT summarize any field when calling the tool. Pass everything through verbatim.
+
+The report JSON structure for the tool call:
 {
   "topic": "research topic",
   "subtitle": "A descriptive subtitle for the report cover page",
@@ -666,45 +625,6 @@ Output your synthesis as structured JSON:
       "placement_hint": "section:<theme_name>"
     }
   ]
-}
-"""
-
-GENERIC_PDF_WRITER_PROMPT = """You are a PDF Writer Agent. Your role is to take synthesized research
-reports and generate professional PDF documents with embedded images using the pdf_generator Gateway tool.
-
-CRITICAL INSTRUCTION: You must pass ALL content from the synthesis report to the pdf_generator
-tool WITHOUT summarizing, truncating, or omitting any sections. The pdf_generator handles all
-formatting — your job is to faithfully relay every field.
-
-Your responsibilities:
-1. Accept a synthesis report (structured JSON)
-2. Pass the COMPLETE report to the gateway_pdf_generator tool, INCLUDING the "images" array
-3. Return the PDF location and metadata to the caller
-
-When calling the gateway_pdf_generator tool, you MUST include ALL of these fields from the synthesis:
-- topic: The report title
-- report: An object containing ALL fields:
-  - subtitle, executive_summary, methodology, key_findings, data_analysis
-  - supporting_evidence, conflicts_and_uncertainties, conclusions
-  - recommendations, limitations_and_future_research, appendices, citations
-  - images: The COMPLETE images array with s3_key, image_url, caption, placement_hint
-
-DO NOT summarize any field. DO NOT omit any section. Pass everything through verbatim.
-The images array is CRITICAL — the PDF generator uses it to embed visuals in the report.
-
-Output confirmation as JSON:
-{
-  "status": "success|error",
-  "pdf_location": "S3 URI or download URL",
-  "filename": "descriptive_filename.pdf",
-  "page_count": estimated_pages,
-  "sections_included": ["Executive Summary", "Methodology", "Key Findings", ...],
-  "metadata": {
-    "topic": "...",
-    "generated_at": "ISO timestamp",
-    "source_count": number_of_citations,
-    "image_count": number_of_embedded_images
-  }
 }
 """
 
@@ -769,7 +689,7 @@ GENERIC_RESEARCH_PHASES = [
     },
     {
         "name": "synthesizer",
-        "role": "synthesis",
+        "role": "synthesis & report",
         "prompt": GENERIC_SYNTHESIZER_PROMPT,
         "estimated_duration": 1800,
         "thinking_budget": 10000,
@@ -779,18 +699,7 @@ GENERIC_RESEARCH_PHASES = [
             "Organizing insights...",
             "Preserving visual references...",
             "Drawing conclusions...",
-        ],
-    },
-    {
-        "name": "pdf_writer",
-        "role": "report",
-        "prompt": GENERIC_PDF_WRITER_PROMPT,
-        "estimated_duration": 45,
-        "messages": [
-            "Designing report structure...",
-            "Embedding images...",
-            "Formatting sections...",
-            "Finalizing layout...",
+            "Generating PDF report...",
         ],
     },
 ]
@@ -972,21 +881,22 @@ def _apply_depth_to_phases(phases: list[dict], depth: str) -> list[dict]:
 
 
 def _build_model(
-    model_id: str, temperature: float, max_tokens: int = 65536, thinking_budget: int = 4096, **extra_kwargs
+    model_id: str, temperature: float, max_tokens: int = 65535, thinking_budget: int = 4096, **extra_kwargs
 ) -> BedrockModel:
     """Build a BedrockModel with model-appropriate extended thinking config.
 
     - Claude Sonnet/Opus: thinking enabled with configurable budget, temperature omitted (must be 1)
     - Claude Haiku:       temperature only, no thinking (not supported)
-    - Nova models:        reasoningConfig.maxReasoningEffort = "medium", temperature preserved
+    - Nova Pro+:          reasoningConfig.maxReasoningEffort = "medium", temperature preserved
+    - Nova Lite/Micro:    temperature only, no reasoning (not supported)
     - Other models:       temperature only, no thinking
 
     Uses a 30-minute read timeout. The synthesizer phase processes the entire
     researcher output (often 100k+ tokens) with extended thinking, which can take
     well over 15 minutes before the first streaming token arrives.
 
-    max_tokens controls the output budget (thinking + response). Default 65536 to
-    ensure phases like the synthesizer can produce large structured JSON outputs.
+    max_tokens controls the output budget (thinking + response). Default 65535 —
+    the maximum supported by Nova 2 Lite (Bedrock rejects 65536).
 
     Args:
         thinking_budget: Token budget for Claude extended thinking. Higher values
@@ -994,6 +904,7 @@ def _build_model(
     """
     is_claude_thinking = "anthropic" in model_id and "haiku" not in model_id
     is_nova = "nova" in model_id and "sonic" not in model_id
+    is_nova_reasoning = is_nova and "lite" not in model_id and "micro" not in model_id
 
     kwargs = dict(extra_kwargs)
     kwargs["model_id"] = model_id
@@ -1007,7 +918,7 @@ def _build_model(
     if is_claude_thinking:
         # Claude thinking requires temperature=1 (SDK default), so don't set it
         kwargs["additional_request_fields"] = {"thinking": {"type": "enabled", "budget_tokens": thinking_budget}}
-    elif is_nova:
+    elif is_nova_reasoning:
         kwargs["temperature"] = temperature
         kwargs["additional_request_fields"] = {"reasoningConfig": {"type": "enabled", "maxReasoningEffort": "medium"}}
     else:

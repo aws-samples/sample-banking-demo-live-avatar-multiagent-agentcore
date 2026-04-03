@@ -11,8 +11,11 @@ import type { PipelinePhase } from "@/lib/agentcore-client/types";
 const RESEARCH_PHASES: PhaseConfig[] = [
     { phase: "planning", label: "Planning", description: "Planning research" },
     { phase: "research", label: "Research", description: "Gathering information" },
-    { phase: "synthesis", label: "Synthesis", description: "Synthesizing findings" },
-    { phase: "report", label: "Report", description: "Generating report" },
+    {
+        phase: "synthesis & report",
+        label: "Synthesis & Report",
+        description: "Synthesizing findings and generating PDF",
+    },
 ];
 
 interface PhaseConfig {
@@ -43,8 +46,7 @@ function computePhaseRanges(phases: PhaseConfig[]): Record<string, [number, numb
 const DEFAULT_AGENT_TO_PHASE: Record<string, PipelinePhase> = {
     planner: "planning",
     researcher: "research",
-    synthesizer: "synthesis",
-    pdf_writer: "report",
+    synthesizer: "synthesis & report",
 };
 
 export function ResearchProgressBar({

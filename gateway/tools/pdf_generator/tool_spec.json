@@ -173,6 +173,10 @@
                     "type": "string",
                     "description": "Menu title (used when format=menu)"
                 },
+                "user_id": {
+                    "type": "string",
+                    "description": "Authenticated user identifier (injected by runtime)"
+                },
                 "menu": {
                     "type": "object",
                     "description": "Menu content with sections and items (required when format=menu)",

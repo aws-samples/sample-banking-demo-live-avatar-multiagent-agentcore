@@ -4,7 +4,12 @@
         "description": "Analyze conversation patterns and trends for a user by running analytics queries on the Neptune memory graph. Returns memory distribution by type, recent activity, and topic analysis.",
         "inputSchema": {
             "type": "object",
-            "properties": {},
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "description": "Authenticated user identifier (injected by runtime)"
+                }
+            },
             "required": []
         }
     }

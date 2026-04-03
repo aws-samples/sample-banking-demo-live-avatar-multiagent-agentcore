@@ -51,13 +51,7 @@ const HEARTBEAT_MESSAGES: Partial<Record<AgentId, string[]>> = {
         "Organizing insights into coherent structure...",
         "Evaluating strength of evidence...",
         "Drawing meaningful conclusions...",
-    ],
-    pdf_writer: [
-        "Designing report structure...",
-        "Organizing content for clarity...",
-        "Formatting sections and headings...",
-        "Ensuring proper citation format...",
-        "Finalizing report layout...",
+        "Generating PDF report...",
     ],
     menu_designer: [
         "Searching for matching dishes...",
@@ -74,8 +68,7 @@ const initialState: ResearchState = {
     phaseProgress: {
         planning: 0,
         research: 0,
-        synthesis: 0,
-        report: 0,
+        "synthesis & report": 0,
         design: 0,
         export: 0,
     },
@@ -107,7 +100,7 @@ function researchReducer(state: ResearchState, action: ResearchAction): Research
                     ...state.phaseProgress,
                     [action.phase]: 100,
                 },
-                isActive: action.phase !== "report" && action.phase !== "export",
+                isActive: action.phase !== "synthesis & report" && action.phase !== "export",
             };
 
         case "PHASE_PROGRESS":

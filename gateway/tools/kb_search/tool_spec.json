@@ -12,6 +12,10 @@
                 "max_results": {
                     "type": "integer",
                     "description": "Maximum number of results to return (optional, default = 5)"
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "Authenticated user identifier (injected by runtime)"
                 }
             },
             "required": ["query"]

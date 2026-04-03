@@ -13,6 +13,10 @@
                     "type": "string",
                     "description": "The type of memory: 'fact', 'preference', or 'context' (optional, default = 'fact')",
                     "enum": ["fact", "preference", "context"]
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "Authenticated user identifier (injected by runtime)"
                 }
             },
             "required": ["content"]

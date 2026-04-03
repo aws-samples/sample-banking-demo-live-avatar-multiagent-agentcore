@@ -43,8 +43,7 @@ export interface PipelineAgent {
 export const AGENT_PIPELINE: PipelineAgent[] = [
     { id: "planner", name: "Planner", color: "#0972d3" },
     { id: "researcher", name: "Researcher", color: "#5f61e6" },
-    { id: "synthesizer", name: "Synthesizer", color: "#539d43" },
-    { id: "pdf_writer", name: "PDF Writer", color: "#d91e18" },
+    { id: "synthesizer", name: "Synthesizer & Report", color: "#539d43" },
 ];
 
 /** Menu agent pipeline colors for visualization */

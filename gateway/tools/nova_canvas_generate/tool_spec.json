@@ -28,6 +28,10 @@
                 "session_id": {
                     "type": "string",
                     "description": "Session identifier for organizing images (optional)"
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "Authenticated user identifier (injected by runtime)"
                 }
             },
             "required": ["prompt"]

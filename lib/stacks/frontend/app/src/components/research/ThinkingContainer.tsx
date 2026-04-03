@@ -29,13 +29,7 @@ const HEARTBEAT_MESSAGES: Partial<Record<AgentId, string[]>> = {
         "Organizing insights into coherent structure...",
         "Evaluating strength of evidence...",
         "Drawing meaningful conclusions...",
-    ],
-    pdf_writer: [
-        "Designing report structure...",
-        "Organizing content for clarity...",
-        "Formatting sections and headings...",
-        "Ensuring proper citation format...",
-        "Finalizing report layout...",
+        "Generating PDF report...",
     ],
     menu_designer: [
         "Searching for matching dishes...",

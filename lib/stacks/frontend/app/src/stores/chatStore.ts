@@ -31,7 +31,7 @@ export type ResearchAction =
 const INITIAL_RESEARCH: ResearchSlot = {
     activeAgent: null,
     completedPhases: [],
-    phaseProgress: { planning: 0, research: 0, synthesis: 0, report: 0, design: 0, export: 0 },
+    phaseProgress: { planning: 0, research: 0, "synthesis & report": 0, design: 0, export: 0 },
     thinkingTraces: [],
     isActive: false,
 };
@@ -56,7 +56,7 @@ function reduceResearch(state: ResearchSlot, action: ResearchAction): ResearchSl
                     ? state.completedPhases
                     : [...state.completedPhases, action.phase],
                 phaseProgress: { ...state.phaseProgress, [action.phase]: 100 },
-                isActive: action.phase !== "report" && action.phase !== "export",
+                isActive: action.phase !== "synthesis & report" && action.phase !== "export",
             };
         case "PHASE_PROGRESS":
             return {

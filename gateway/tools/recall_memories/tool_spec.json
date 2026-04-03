@@ -12,6 +12,10 @@
                 "limit": {
                     "type": "integer",
                     "description": "Maximum number of memories to return (optional, default = 10)"
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "Authenticated user identifier (injected by runtime)"
                 }
             },
             "required": []

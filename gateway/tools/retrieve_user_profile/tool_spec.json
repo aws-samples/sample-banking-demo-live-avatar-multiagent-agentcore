@@ -4,7 +4,12 @@
         "description": "Retrieve the current user's profile data from DynamoDB. Returns their full profile including preferences and account details.",
         "inputSchema": {
             "type": "object",
-            "properties": {},
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "description": "Authenticated user identifier (injected by runtime)"
+                }
+            },
             "required": []
         }
     }
