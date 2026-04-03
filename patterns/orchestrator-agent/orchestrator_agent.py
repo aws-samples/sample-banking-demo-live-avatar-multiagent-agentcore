@@ -873,7 +873,7 @@ DEPTH_CONFIGS = {
         "search_budget": 50,
         "searches_per_q": "2-3",
         "thinking_budget": 10000,
-        "max_tokens": 65536,
+        "max_tokens": 65535,
         "exec_summary_words": "500-800",
         "exec_summary_paragraphs": "4-6",
         "finding_words": "500-1000",
@@ -884,7 +884,7 @@ DEPTH_CONFIGS = {
         "search_budget": 100,
         "searches_per_q": "3-5",
         "thinking_budget": 16000,
-        "max_tokens": 65536,
+        "max_tokens": 65535,
         "exec_summary_words": "800-1200",
         "exec_summary_paragraphs": "6-8",
         "finding_words": "800-1500",
@@ -1603,7 +1603,7 @@ async def _run_pipeline(phases, query, user_id, session_id, requested_model="", 
         messages = phase["messages"]
         estimated_duration = phase["estimated_duration"]
         thinking_budget = phase.get("thinking_budget", 4096)
-        phase_max_tokens = phase.get("max_tokens", 65536)
+        phase_max_tokens = phase.get("max_tokens", 65535)
 
         print(
             f"[ORCHESTRATOR] === Starting phase: {agent_name} (thinking_budget={thinking_budget}, max_tokens={phase_max_tokens}) ==="
