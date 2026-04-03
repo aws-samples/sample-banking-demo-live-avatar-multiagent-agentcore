@@ -52,12 +52,10 @@ def _presign_s3_uri(s3_uri: str, page: int | None = None) -> str | None:
 def _retrieve_and_generate(knowledge_base_id: str, query: str, max_results: int, user_id: str = "") -> str:
     """Query Bedrock Knowledge Base using Retrieve.
 
-    When user_id is provided, applies server-side Bedrock filtering to show:
-    - Documents tagged with this user_id (user's own generated research)
-    - Documents without a user_id tag (shared base documents)
-
-    S3 Vectors indexes all metadata as filterable by default. Bedrock translates
-    orAll/equals/notExists to S3 Vectors' native $or/$eq/$exists operators.
+    When user_id is provided, applies server-side Bedrock filtering to scope
+    results to that user's generated research. Untagged shared documents are
+    returned regardless because S3 Vectors only filters on documents that
+    actually have the metadata key present.
     """
     vector_config: dict = {
         "numberOfResults": max_results,
@@ -69,19 +67,14 @@ def _retrieve_and_generate(knowledge_base_id: str, query: str, max_results: int,
         logger.warning("kb_search: invalid user_id rejected: %r", user_id)
         user_id = ""
 
-    # Server-side per-user isolation (fail-closed)
+    # Optional per-user scoping: when user_id is provided, prefer that user's
+    # generated docs. Documents without a user_id tag (shared base docs) are
+    # always included because S3 Vectors only filters on documents that have
+    # the metadata key — untagged documents pass through automatically.
     if user_id:
-        # User's own docs + shared (untagged) docs
-        vector_config["filter"] = {
-            "orAll": [
-                {"equals": {"key": "user_id", "value": user_id}},
-                {"notExists": {"key": "user_id"}},
-            ]
-        }
+        vector_config["filter"] = {"equals": {"key": "user_id", "value": user_id}}
     else:
-        # Fail-closed: only shared (untagged) documents when no user_id
-        vector_config["filter"] = {"notExists": {"key": "user_id"}}
-        logger.warning("kb_search: no user_id provided, returning shared docs only")
+        logger.info("kb_search: no user_id provided, returning all docs (unfiltered)")
 
     logger.info(f"Retrieving from KB {knowledge_base_id} with filter: {vector_config.get('filter', 'none')}")
 
