@@ -90,6 +90,7 @@ export class FederateUserPoolClient extends UserPoolClient {
                 ...(props.supportedIdentityProviders ?? []),
                 ...(midway
                     ? [
+                          UserPoolClientIdentityProvider.COGNITO,
                           UserPoolClientIdentityProvider.custom(
                               new UserPoolIdentityProviderOidc(scope, "UserPoolIdentityProvider", {
                                   userPool: props.userPool as IUserPool,

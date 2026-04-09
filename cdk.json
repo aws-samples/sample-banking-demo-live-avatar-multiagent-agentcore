@@ -23,6 +23,16 @@
                 "id": "710562346591",
                 "region": "us-east-1",
                 "midway": true
+            },
+            "kamrult": {
+                "id": "814298260057",
+                "region": "us-east-1",
+                "midway": false
+            },
+            "prod": {
+                "id": "726463260787",
+                "region": "us-east-1",
+                "midway": true
             }
         },
         "stackNameBase": "gartner-appdev-2026",
