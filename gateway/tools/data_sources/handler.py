@@ -5,7 +5,7 @@ import json
 import logging
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
