@@ -98,7 +98,7 @@
             "env": {
                 "FASTMCP_LOG_LEVEL": "ERROR"
             },
-            "disabled": true,
+            "disabled": false,
             "autoApprove": ["generate_diagram", "get_diagram_examples", "list_icons"]
         },
         "synthetic-data": {

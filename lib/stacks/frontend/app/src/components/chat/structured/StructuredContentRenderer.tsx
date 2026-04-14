@@ -5,7 +5,14 @@ import { PlannerResultCard } from "./PlannerResultCard";
 import { ResearcherResultCard } from "./ResearcherResultCard";
 import { SynthesizerResultCard } from "./SynthesizerResultCard";
 import { PdfWriterResultCard } from "./PdfWriterResultCard";
-import type { PlannerResult, ResearcherResult, SynthesizerResult, PdfWriterResult } from "./types";
+import { WebsiteWriterResultCard } from "./WebsiteWriterResultCard";
+import type {
+    PlannerResult,
+    ResearcherResult,
+    SynthesizerResult,
+    PdfWriterResult,
+    WebsiteWriterResult,
+} from "./types";
 
 export function StructuredContentRenderer({ content }: { content: string }): JSX.Element | null {
     const parts = useMemo(() => splitContent(content), [content]);
@@ -45,6 +52,12 @@ export function StructuredContentRenderer({ content }: { content: string }): JSX
                         return (
                             <div key={i} className="my-2">
                                 <PdfWriterResultCard data={part.data as PdfWriterResult} />
+                            </div>
+                        );
+                    case "website_writer":
+                        return (
+                            <div key={i} className="my-2">
+                                <WebsiteWriterResultCard data={part.data as WebsiteWriterResult} />
                             </div>
                         );
                     default:

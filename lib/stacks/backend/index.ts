@@ -249,6 +249,7 @@ export class Backend extends Stack {
             { dir: "retrieve_user_profile", handler: "handler.handler", timeout: 60, memory: 128 },
             { dir: "place_order", handler: "handler.handler", timeout: 300, memory: 256 },
             { dir: "data_sources", handler: "handler.handler", timeout: 30, memory: 128 },
+            { dir: "website_generator", handler: "handler.handler", timeout: 900, memory: 512 },
             {
                 dir: "sample_tool",
                 handler: "sample_tool_lambda.handler",

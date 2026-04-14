@@ -4,6 +4,7 @@ export type {
     ResearcherResult,
     SynthesizerResult,
     PdfWriterResult,
+    WebsiteWriterResult,
     ContentPart,
     StructuredType,
 } from "./types";

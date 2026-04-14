@@ -1,0 +1,69 @@
+[
+    {
+        "name": "website_generator",
+        "description": "Generate or update a static restaurant website on S3. Two modes: 'create' builds a site from menu JSON. 'update' uploads new HTML to replace an existing site. Returns a presigned URL to view the site.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["create", "update"],
+                    "default": "create",
+                    "description": "'create' to build from menu data, 'update' to replace an existing site with new HTML"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Restaurant or website title (required for create)"
+                },
+                "menu": {
+                    "type": "object",
+                    "description": "Menu content with sections and items (required for create)",
+                    "properties": {
+                        "title": { "type": "string" },
+                        "sections": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": { "type": "string" },
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": { "type": "string" },
+                                                "description": { "type": "string" },
+                                                "price": { "type": "string" },
+                                                "dietary": {
+                                                    "type": "array",
+                                                    "items": { "type": "string" }
+                                                },
+                                                "s3_key": { "type": "string" },
+                                                "image_url": { "type": "string" }
+                                            },
+                                            "required": ["name"]
+                                        }
+                                    }
+                                },
+                                "required": ["name", "items"]
+                            }
+                        }
+                    }
+                },
+                "s3_key": {
+                    "type": "string",
+                    "description": "S3 key of the existing website to update (required for update)"
+                },
+                "html": {
+                    "type": "string",
+                    "description": "Complete HTML content to upload (required for update). You generate this HTML yourself based on the user's design instructions."
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "Authenticated user identifier (injected by runtime)"
+                }
+            },
+            "required": []
+        }
+    }
+]

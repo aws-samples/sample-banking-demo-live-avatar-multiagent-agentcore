@@ -1,0 +1,220 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+import json
+import logging
+import os
+import uuid
+from datetime import datetime, timezone
+from html import escape
+
+import boto3
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+s3_client = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+REPORTS_BUCKET = os.environ.get("REPORTS_BUCKET", "")
+IMAGES_BUCKET = os.environ.get("IMAGES_BUCKET", "")
+
+DIETARY_LABELS = {"V": "Vegetarian", "VG": "Vegan", "GF": "Gluten-Free", "DF": "Dairy-Free"}
+
+
+def _get_image_url(s3_key: str, image_url: str = "") -> str:
+    """Get a presigned URL for the image."""
+    try:
+        if s3_key and IMAGES_BUCKET:
+            return s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": IMAGES_BUCKET, "Key": s3_key},
+                ExpiresIn=3600,
+            )
+    except Exception:
+        logger.warning("Failed to generate presigned URL for: %s", s3_key, exc_info=True)
+    return image_url or ""
+
+
+def _upload_html(html: str, s3_key: str, user_id: str = "") -> str:
+    """Upload HTML to S3 and return presigned URL."""
+    s3_client.put_object(
+        Bucket=REPORTS_BUCKET,
+        Key=s3_key,
+        Body=html.encode("utf-8"),
+        ContentType="text/html",
+        Metadata={
+            "generated_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "pipeline": "menu_website",
+            **({"user_id": user_id} if user_id else {}),
+        },
+    )
+    return s3_client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": REPORTS_BUCKET, "Key": s3_key},
+        ExpiresIn=3600,
+    )
+
+
+def _render_html(title: str, menu: dict) -> str:
+    """Render a self-contained HTML restaurant website from menu data."""
+    menu_title = escape(menu.get("title", title))
+    sections = menu.get("sections", [])
+
+    nav_items = ""
+    for section in sections:
+        sid = escape(section["name"].lower().replace(" ", "-"))
+        nav_items += f'<a href="#{sid}" class="hover:text-amber-400 transition">{escape(section["name"])}</a>\n'
+
+    sections_html = ""
+    for section in sections:
+        sid = escape(section["name"].lower().replace(" ", "-"))
+        items_html = ""
+        for item in section.get("items", []):
+            img_uri = _get_image_url(item.get("s3_key", ""), item.get("image_url", ""))
+            img_tag = (
+                f'<img src="{img_uri}" alt="{escape(item["name"])}" '
+                f'class="w-full h-48 object-cover rounded-lg mb-4" loading="lazy"/>'
+                if img_uri
+                else ""
+            )
+
+            badges = ""
+            for tag in item.get("dietary", []):
+                label = DIETARY_LABELS.get(tag, tag)
+                badges += (
+                    f'<span class="inline-block text-xs font-semibold px-2 py-0.5 rounded-full '
+                    f'border border-gray-300 text-gray-600">{escape(label)}</span>\n'
+                )
+
+            price = escape(item.get("price", "")) if item.get("price") else ""
+            desc = escape(item.get("description", ""))
+
+            items_html += f"""
+            <div class="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition">
+                {img_tag}
+                <div class="p-5">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-lg font-bold text-gray-900">{escape(item["name"])}</h3>
+                        <span class="text-lg font-semibold text-amber-700 whitespace-nowrap ml-3">{price}</span>
+                    </div>
+                    <p class="text-gray-600 text-sm mb-3">{desc}</p>
+                    <div class="flex flex-wrap gap-1">{badges}</div>
+                </div>
+            </div>"""
+
+        sections_html += f"""
+        <section id="{sid}" class="mb-16">
+            <h2 class="text-3xl font-bold text-gray-900 mb-8 border-b-2 border-amber-500 pb-3">
+                {escape(section["name"])}
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {items_html}
+            </div>
+        </section>"""
+
+    year = datetime.now(timezone.utc).year
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>{menu_title}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html {{ scroll-behavior: smooth; }}
+        body {{ font-family: 'Georgia', serif; }}
+    </style>
+</head>
+<body class="bg-stone-50 text-gray-800">
+    <header class="bg-gray-900 text-white sticky top-0 z-50 shadow-lg">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <h1 class="text-2xl font-bold tracking-wide">{menu_title}</h1>
+            <nav class="flex gap-6 text-sm uppercase tracking-wider">{nav_items}</nav>
+        </div>
+    </header>
+    <div class="bg-gray-900 text-white py-20 text-center">
+        <h2 class="text-5xl font-bold mb-4">{menu_title}</h2>
+        <p class="text-lg text-gray-300">Crafted with passion, served with pride</p>
+    </div>
+    <main class="max-w-6xl mx-auto px-6 py-16">{sections_html}</main>
+    <footer class="bg-gray-900 text-gray-400 text-center py-8 text-sm">
+        <p>&copy; {year} {menu_title}. Generated by AI Menu Designer.</p>
+    </footer>
+</body>
+</html>"""
+
+
+def handler(event, context):
+    """Website generator Lambda handler."""
+    logger.info("Received event keys: %s", list(event.keys()))
+
+    try:
+        delimiter = "___"
+        original_tool_name = context.client_context.custom["bedrockAgentCoreToolName"]
+        tool_name = original_tool_name[original_tool_name.index(delimiter) + len(delimiter) :]
+
+        if tool_name != "website_generator":
+            return {"error": f"This Lambda only supports 'website_generator', received: {tool_name}"}
+
+        mode = event.get("mode", "create")
+        user_id = event.get("user_id", "")
+
+        if mode == "update":
+            s3_key = event.get("s3_key", "")
+            html = event.get("html", "")
+            if not s3_key or not html:
+                return {"error": "update mode requires 's3_key' and 'html'"}
+
+            presigned_url = _upload_html(html, s3_key, user_id)
+            logger.info("Update successful: s3_key=%s url_length=%d", s3_key, len(presigned_url))
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "success": True,
+                                "url": presigned_url,
+                                "s3_key": s3_key,
+                            }
+                        ),
+                    }
+                ]
+            }
+        else:
+            title = event.get("title", "Restaurant Menu")
+            menu = event.get("menu", {})
+            if not menu.get("sections"):
+                return {"error": "Missing required parameter: menu with sections"}
+
+            html = _render_html(title, menu)
+            site_id = str(uuid.uuid4())[:8]
+            safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)[:50].strip().replace(" ", "-")
+            s3_key = f"websites/{safe_title}-{site_id}/index.html"
+
+            presigned_url = _upload_html(html, s3_key, user_id)
+            section_names = [s["name"] for s in menu.get("sections", [])]
+            item_count = sum(len(s.get("items", [])) for s in menu.get("sections", []))
+
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "success": True,
+                                "url": presigned_url,
+                                "s3_key": s3_key,
+                                "bucket": REPORTS_BUCKET,
+                                "title": title,
+                                "sections": section_names,
+                                "item_count": item_count,
+                            }
+                        ),
+                    }
+                ]
+            }
+
+    except Exception as e:
+        logger.error("Error: %s", str(e), exc_info=True)
+        return {"error": f"Internal server error: {str(e)}"}

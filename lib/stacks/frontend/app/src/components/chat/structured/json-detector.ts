@@ -9,6 +9,7 @@ export function identifySchema(data: unknown): StructuredType | null {
     if ("question" in obj && ("kb_findings" in obj || "web_findings" in obj)) return "researcher";
     if ("executive_summary" in obj && "key_findings" in obj) return "synthesizer";
     if ("status" in obj && ("pdf_location" in obj || "filename" in obj)) return "pdf_writer";
+    if ("success" in obj && "s3_key" in obj && "url" in obj) return "website_writer";
 
     return null;
 }

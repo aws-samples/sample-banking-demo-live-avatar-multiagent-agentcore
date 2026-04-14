@@ -393,6 +393,34 @@ Output confirmation as JSON:
 }
 """
 
+MENU_WEBSITE_WRITER_PROMPT = """You are a Menu Website Writer Agent. Your role is to take the designed
+menu and generate a restaurant website using the website_generator Gateway tool.
+
+Your responsibilities:
+1. Accept the menu data from the previous agent (structured JSON with sections and items)
+2. Call the gateway_website_generator tool with mode="create", the title, and menu data
+3. Return the website URL to the caller
+
+When calling the website_generator tool, provide:
+- mode: "create"
+- title: The restaurant/menu title
+- menu: The complete menu object with sections and items, including s3_key for each item's photo
+
+IMPORTANT:
+- Pass s3_key for each item (preferred for reliable image embedding)
+- Also pass image_url as fallback
+- Do NOT modify the menu data — pass it through exactly as received
+
+Output confirmation as JSON:
+{
+  "status": "success",
+  "website_url": "presigned URL to view the website",
+  "s3_key": "the S3 key for future updates",
+  "sections_included": ["Appetizers", "Entrees", "Desserts"],
+  "item_count": 9
+}
+"""
+
 MENU_PHASES = [
     {
         "name": "menu_designer",
@@ -415,6 +443,17 @@ MENU_PHASES = [
             "Formatting menu PDF...",
             "Embedding dish photos...",
             "Finalizing layout...",
+        ],
+    },
+    {
+        "name": "menu_website_writer",
+        "role": "export",
+        "prompt": MENU_WEBSITE_WRITER_PROMPT,
+        "estimated_duration": 30,
+        "messages": [
+            "Building restaurant website...",
+            "Embedding dish photos...",
+            "Publishing site...",
         ],
     },
 ]
@@ -440,6 +479,15 @@ Tool reference:
   results so users can view source PDFs.
 - gateway_web_search: current/real-time information from the web. Use automatically — never ask first.
 - gateway_place_order: place orders for users.
+- gateway_website_generator: generate or update restaurant websites.
+  - To create: call with mode="create", title, and menu data.
+  - To update/redesign: you MUST generate the complete new HTML yourself, then call with
+    mode="update", s3_key (from the original generation result), and html (the full HTML string
+    you wrote). Do NOT ask the tool to generate the HTML — you write it.
+  - When writing HTML for updates: use Tailwind CDN, Google Fonts, and inline CSS for animations.
+    Write production-quality, visually stunning HTML that fully implements the user's design vision.
+    The HTML must be completely self-contained (no external image references except CDN fonts/scripts).
+  - Remember the s3_key from website generation results so you can apply edits later.
 
 Tool limits:
 - If a tool returns no results, try ONE more time with a broader query.
