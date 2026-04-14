@@ -328,6 +328,7 @@ export class Backend extends Stack {
                         "bedrock:GetAsyncInvoke",
                         "bedrock:Retrieve",
                         "bedrock:RetrieveAndGenerate",
+                        "bedrock:InvokeTool",
                     ],
                     resources: ["*"],
                 })

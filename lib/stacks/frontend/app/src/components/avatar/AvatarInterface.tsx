@@ -346,21 +346,46 @@ export default function AvatarInterface(): JSX.Element {
                             if (isNewTurn) {
                                 currentAssistantTextRef.current = "";
                             }
-                            // Deduplicate: Nova Sonic sends streaming chunks then a final complete transcript.
-                            // If the accumulated text already ends with this content, skip it.
+                            // Deduplicate: Nova Sonic sends streaming chunks then a final
+                            // complete transcript, and may also re-send overlapping text
+                            // across multiple response turns (e.g. before/after tool calls).
+
+                            const existing = currentAssistantTextRef.current;
+                            const incoming = message.content;
+
+                            // Skip if incoming is already fully contained
                             if (
-                                currentAssistantTextRef.current.length > 0 &&
-                                message.content.length > 3 &&
-                                currentAssistantTextRef.current.endsWith(message.content)
+                                existing.length > 0 &&
+                                incoming.length > 3 &&
+                                existing.includes(incoming)
                             ) {
                                 break;
                             }
-                            currentAssistantTextRef.current += message.content;
+
+                            // Detect overlap: if the start of incoming matches the end of existing,
+                            // only append the non-overlapping suffix.
+                            let textToAppend = incoming;
+                            if (existing.length > 0 && incoming.length > 10) {
+                                // Find the longest suffix of existing that is a prefix of incoming
+                                const maxCheck = Math.min(existing.length, incoming.length);
+                                let overlapLen = 0;
+                                for (let len = maxCheck; len >= 10; len--) {
+                                    if (existing.endsWith(incoming.substring(0, len))) {
+                                        overlapLen = len;
+                                        break;
+                                    }
+                                }
+                                if (overlapLen > 0) {
+                                    textToAppend = incoming.substring(overlapLen);
+                                    if (textToAppend.length === 0) break;
+                                }
+                            }
+
+                            currentAssistantTextRef.current += textToAppend;
                             setTranscript((prev) => {
                                 const updated = [...prev];
                                 const last = updated[updated.length - 1];
                                 if (
-                                    !isNewTurn &&
                                     last &&
                                     last.role === "assistant" &&
                                     last.segments[0]?.kind === "text"
