@@ -144,6 +144,50 @@ def _render_html(title: str, menu: dict) -> str:
 </html>"""
 
 
+bedrock_runtime = boto3.client(
+    "bedrock-runtime",
+    region_name=os.environ.get("AWS_REGION", "us-east-1"),
+)
+EDIT_MODEL_ID = os.environ.get("WEBSITE_EDIT_MODEL_ID", "us.amazon.nova-pro-v1:0")
+
+
+def _ai_edit_website(s3_key: str, edit_instructions: str, user_id: str = "") -> dict:
+    """Fetch existing HTML from S3, apply edits via Bedrock, re-upload."""
+    resp = s3_client.get_object(Bucket=REPORTS_BUCKET, Key=s3_key)
+    current_html = resp["Body"].read().decode("utf-8")
+
+    response = bedrock_runtime.converse(
+        modelId=EDIT_MODEL_ID,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "text": (
+                            "Edit this HTML based on the instructions. "
+                            "Return ONLY the complete updated HTML. No markdown fences, no explanation.\n\n"
+                            f"INSTRUCTIONS: {edit_instructions}\n\n"
+                            f"HTML:\n{current_html}"
+                        )
+                    }
+                ],
+            }
+        ],
+        inferenceConfig={"maxTokens": 10000, "temperature": 0.2},
+    )
+
+    updated_html = "".join(
+        b["text"] for b in response["output"]["message"]["content"] if "text" in b
+    ).strip()
+    if updated_html.startswith("```"):
+        updated_html = updated_html[updated_html.index("\n") + 1 :]
+    if updated_html.endswith("```"):
+        updated_html = updated_html[:-3].rstrip()
+
+    presigned_url = _upload_html(updated_html, s3_key, user_id)
+    return {"success": True, "url": presigned_url, "s3_key": s3_key}
+
+
 def handler(event, context):
     """Website generator Lambda handler."""
     logger.info("Received event keys: %s", list(event.keys()))
@@ -162,25 +206,25 @@ def handler(event, context):
         if mode == "update":
             s3_key = event.get("s3_key", "")
             html = event.get("html", "")
-            if not s3_key or not html:
-                return {"error": "update mode requires 's3_key' and 'html'"}
+            edit_instructions = event.get("edit_instructions", "")
 
-            presigned_url = _upload_html(html, s3_key, user_id)
-            logger.info("Update successful: s3_key=%s url_length=%d", s3_key, len(presigned_url))
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": json.dumps(
-                            {
-                                "success": True,
-                                "url": presigned_url,
-                                "s3_key": s3_key,
-                            }
-                        ),
-                    }
-                ]
-            }
+            if not s3_key:
+                return {"error": "update mode requires 's3_key'"}
+
+            if html:
+                # Agent-generated HTML (chatbot mode with Claude)
+                presigned_url = _upload_html(html, s3_key, user_id)
+                logger.info("Update (html) successful: s3_key=%s", s3_key)
+                result = {"success": True, "url": presigned_url, "s3_key": s3_key}
+            elif edit_instructions:
+                # AI-powered edit (avatar mode with Nova Sonic)
+                logger.info("Update (ai_edit) starting: s3_key=%s", s3_key)
+                result = _ai_edit_website(s3_key, edit_instructions, user_id)
+                logger.info("Update (ai_edit) successful: s3_key=%s", s3_key)
+            else:
+                return {"error": "update mode requires 'html' or 'edit_instructions'"}
+
+            return {"content": [{"type": "text", "text": json.dumps(result)}]}
         else:
             title = event.get("title", "Restaurant Menu")
             menu = event.get("menu", {})

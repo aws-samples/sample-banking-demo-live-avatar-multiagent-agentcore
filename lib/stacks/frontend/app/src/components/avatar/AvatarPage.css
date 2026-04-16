@@ -233,11 +233,10 @@
 .avatar-page__new-messages {
     position: sticky;
     bottom: 0.5rem;
-    left: 50%;
-    transform: translateX(-50%);
     z-index: 10;
     display: flex;
     justify-content: center;
+    width: 100%;
     padding-top: 0.5rem;
     animation: slideUpFade 0.25s ease-out;
 }
@@ -381,9 +380,15 @@
 .avatar-page__inline-media video {
     display: block;
     width: 100%;
-    max-width: 360px;
+    max-width: 200px;
     height: auto;
     border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.avatar-page__inline-media img:hover {
+    opacity: 0.85;
 }
 
 .avatar-page__media-badge {

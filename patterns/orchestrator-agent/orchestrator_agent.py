@@ -1541,6 +1541,7 @@ async def _run_pipeline(phases, query, user_id, session_id, requested_model="", 
         return
 
     accumulated = initial_accumulated or query
+    menu_designer_output = ""
 
     for phase in phases:
         agent_name = phase["name"]
@@ -1796,9 +1797,20 @@ async def _run_pipeline(phases, query, user_id, session_id, requested_model="", 
         }
         yield {"agent_phase": {"agent": agent_name, "phase": role, "status": "end"}}
 
-        # Feed this agent's output to the next agent
+        # Feed this agent's output to the next agent.
+        # For menu pipelines, preserve the designer's menu JSON so later phases
+        # (pdf_writer, website_writer) can access the full menu with s3_key fields.
         if agent_text:
-            accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
+            if agent_name == "menu_designer":
+                menu_designer_output = agent_text
+                accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
+            elif menu_designer_output:
+                accumulated = (
+                    f"Menu designer output (contains menu JSON with s3_key for images):\n{menu_designer_output}\n\n"
+                    f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
+                )
+            else:
+                accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
 
     yield {"result": {"stop_reason": "end_turn"}}
 

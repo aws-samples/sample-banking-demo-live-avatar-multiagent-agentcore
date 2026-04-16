@@ -1,7 +1,7 @@
 [
     {
         "name": "website_generator",
-        "description": "Generate or update a static restaurant website on S3. Two modes: 'create' builds a site from menu JSON. 'update' uploads new HTML to replace an existing site. Returns a presigned URL to view the site.",
+        "description": "Generate or update a static restaurant website on S3. Returns a presigned URL to view the site. Three modes: 'create' builds from menu JSON. 'update' with 'html' uploads agent-generated HTML. 'update' with 'edit_instructions' fetches the current site and applies changes via AI.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -9,7 +9,7 @@
                     "type": "string",
                     "enum": ["create", "update"],
                     "default": "create",
-                    "description": "'create' to build from menu data, 'update' to replace an existing site with new HTML"
+                    "description": "'create' to build from menu data, 'update' to modify an existing site"
                 },
                 "title": {
                     "type": "string",
@@ -34,10 +34,7 @@
                                                 "name": { "type": "string" },
                                                 "description": { "type": "string" },
                                                 "price": { "type": "string" },
-                                                "dietary": {
-                                                    "type": "array",
-                                                    "items": { "type": "string" }
-                                                },
+                                                "dietary": { "type": "array", "items": { "type": "string" } },
                                                 "s3_key": { "type": "string" },
                                                 "image_url": { "type": "string" }
                                             },
@@ -56,7 +53,11 @@
                 },
                 "html": {
                     "type": "string",
-                    "description": "Complete HTML content to upload (required for update). You generate this HTML yourself based on the user's design instructions."
+                    "description": "Complete HTML to upload directly (for update mode when the agent generates HTML itself)"
+                },
+                "edit_instructions": {
+                    "type": "string",
+                    "description": "Natural language description of changes to apply (for update mode). The tool fetches the current site and applies changes via AI. Use this when you cannot generate HTML yourself."
                 },
                 "user_id": {
                     "type": "string",

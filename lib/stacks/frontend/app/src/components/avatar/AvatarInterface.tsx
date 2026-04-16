@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import type { AvatarVariantName } from "./AvatarVariant";
 import Button from "@cloudscape-design/components/button";
-import Container from "@cloudscape-design/components/container";
 import Alert from "@cloudscape-design/components/alert";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -54,7 +53,8 @@ type TranscriptSegment =
     | { kind: "text"; content: string }
     | { kind: "media"; mediaType: "image" | "video"; url: string; toolName: string }
     | { kind: "tool"; toolName: string; status: "running" | "done"; input?: string }
-    | { kind: "kb"; resultJson: string };
+    | { kind: "kb"; resultJson: string }
+    | { kind: "website"; url: string; title?: string; s3_key?: string };
 
 interface TranscriptEntry {
     role: "user" | "assistant" | "system";
@@ -118,6 +118,7 @@ export default function AvatarInterface(): JSX.Element {
     const [sessionSeconds, setSessionSeconds] = useState(0);
     const [interruptCount, setInterruptCount] = useState(0);
     const [pdfPreview, setPdfPreview] = useState<PdfPreviewData | null>(null);
+    const [websitePreview, setWebsitePreview] = useState<string | null>(null);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [showPromptEditor, setShowPromptEditor] = useState(false);
     const [systemPrompt, setSystemPrompt] = useState(() => {
@@ -211,6 +212,16 @@ export default function AvatarInterface(): JSX.Element {
         }
     }, [transcript, isUserScrolling]);
 
+    // Re-scroll after images load (they change scroll height after rendering)
+    useEffect(() => {
+        if (!isUserScrolling && transcriptEndRef.current) {
+            const timer = setTimeout(() => {
+                transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [mediaResults.length, isUserScrolling]);
+
     useEffect(() => {
         const el = transcriptRef.current;
         if (!el) return;
@@ -221,11 +232,11 @@ export default function AvatarInterface(): JSX.Element {
             if (!nearBottom) {
                 setIsUserScrolling(true);
                 if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-                // Auto-resume scroll after 5s idle
+                // Auto-resume scroll after 2s idle
                 scrollTimeoutRef.current = setTimeout(() => {
                     setIsUserScrolling(false);
                     setShowScrollToBottom(false);
-                }, 5000);
+                }, 2000);
             } else {
                 setIsUserScrolling(false);
                 setShowScrollToBottom(false);
@@ -481,7 +492,6 @@ export default function AvatarInterface(): JSX.Element {
                                             timestamp: new Date().toISOString(),
                                         },
                                     ]);
-                                    setLightboxUrl(imgUrl);
                                 } else if (vidUrl) {
                                     setTranscript((prev) => [
                                         ...prev,
@@ -513,6 +523,28 @@ export default function AvatarInterface(): JSX.Element {
                                         {
                                             role: "assistant",
                                             segments: [{ kind: "kb", resultJson: kbResultStr }],
+                                            timestamp: new Date().toISOString(),
+                                        },
+                                    ]);
+                                }
+                                // Show website result as a card
+                                if (
+                                    message.toolName!.includes("website_generator") &&
+                                    resultData?.success &&
+                                    resultData?.url
+                                ) {
+                                    setTranscript((prev) => [
+                                        ...prev,
+                                        {
+                                            role: "assistant",
+                                            segments: [
+                                                {
+                                                    kind: "website",
+                                                    url: resultData.url,
+                                                    title: resultData.title,
+                                                    s3_key: resultData.s3_key,
+                                                },
+                                            ],
                                             timestamp: new Date().toISOString(),
                                         },
                                     ]);
@@ -603,9 +635,7 @@ export default function AvatarInterface(): JSX.Element {
                             },
                         ]);
                         // Auto-popup images so they're immediately visible
-                        if (message.mediaType === "image") {
-                            setLightboxUrl(message.mediaUrl!);
-                        }
+                        // Disabled — images show inline in chat; user clicks to enlarge
                     }
 
                     // Handle pdfPreview from toolResult
@@ -636,6 +666,37 @@ export default function AvatarInterface(): JSX.Element {
                                 timestamp: new Date().toISOString(),
                             },
                         ]);
+                    }
+
+                    // Show website result as a clickable card
+                    if (message.toolName?.includes("website_generator") && message.toolResult) {
+                        try {
+                            let wr =
+                                typeof message.toolResult === "string"
+                                    ? JSON.parse(message.toolResult)
+                                    : message.toolResult;
+                            if (wr?.content?.[0]?.text) {
+                                try { wr = JSON.parse(wr.content[0].text); } catch { /* not nested */ }
+                            }
+                            if (wr?.success && wr?.url) {
+                                setWebsitePreview(wr.url);
+                                setTranscript((prev) => [
+                                    ...prev,
+                                    {
+                                        role: "assistant",
+                                        segments: [
+                                            {
+                                                kind: "website",
+                                                url: wr.url,
+                                                title: wr.title,
+                                                s3_key: wr.s3_key,
+                                            },
+                                        ],
+                                        timestamp: new Date().toISOString(),
+                                    },
+                                ]);
+                            }
+                        } catch { /* not JSON */ }
                     }
 
                     currentAssistantTextRef.current = "";
@@ -787,7 +848,7 @@ export default function AvatarInterface(): JSX.Element {
             });
 
             mediaStreamRef.current = stream;
-            const audioCtx = new AudioContext();
+            const audioCtx = new AudioContext({ sampleRate: 16000 });
             audioContextRef.current = audioCtx;
 
             const processorUrl = createPCMProcessorUrl();
@@ -950,6 +1011,80 @@ export default function AvatarInterface(): JSX.Element {
                             className="w-full h-full"
                             variant={avatarVariant}
                         />
+
+                        {/* Wall-mounted monitor displaying generated website */}
+                        {websitePreview && (
+                            <div
+                                className="absolute inset-0 z-10 flex items-center justify-center animate-[fadeIn_0.6s_ease-out]"
+                                style={{ pointerEvents: "none" }}
+                            >
+                                <div
+                                    className="relative"
+                                    style={{
+                                        width: "80%",
+                                        height: "75%",
+                                        pointerEvents: "auto",
+                                    }}
+                                >
+                                    {/* Monitor frame */}
+                                    <div
+                                        className="w-full h-full rounded-2xl overflow-hidden"
+                                        style={{
+                                            border: "3px solid rgba(0,212,255,0.25)",
+                                            background: "rgba(5,13,26,0.85)",
+                                            boxShadow:
+                                                "0 0 60px rgba(0,212,255,0.15), 0 0 120px rgba(0,212,255,0.05), inset 0 0 30px rgba(0,0,0,0.5)",
+                                        }}
+                                    >
+                                        {/* Top bezel */}
+                                        <div className="flex items-center justify-between px-4 py-2 bg-black/70 border-b border-cyan-500/20">
+                                            <div className="flex gap-2">
+                                                <div className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
+                                                <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/80" />
+                                                <div className="w-2.5 h-2.5 rounded-full bg-green-400/80" />
+                                            </div>
+                                            <span className="text-[10px] text-cyan-400/50 font-mono truncate mx-4 max-w-[60%]">
+                                                {websitePreview.split("/websites/")[1]?.split("?")[0] || "website"}
+                                            </span>
+                                            <div className="flex items-center gap-3">
+                                                <a
+                                                    href={websitePreview}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-[10px] text-cyan-400/70 hover:text-cyan-300 transition-colors"
+                                                >
+                                                    Open ↗
+                                                </a>
+                                                <button
+                                                    onClick={() => setWebsitePreview(null)}
+                                                    className="text-gray-500 hover:text-white transition-colors text-sm leading-none"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {/* Live iframe */}
+                                        <iframe
+                                            src={websitePreview}
+                                            title="Generated Website"
+                                            className="w-full border-0 bg-white"
+                                            style={{ height: "calc(100% - 36px)" }}
+                                            sandbox="allow-scripts allow-same-origin"
+                                        />
+                                    </div>
+                                    {/* Monitor stand / wall mount accent */}
+                                    <div
+                                        className="mx-auto"
+                                        style={{
+                                            width: "30%",
+                                            height: "4px",
+                                            background: "linear-gradient(90deg, transparent, rgba(0,212,255,0.3), transparent)",
+                                            borderRadius: "0 0 4px 4px",
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        )}
                         <div className="absolute bottom-2 left-2 flex gap-1">
                             {[
                                 { name: "robot" as const, icon: <Bot size={14} />, label: "Robot" },
@@ -1026,12 +1161,6 @@ export default function AvatarInterface(): JSX.Element {
                 <div className="avatar-page__chat-col">
                     <div className="avatar-page__chat-header">
                         <h3>Transcript</h3>
-                        {mediaResults.length > 0 && (
-                            <span className="text-xs text-gray-400">
-                                {mediaResults.length} media result
-                                {mediaResults.length !== 1 ? "s" : ""}
-                            </span>
-                        )}
                     </div>
 
                     <div className="avatar-page__transcript" ref={transcriptRef}>
@@ -1104,6 +1233,24 @@ export default function AvatarInterface(): JSX.Element {
                                                         />
                                                     );
                                                 }
+                                                if (seg.kind === "website") {
+                                                    return (
+                                                        <div key={j} className="rounded-xl border border-cyan-500/30 bg-gradient-to-br from-gray-900 to-gray-800 p-4 shadow-lg my-2">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <span className="text-xl">🌐</span>
+                                                                <span className="text-sm font-semibold text-white">{seg.title || "Restaurant Website"}</span>
+                                                            </div>
+                                                            <a
+                                                                href={seg.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-cyan-500 to-teal-400 text-gray-900 hover:shadow-[0_0_20px_rgba(0,212,255,0.3)] transition-all"
+                                                            >
+                                                                View Website ↗
+                                                            </a>
+                                                        </div>
+                                                    );
+                                                }
                                                 if (seg.kind === "tool") {
                                                     return (
                                                         <div
@@ -1160,45 +1307,7 @@ export default function AvatarInterface(): JSX.Element {
                         )}
                     </div>
 
-                    {/* Inline media results below transcript */}
-                    {mediaResults.length > 0 && (
-                        <div className="avatar-page__media-sidebar">
-                            <SpaceBetween size="s">
-                                {mediaResults.map((media, i) => (
-                                    <Container key={i} disableContentPaddings>
-                                        {media.type === "image" ? (
-                                            <div className="relative">
-                                                <img
-                                                    src={media.url}
-                                                    alt={`Generated by ${media.toolName}`}
-                                                    className="w-full h-auto"
-                                                />
-                                                <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded">
-                                                    <Image size={12} />
-                                                    {media.toolName}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="relative">
-                                                <video
-                                                    src={media.url}
-                                                    controls
-                                                    className="w-full h-auto"
-                                                />
-                                                <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded">
-                                                    <Video size={12} />
-                                                    {media.toolName}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <div className="px-3 py-2 text-xs text-gray-500">
-                                            {new Date(media.timestamp).toLocaleTimeString()}
-                                        </div>
-                                    </Container>
-                                ))}
-                            </SpaceBetween>
-                        </div>
-                    )}
+                    {/* Media results are shown inline in the transcript — no separate sidebar */}
                 </div>
 
                 {/* PDF Viewer column (conditionally shown) */}
