@@ -26,6 +26,7 @@ import { PersonaSelector } from "./PersonaSelector";
 import { LanguageSelector } from "./LanguageSelector";
 import { VoiceSelector } from "./VoiceSelector";
 import Avatar3DReactWrapper from "./Avatar3DReactWrapper";
+import WebsiteMonitor from "./WebsiteMonitor";
 import { useAudioPlayer, AudioPlayerControls } from "./AudioPlayer";
 import { MarkdownRenderer } from "../chat/MarkdownRenderer";
 import { KbSearchResultCard } from "../chat/KbSearchResultCard";
@@ -392,7 +393,9 @@ export default function AvatarInterface(): JSX.Element {
                                 }
                             }
 
-                            currentAssistantTextRef.current += textToAppend;
+                            // Strip URLs from assistant speech — the UI renders clickable cards instead
+                            const cleaned = textToAppend.replace(/https?:\/\/\S+/g, "").replace(/\s{2,}/g, " ");
+                            currentAssistantTextRef.current += cleaned;
                             setTranscript((prev) => {
                                 const updated = [...prev];
                                 const last = updated[updated.length - 1];
@@ -1012,78 +1015,12 @@ export default function AvatarInterface(): JSX.Element {
                             variant={avatarVariant}
                         />
 
-                        {/* Wall-mounted monitor displaying generated website */}
+                        {/* Draggable website monitor overlay */}
                         {websitePreview && (
-                            <div
-                                className="absolute inset-0 z-10 flex items-center justify-center animate-[fadeIn_0.6s_ease-out]"
-                                style={{ pointerEvents: "none" }}
-                            >
-                                <div
-                                    className="relative"
-                                    style={{
-                                        width: "80%",
-                                        height: "75%",
-                                        pointerEvents: "auto",
-                                    }}
-                                >
-                                    {/* Monitor frame */}
-                                    <div
-                                        className="w-full h-full rounded-2xl overflow-hidden"
-                                        style={{
-                                            border: "3px solid rgba(0,212,255,0.25)",
-                                            background: "rgba(5,13,26,0.85)",
-                                            boxShadow:
-                                                "0 0 60px rgba(0,212,255,0.15), 0 0 120px rgba(0,212,255,0.05), inset 0 0 30px rgba(0,0,0,0.5)",
-                                        }}
-                                    >
-                                        {/* Top bezel */}
-                                        <div className="flex items-center justify-between px-4 py-2 bg-black/70 border-b border-cyan-500/20">
-                                            <div className="flex gap-2">
-                                                <div className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-                                                <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/80" />
-                                                <div className="w-2.5 h-2.5 rounded-full bg-green-400/80" />
-                                            </div>
-                                            <span className="text-[10px] text-cyan-400/50 font-mono truncate mx-4 max-w-[60%]">
-                                                {websitePreview.split("/websites/")[1]?.split("?")[0] || "website"}
-                                            </span>
-                                            <div className="flex items-center gap-3">
-                                                <a
-                                                    href={websitePreview}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-[10px] text-cyan-400/70 hover:text-cyan-300 transition-colors"
-                                                >
-                                                    Open ↗
-                                                </a>
-                                                <button
-                                                    onClick={() => setWebsitePreview(null)}
-                                                    className="text-gray-500 hover:text-white transition-colors text-sm leading-none"
-                                                >
-                                                    ✕
-                                                </button>
-                                            </div>
-                                        </div>
-                                        {/* Live iframe */}
-                                        <iframe
-                                            src={websitePreview}
-                                            title="Generated Website"
-                                            className="w-full border-0 bg-white"
-                                            style={{ height: "calc(100% - 36px)" }}
-                                            sandbox="allow-scripts allow-same-origin"
-                                        />
-                                    </div>
-                                    {/* Monitor stand / wall mount accent */}
-                                    <div
-                                        className="mx-auto"
-                                        style={{
-                                            width: "30%",
-                                            height: "4px",
-                                            background: "linear-gradient(90deg, transparent, rgba(0,212,255,0.3), transparent)",
-                                            borderRadius: "0 0 4px 4px",
-                                        }}
-                                    />
-                                </div>
-                            </div>
+                            <WebsiteMonitor
+                                url={websitePreview}
+                                onClose={() => setWebsitePreview(null)}
+                            />
                         )}
                         <div className="absolute bottom-2 left-2 flex gap-1">
                             {[
