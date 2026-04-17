@@ -5,6 +5,7 @@ import Box from "@cloudscape-design/components/box";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Header from "@cloudscape-design/components/header";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 import { ResearchDepthSelector } from "./ResearchDepthSelector";
 
 type ChatHeaderProps = {
@@ -22,7 +23,9 @@ export function ChatHeader({
 }: ChatHeaderProps): JSX.Element {
     const { isAuthenticated, signOut } = useAuth();
     const [logoutVisible, setLogoutVisible] = useState(false);
+    const navigate = useNavigate();
     const isResearchMode = mode === "research" || mode === "generic_research";
+    const isConciergeMode = mode === "chatbot";
 
     return (
         <div className="border-b p-4">
@@ -33,6 +36,11 @@ export function ChatHeader({
                         <Button onClick={onNewChat} disabled={!canStartNewChat} iconName="add-plus">
                             New Chat
                         </Button>
+                        {isConciergeMode && (
+                            <Button variant="normal" onClick={() => navigate("/archive")} iconName="search">
+                                Report Archive
+                            </Button>
+                        )}
                         {isAuthenticated && (
                             <Button variant="normal" onClick={() => setLogoutVisible(true)}>
                                 Logout

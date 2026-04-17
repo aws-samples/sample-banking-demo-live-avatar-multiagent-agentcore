@@ -213,6 +213,43 @@ def _refresh_image_urls(html: str) -> str:
     return re.sub(r'<img\s[^>]*data-s3-key="[^"]*"[^>]*/?\s*>', _replace_src, html)
 
 
+def _extract_image_map(html: str) -> dict[str, str]:
+    """Extract {alt_text: s3_key} mapping from all img tags with data-s3-key."""
+    mapping = {}
+    for match in re.finditer(r'<img\s[^>]*data-s3-key="([^"]+)"[^>]*alt="([^"]*)"', html):
+        mapping[match.group(2)] = match.group(1)
+    # Also try alt before data-s3-key
+    for match in re.finditer(r'<img\s[^>]*alt="([^"]*)"[^>]*data-s3-key="([^"]+)"', html):
+        mapping[match.group(1)] = match.group(2)
+    return mapping
+
+
+def _inject_images(new_html: str, image_map: dict[str, str]) -> str:
+    """Inject images from old HTML into new HTML by matching dish names.
+
+    Only replaces existing <img> tags with matching alt text — does NOT insert
+    new img tags into arbitrary positions (that corrupts the HTML structure).
+    """
+    for dish_name, s3_key in image_map.items():
+        url = _get_image_url(s3_key)
+        if not url:
+            continue
+
+        escaped = re.escape(dish_name)
+        tag = (
+            f'<img src="{url}" alt="{dish_name}" data-s3-key="{s3_key}" '
+            f'class="w-full h-48 object-cover rounded-t-xl" loading="lazy"/>'
+        )
+
+        new_html = re.sub(
+            rf'<img\s[^>]*alt="{escaped}"[^>]*/?\s*>',
+            tag,
+            new_html,
+        )
+
+    return new_html
+
+
 def _strip_presigned_urls(html: str) -> str:
     """Replace presigned URLs with placeholder to reduce tokens for Bedrock, keep data-s3-key."""
     return re.sub(
@@ -263,6 +300,11 @@ def _ai_edit_website(s3_key: str, edit_instructions: str, user_id: str = "") -> 
     # Regenerate fresh presigned URLs for all images from their stored s3 keys
     updated_html = _refresh_image_urls(updated_html)
 
+    # If AI dropped any images, re-inject them from the original HTML
+    image_map = _extract_image_map(current_html)
+    if image_map:
+        updated_html = _inject_images(updated_html, image_map)
+
     presigned_url = _upload_html(updated_html, s3_key, user_id)
     return {"success": True, "url": presigned_url, "s3_key": s3_key}
 
@@ -300,6 +342,15 @@ def handler(event, context):
 
             if html:
                 # Agent-generated HTML (chatbot mode with Claude)
+                # Carry images from old site into new HTML — Claude often drops data-s3-key attrs
+                try:
+                    old_html = s3_client.get_object(Bucket=REPORTS_BUCKET, Key=s3_key)["Body"].read().decode("utf-8")
+                    image_map = _extract_image_map(old_html)
+                    if image_map:
+                        html = _inject_images(html, image_map)
+                        logger.info("Injected %d images from old site", len(image_map))
+                except Exception:
+                    logger.warning("Could not carry images from old site", exc_info=True)
                 html = _refresh_image_urls(html)
                 presigned_url = _upload_html(html, s3_key, user_id)
                 logger.info("Update (html) successful: s3_key=%s", s3_key)

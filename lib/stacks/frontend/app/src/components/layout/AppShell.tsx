@@ -8,7 +8,6 @@ import {
     Sun,
     Moon,
     FlaskConical,
-    BookOpen,
     ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,7 +35,6 @@ const researchDropdownItems = [
         subtitle: "Any topic · PDF output",
         icon: FlaskConical,
     },
-    { to: "/archive", label: "Report Archive", subtitle: "Search past reports", icon: BookOpen },
 ] as const;
 
 const researchPaths = researchDropdownItems.map((i) => i.to) as unknown as string[];

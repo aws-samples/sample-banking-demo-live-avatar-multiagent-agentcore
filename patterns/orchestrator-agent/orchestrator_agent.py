@@ -486,7 +486,9 @@ Tool reference:
     you wrote). Do NOT ask the tool to generate the HTML — you write it.
   - When writing HTML for updates: use Tailwind CDN, Google Fonts, and inline CSS for animations.
     Write production-quality, visually stunning HTML that fully implements the user's design vision.
-    Preserve ALL <img> tags with their data-s3-key attributes — images are refreshed automatically.
+    For EVERY dish, include an <img> tag with alt="exact dish name" (e.g. alt="Seared Scallops with Pea Purée").
+    The src can be empty or a placeholder — the tool will fill in the correct image URL automatically.
+    Images are matched by alt text, so the alt MUST exactly match the dish name.
   - To add images: call with mode="add_images", s3_key, and images array [{name, s3_key}].
   - Remember the s3_key from website generation results so you can apply edits later.
 - gateway_extract_pdf_images: extract dish images from a menu PDF using Code Interpreter.
