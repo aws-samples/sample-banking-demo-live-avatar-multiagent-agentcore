@@ -8,6 +8,8 @@ import { useChatEngine } from "@/hooks/useChatEngine";
 import { useDefaultTool, useToolRenderer } from "@/hooks/useToolRenderer";
 import { ToolCallDisplay } from "./ToolCallDisplay";
 import { KbSearchResultCard } from "./KbSearchResultCard";
+import { ConciergeFlowSidebar } from "@/components/concierge-flow/ConciergeFlowSidebar";
+import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 
 import { submitFeedback } from "@/services/feedbackService";
 import { useAuth } from "react-oidc-context";
@@ -20,16 +22,21 @@ interface ChatInterfaceProps {
     mode?: "research" | "chatbot" | "menu" | "generic_research" | "archive_chat";
     /** Title shown in the ChatHeader. Defaults to "Research Agent". */
     title?: string;
+    /** When true, shows the live AgentCore flow sidebar toggle in the header. */
+    enableFlowSidebar?: boolean;
 }
 
 export default function ChatInterface({
     renderWelcome,
     mode,
     title,
+    enableFlowSidebar,
 }: ChatInterfaceProps): JSX.Element {
     const [input, setInput] = useState("");
+    const [flowOpen, setFlowOpen] = useState(false);
     const auth = useAuth();
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const runtimeActive = useConciergeFlowStore((s) => s.runtimeActive);
 
     const {
         messages,
@@ -115,71 +122,89 @@ export default function ChatInterface({
         setInput("");
     };
 
+    // Auto-open the flow sidebar when the first message is sent.
+    const hasAutoOpened = useRef(false);
+    useEffect(() => {
+        if (!enableFlowSidebar || hasAutoOpened.current) return;
+        if (messages.length > 0) {
+            setFlowOpen(true);
+            hasAutoOpened.current = true;
+        }
+    }, [messages.length, enableFlowSidebar]);
+
     const isInitialState = messages.length === 0;
     const hasAssistantMessages = messages.some((message) => message.role === "assistant");
 
     return (
-        <div className="flex flex-col h-full w-full">
-            <div className="flex-none">
-                <ChatHeader
-                    title={title}
-                    onNewChat={handleNewChat}
-                    canStartNewChat={hasAssistantMessages}
-                    mode={mode}
-                />
-                {error && (
-                    <div className="mx-4 mt-2">
-                        <Alert type="error" dismissible onDismiss={clearError}>
-                            {error}
-                        </Alert>
-                    </div>
+        <div className="flex h-full w-full">
+            <div className="flex flex-col h-full min-w-0 flex-1">
+                <div className="flex-none">
+                    <ChatHeader
+                        title={title}
+                        onNewChat={handleNewChat}
+                        canStartNewChat={hasAssistantMessages}
+                        mode={mode}
+                        onToggleFlow={enableFlowSidebar ? () => setFlowOpen((v) => !v) : undefined}
+                        flowOpen={flowOpen}
+                        flowPulse={enableFlowSidebar && runtimeActive && !flowOpen}
+                    />
+                    {error && (
+                        <div className="mx-4 mt-2">
+                            <Alert type="error" dismissible onDismiss={clearError}>
+                                {error}
+                            </Alert>
+                        </div>
+                    )}
+                </div>
+
+                {isInitialState ? (
+                    <>
+                        <div className="grow overflow-y-auto">
+                            {renderWelcome ? (
+                                renderWelcome(handleExampleClick)
+                            ) : (
+                                <WelcomeScreen onExampleClick={handleExampleClick} />
+                            )}
+                        </div>
+                        <div className="flex-none">
+                            <div className="px-4 mb-4 max-w-4xl mx-auto w-full">
+                                <ChatInput
+                                    input={input}
+                                    setInput={setInput}
+                                    handleSubmit={handleSubmit}
+                                    isLoading={isLoading}
+                                />
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="grow overflow-hidden">
+                            <div className="max-w-4xl mx-auto w-full h-full">
+                                <ChatMessages
+                                    messages={messages}
+                                    messagesEndRef={messagesEndRef}
+                                    sessionId={sessionId}
+                                    onFeedbackSubmit={handleFeedbackSubmit}
+                                    onUIAction={handleUIAction}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex-none">
+                            <div className="max-w-4xl mx-auto w-full">
+                                <ChatInput
+                                    input={input}
+                                    setInput={setInput}
+                                    handleSubmit={handleSubmit}
+                                    isLoading={isLoading}
+                                />
+                            </div>
+                        </div>
+                    </>
                 )}
             </div>
-
-            {isInitialState ? (
-                <>
-                    <div className="grow overflow-y-auto">
-                        {renderWelcome ? (
-                            renderWelcome(handleExampleClick)
-                        ) : (
-                            <WelcomeScreen onExampleClick={handleExampleClick} />
-                        )}
-                    </div>
-                    <div className="flex-none">
-                        <div className="px-4 mb-4 max-w-4xl mx-auto w-full">
-                            <ChatInput
-                                input={input}
-                                setInput={setInput}
-                                handleSubmit={handleSubmit}
-                                isLoading={isLoading}
-                            />
-                        </div>
-                    </div>
-                </>
-            ) : (
-                <>
-                    <div className="grow overflow-hidden">
-                        <div className="max-w-4xl mx-auto w-full h-full">
-                            <ChatMessages
-                                messages={messages}
-                                messagesEndRef={messagesEndRef}
-                                sessionId={sessionId}
-                                onFeedbackSubmit={handleFeedbackSubmit}
-                                onUIAction={handleUIAction}
-                            />
-                        </div>
-                    </div>
-                    <div className="flex-none">
-                        <div className="max-w-4xl mx-auto w-full">
-                            <ChatInput
-                                input={input}
-                                setInput={setInput}
-                                handleSubmit={handleSubmit}
-                                isLoading={isLoading}
-                            />
-                        </div>
-                    </div>
-                </>
+            {enableFlowSidebar && flowOpen && (
+                <ConciergeFlowSidebar onClose={() => setFlowOpen(false)} />
             )}
         </div>
     );

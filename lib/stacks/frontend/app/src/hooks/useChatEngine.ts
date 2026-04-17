@@ -6,6 +6,7 @@ import { useAuth } from "react-oidc-context";
 import { useModelSelector } from "@/hooks/useModelSelector";
 import { useChatStore } from "@/stores/chatStore";
 import type { ResearchAction } from "@/stores/chatStore";
+import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 
 export type { ResearchAction };
 
@@ -110,6 +111,8 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
 
                 const segments: MessageSegment[] = [];
                 const toolCallMap = new Map<string, ToolCall>();
+                const flowStore = useConciergeFlowStore.getState();
+                flowStore.runtimeStart();
 
                 const updateMessage = (): void => {
                     const content = segments
@@ -186,6 +189,9 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                 };
                                 toolCallMap.set(event.toolUseId, tc);
                                 segments.push({ type: "tool", toolCall: tc });
+                                useConciergeFlowStore
+                                    .getState()
+                                    .toolStart(event.toolUseId, event.name);
                                 updateMessage();
                                 break;
                             }
@@ -203,6 +209,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                     tc.result = event.result;
                                     tc.status = "complete";
                                 }
+                                useConciergeFlowStore.getState().toolEnd(event.toolUseId);
                                 updateMessage();
                                 break;
                             }
@@ -297,6 +304,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                 });
             } finally {
                 setLoading(storeKey, false);
+                useConciergeFlowStore.getState().runtimeEnd();
             }
         },
         [client, sessionId, auth.user?.access_token, researchDispatch, modelId, storeKey]
@@ -345,6 +353,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
 
     const startNewChat = useCallback((): void => {
         useChatStore.getState().clearSlot(storeKey);
+        useConciergeFlowStore.getState().reset();
     }, [storeKey]);
 
     const clearError = useCallback((): void => {

@@ -13,6 +13,9 @@ type ChatHeaderProps = {
     onNewChat: () => void;
     canStartNewChat: boolean;
     mode?: string;
+    onToggleFlow?: () => void;
+    flowOpen?: boolean;
+    flowPulse?: boolean;
 };
 
 export function ChatHeader({
@@ -20,6 +23,9 @@ export function ChatHeader({
     onNewChat,
     canStartNewChat,
     mode,
+    onToggleFlow,
+    flowOpen,
+    flowPulse,
 }: ChatHeaderProps): JSX.Element {
     const { isAuthenticated, signOut } = useAuth();
     const [logoutVisible, setLogoutVisible] = useState(false);
@@ -33,6 +39,17 @@ export function ChatHeader({
                 actions={
                     <SpaceBetween direction="horizontal" size="xs">
                         {isResearchMode && <ResearchDepthSelector />}
+                        {onToggleFlow && (
+                            <Button
+                                variant={flowOpen ? "primary" : "normal"}
+                                onClick={onToggleFlow}
+                                iconName="share"
+                                ariaLabel="Toggle AgentCore flow diagram"
+                                className={flowPulse ? "concierge-flow-toggle-pulse" : undefined}
+                            >
+                                Flow
+                            </Button>
+                        )}
                         <Button onClick={onNewChat} disabled={!canStartNewChat} iconName="add-plus">
                             New Chat
                         </Button>

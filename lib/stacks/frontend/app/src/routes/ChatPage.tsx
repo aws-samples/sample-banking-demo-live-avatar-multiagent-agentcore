@@ -6,6 +6,7 @@ export default function ChatPage(): JSX.Element {
         <ChatInterface
             mode="chatbot"
             title="AI Concierge"
+            enableFlowSidebar
             renderWelcome={(onExampleClick) => (
                 <ChatbotWelcomeScreen onExampleClick={onExampleClick} />
             )}
