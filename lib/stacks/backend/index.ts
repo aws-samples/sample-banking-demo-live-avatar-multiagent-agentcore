@@ -250,6 +250,7 @@ export class Backend extends Stack {
             { dir: "place_order", handler: "handler.handler", timeout: 300, memory: 256 },
             { dir: "data_sources", handler: "handler.handler", timeout: 30, memory: 128 },
             { dir: "website_generator", handler: "handler.handler", timeout: 900, memory: 512 },
+            { dir: "extract_pdf_images", handler: "handler.handler", timeout: 900, memory: 256 },
             {
                 dir: "sample_tool",
                 handler: "sample_tool_lambda.handler",
@@ -330,6 +331,7 @@ export class Backend extends Stack {
                         "bedrock:Retrieve",
                         "bedrock:RetrieveAndGenerate",
                         "bedrock:InvokeTool",
+                        "bedrock-agentcore:*",
                     ],
                     resources: ["*"],
                 })

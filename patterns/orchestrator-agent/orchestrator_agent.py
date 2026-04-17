@@ -486,8 +486,13 @@ Tool reference:
     you wrote). Do NOT ask the tool to generate the HTML — you write it.
   - When writing HTML for updates: use Tailwind CDN, Google Fonts, and inline CSS for animations.
     Write production-quality, visually stunning HTML that fully implements the user's design vision.
-    The HTML must be completely self-contained (no external image references except CDN fonts/scripts).
+    Preserve ALL <img> tags with their data-s3-key attributes — images are refreshed automatically.
+  - To add images: call with mode="add_images", s3_key, and images array [{name, s3_key}].
   - Remember the s3_key from website generation results so you can apply edits later.
+- gateway_extract_pdf_images: extract dish images from a menu PDF using Code Interpreter.
+  - Call with pdf_s3_key and menu JSON. Returns [{name, s3_key}] for each image.
+  - Use when the user wants to add PDF images to a website — extract first, then call
+    gateway_website_generator mode="add_images" with the results.
 
 Tool limits:
 - If a tool returns no results, try ONE more time with a broader query.

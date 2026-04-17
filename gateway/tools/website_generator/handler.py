@@ -151,10 +151,84 @@ bedrock_runtime = boto3.client(
 EDIT_MODEL_ID = os.environ.get("WEBSITE_EDIT_MODEL_ID", "us.amazon.nova-pro-v1:0")
 
 
+import re
+
+
+def _add_images_to_website(s3_key: str, images: list, user_id: str = "") -> dict:
+    """Patch images into an existing website HTML by matching dish names."""
+    resp = s3_client.get_object(Bucket=REPORTS_BUCKET, Key=s3_key)
+    html = resp["Body"].read().decode("utf-8")
+
+    img_tag_tpl = (
+        '<img src="{url}" alt="{name}" data-s3-key="{s3_key}" '
+        'class="w-full h-48 object-cover rounded-t-xl" loading="lazy"/>'
+    )
+
+    for img in images:
+        name = img.get("name", "")
+        img_s3_key = img.get("s3_key", "")
+        image_url = img.get("image_url", "")
+        url = _get_image_url(img_s3_key, image_url)
+        if not name or not url:
+            continue
+
+        escaped_name = re.escape(name)
+        tag = img_tag_tpl.format(url=url, name=name, s3_key=img_s3_key)
+
+        # Replace existing broken img tags with matching alt text
+        html, count = re.subn(
+            rf'<img\s[^>]*alt="{escaped_name}"[^>]*/?>',
+            tag,
+            html,
+        )
+        if count > 0:
+            continue
+
+        # No existing img — insert before the <div class="p-5"> that contains this dish name
+        html = re.sub(
+            rf'(<div\s+class="p-5">\s*<div\s+class="flex[^"]*">\s*<h3[^>]*>[^<]*{escaped_name})',
+            tag + "\n\\1",
+            html,
+        )
+
+    presigned_url = _upload_html(html, s3_key, user_id)
+    return {"success": True, "url": presigned_url, "s3_key": s3_key}
+
+
+def _refresh_image_urls(html: str) -> str:
+    """Regenerate presigned URLs for all images that have a data-s3-key attribute."""
+    def _replace_src(match):
+        full_tag = match.group(0)
+        s3_key_match = re.search(r'data-s3-key="([^"]+)"', full_tag)
+        if not s3_key_match:
+            return full_tag
+        s3_key = s3_key_match.group(1)
+        if not s3_key:
+            return full_tag
+        fresh_url = _get_image_url(s3_key)
+        if not fresh_url:
+            return full_tag
+        return re.sub(r'src="[^"]*"', f'src="{fresh_url}"', full_tag)
+
+    return re.sub(r'<img\s[^>]*data-s3-key="[^"]*"[^>]*/?\s*>', _replace_src, html)
+
+
+def _strip_presigned_urls(html: str) -> str:
+    """Replace presigned URLs with placeholder to reduce tokens for Bedrock, keep data-s3-key."""
+    return re.sub(
+        r'(<img\s[^>]*?)src="https://[^"]*"([^>]*data-s3-key="[^"]*")',
+        r'\1src="PLACEHOLDER"\2',
+        html,
+    )
+
+
 def _ai_edit_website(s3_key: str, edit_instructions: str, user_id: str = "") -> dict:
     """Fetch existing HTML from S3, apply edits via Bedrock, re-upload."""
     resp = s3_client.get_object(Bucket=REPORTS_BUCKET, Key=s3_key)
     current_html = resp["Body"].read().decode("utf-8")
+
+    # Strip presigned URLs before sending to Bedrock — reduces tokens, avoids corruption
+    stripped = _strip_presigned_urls(current_html)
 
     response = bedrock_runtime.converse(
         modelId=EDIT_MODEL_ID,
@@ -165,9 +239,11 @@ def _ai_edit_website(s3_key: str, edit_instructions: str, user_id: str = "") -> 
                     {
                         "text": (
                             "Edit this HTML based on the instructions. "
-                            "Return ONLY the complete updated HTML. No markdown fences, no explanation.\n\n"
+                            "Return ONLY the complete updated HTML. No markdown fences, no explanation.\n"
+                            "IMPORTANT: Keep ALL <img> tags with their data-s3-key attributes intact. "
+                            "Do not remove or modify data-s3-key values or img tags.\n\n"
                             f"INSTRUCTIONS: {edit_instructions}\n\n"
-                            f"HTML:\n{current_html}"
+                            f"HTML:\n{stripped}"
                         )
                     }
                 ],
@@ -183,6 +259,9 @@ def _ai_edit_website(s3_key: str, edit_instructions: str, user_id: str = "") -> 
         updated_html = updated_html[updated_html.index("\n") + 1 :]
     if updated_html.endswith("```"):
         updated_html = updated_html[:-3].rstrip()
+
+    # Regenerate fresh presigned URLs for all images from their stored s3 keys
+    updated_html = _refresh_image_urls(updated_html)
 
     presigned_url = _upload_html(updated_html, s3_key, user_id)
     return {"success": True, "url": presigned_url, "s3_key": s3_key}
@@ -203,6 +282,14 @@ def handler(event, context):
         mode = event.get("mode", "create")
         user_id = event.get("user_id", "")
 
+        if mode == "add_images":
+            s3_key = event.get("s3_key", "")
+            images = event.get("images", [])
+            if not s3_key or not images:
+                return {"error": "add_images mode requires 's3_key' and 'images'"}
+            result = _add_images_to_website(s3_key, images, user_id)
+            return {"content": [{"type": "text", "text": json.dumps(result)}]}
+
         if mode == "update":
             s3_key = event.get("s3_key", "")
             html = event.get("html", "")
@@ -213,6 +300,7 @@ def handler(event, context):
 
             if html:
                 # Agent-generated HTML (chatbot mode with Claude)
+                html = _refresh_image_urls(html)
                 presigned_url = _upload_html(html, s3_key, user_id)
                 logger.info("Update (html) successful: s3_key=%s", s3_key)
                 result = {"success": True, "url": presigned_url, "s3_key": s3_key}

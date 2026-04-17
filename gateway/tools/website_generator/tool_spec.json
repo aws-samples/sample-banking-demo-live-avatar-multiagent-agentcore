@@ -7,9 +7,9 @@
             "properties": {
                 "mode": {
                     "type": "string",
-                    "enum": ["create", "update"],
+                    "enum": ["create", "update", "add_images"],
                     "default": "create",
-                    "description": "'create' to build from menu data, 'update' to modify an existing site"
+                    "description": "'create' to build from menu data, 'update' to modify an existing site, 'add_images' to attach generated images to dishes on an existing site"
                 },
                 "title": {
                     "type": "string",
@@ -58,6 +58,19 @@
                 "edit_instructions": {
                     "type": "string",
                     "description": "Natural language description of changes to apply (for update mode). The tool fetches the current site and applies changes via AI. Use this when you cannot generate HTML yourself."
+                },
+                "images": {
+                    "type": "array",
+                    "description": "Array of dish images to add to the website (for add_images mode). Each item has 'name' (dish name to match) and 's3_key' or 'image_url'.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string", "description": "Dish name to match in the website" },
+                            "s3_key": { "type": "string", "description": "S3 key of the image" },
+                            "image_url": { "type": "string", "description": "Presigned URL of the image (fallback)" }
+                        },
+                        "required": ["name"]
+                    }
                 },
                 "user_id": {
                     "type": "string",
