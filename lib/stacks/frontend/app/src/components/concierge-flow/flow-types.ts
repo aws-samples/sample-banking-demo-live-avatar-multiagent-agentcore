@@ -28,31 +28,142 @@ export function normalizeToolName(raw: string): string {
 }
 
 /** Tool name (backend) → display label + optional icon override. */
-export const TOOL_META: Record<string, { label: string; icon?: string }> = {
-    kb_search: { label: "KB Search" },
-    web_search: { label: "Web Search" },
-    pdf_generator: { label: "PDF Generator" },
-    nova_canvas_generate: { label: "Canvas Generate" },
-    nova_canvas_edit: { label: "Canvas Edit" },
-    nova_canvas_history: { label: "Canvas History" },
-    nova_reel_generate: { label: "Reel Generate" },
-    nova_reel_status: { label: "Reel Status" },
-    nova_reel_history: { label: "Reel History" },
-    save_memory: { label: "Save Memory" },
-    recall_memories: { label: "Recall Memory" },
-    analyze_patterns: { label: "Analyze Patterns" },
-    retrieve_user_profile: { label: "User Profile" },
-    place_order: { label: "Place Order" },
-    data_sources: { label: "Data Sources" },
+/** Tool name (backend) → display label + optional icon override. */
+export const TOOL_META: Record<string, { label: string; icon?: string; description: string }> = {
+    kb_search: {
+        label: "KB Search",
+        description:
+            "Hybrid semantic + keyword search over the Bedrock Knowledge Base (S3 Vectors, Nova Multimodal Embeddings) to retrieve grounded context from prior research reports and menus.",
+    },
+    web_search: {
+        label: "Web Search",
+        description:
+            "Web-grounded search powered by Nova Pro. Returns live sources with citations for the researcher and chatbot to synthesize into answers.",
+    },
+    pdf_generator: {
+        label: "PDF Generator",
+        description:
+            "Generates 12-section research PDF reports via ReportLab and uploads to S3, returning a presigned URL. Handles cover page, TOC, findings, citations, and appendices.",
+    },
+    nova_canvas_generate: {
+        label: "Canvas Generate",
+        description:
+            "Generates dish or design imagery via Amazon Nova Canvas. Images are stored in S3 with session-scoped history.",
+    },
+    nova_canvas_edit: {
+        label: "Canvas Edit",
+        description:
+            "Edits existing images via Nova Canvas inpainting / outpainting for localized or expansive image modifications.",
+    },
+    nova_canvas_history: {
+        label: "Canvas History",
+        description: "Retrieves the history of Nova Canvas images generated during the session.",
+    },
+    nova_reel_generate: {
+        label: "Reel Generate",
+        description:
+            "Generates short-form video via Amazon Nova Reel. Asynchronous job that returns a job id for status polling.",
+    },
+    nova_reel_status: {
+        label: "Reel Status",
+        description: "Polls a Nova Reel generation job for completion status.",
+    },
+    nova_reel_history: {
+        label: "Reel History",
+        description: "Retrieves the history of Nova Reel videos generated during the session.",
+    },
+    save_memory: {
+        label: "Save Memory",
+        description:
+            "Persists a fact or event to AgentCore Memory across episodic, semantic, and user preference strategies. Events auto-expire after 30 days.",
+    },
+    recall_memories: {
+        label: "Recall Memory",
+        description:
+            "Retrieves relevant memories from AgentCore Memory across episodic, semantic, and user preference strategies for context-aware responses.",
+    },
+    analyze_patterns: {
+        label: "Analyze Patterns",
+        description: "Analyzes conversation patterns across a session to surface recurring themes.",
+    },
+    retrieve_user_profile: {
+        label: "User Profile",
+        description:
+            "Looks up the authenticated customer profile from DynamoDB to personalize the response (preferences, past orders).",
+    },
+    place_order: {
+        label: "Place Order",
+        description:
+            "Places a restaurant order on behalf of the customer and records it in DynamoDB.",
+    },
+    data_sources: {
+        label: "Data Sources",
+        description:
+            "Lists the data sources available for research, including KBs and external feeds.",
+    },
     extract_pdf_images: {
         label: "Extract PDF Images",
         icon: "/icons/agentcore/code-interpreter.png",
+        description:
+            "Extracts embedded dish images from a menu PDF using an AgentCore Code Interpreter sandboxed Python session. Uploads images to S3 for reuse on the generated website.",
     },
-    website_generator: { label: "Website Generator" },
+    website_generator: {
+        label: "Website Generator",
+        description:
+            "Generates or updates a live menu website (HTML/CSS) from the structured menu JSON and extracted dish images, hosted in S3 with a presigned URL.",
+    },
 };
 
 /** Tools that trigger reveal of a conditional downstream node. */
 export const CONDITIONAL_REVEAL: Record<string, string> = {
     kb_search: "knowledge_base",
     extract_pdf_images: "code_interpreter",
+};
+
+/** Rich descriptions for core architecture nodes (non-tools). */
+export const CORE_NODE_META: Record<
+    string,
+    { label: string; rawName: string; description: string }
+> = {
+    runtime: {
+        label: "AgentCore Runtime",
+        rawName: "bedrock-agentcore-runtime · orchestrator",
+        description:
+            "Serverless HTTP/SSE runtime running the in-process multi-agent orchestrator on Claude Sonnet 4.6. Handles 6 modes (research, menu, chatbot, …) and streams tokens + tool events back to the client.",
+    },
+    gateway: {
+        label: "AgentCore Gateway",
+        rawName: "bedrock-agentcore-gateway · MCP",
+        description:
+            "Managed MCP server that exposes 16+ Lambda-backed tools to the runtime. Authenticates agents via Cognito M2M OAuth2 and routes tool calls to the corresponding Lambda function.",
+    },
+    memory: {
+        label: "AgentCore Memory",
+        rawName: "bedrock-agentcore-memory",
+        description:
+            "Persistent memory service with three strategies: episodic (session-scoped with reflection), semantic (cross-session facts), and user preference. Events auto-expire after 30 days.",
+    },
+    guardrails: {
+        label: "Bedrock Guardrails",
+        rawName: "bedrock-guardrails",
+        description:
+            "Content, topic, and word policy enforcement applied at the model invocation level for the chatbot mode. Blocks disallowed prompts and filters unsafe responses.",
+    },
+    knowledge_base: {
+        label: "Knowledge Base",
+        rawName: "bedrock-knowledge-base · S3 Vectors",
+        description:
+            "Bedrock Knowledge Base backed by S3 Vectors (1024-dim, FLOAT32, cosine) with Nova Multimodal Embeddings. Auto-ingests generated PDFs via S3 event notifications.",
+    },
+    code_interpreter: {
+        label: "Code Interpreter",
+        rawName: "bedrock-agentcore-code-interpreter",
+        description:
+            "Sandboxed Python execution environment used by tools that need to parse PDFs, run data analysis, or execute code. Session-scoped and isolated.",
+    },
+    user: {
+        label: "User",
+        rawName: "concierge request",
+        description: "The end user's message that initiates an orchestration turn.",
+    },
 };

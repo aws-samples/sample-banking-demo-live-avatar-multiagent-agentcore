@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ReactFlow,
     Background,
@@ -10,6 +10,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { ConciergeNode } from "./ConciergeNode";
 import { ConciergeEdge } from "./ConciergeEdge";
+import { NodeDetailModal } from "./NodeDetailModal";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 import type { ConciergeNodeData, NodeActivity } from "./flow-types";
 import { TOOL_META, CONDITIONAL_REVEAL } from "./flow-types";
@@ -257,34 +258,45 @@ function ConciergeFlowInner() {
         return { nodes: ns, edges: es };
     }, [runtimeActive, activeTool, invokedTools, callCounts, anyActivity]);
 
-    // Auto-zoom: follow the active node (source + target of current flow).
+    // Auto-zoom: follow the current phase of execution.
+    // Priority: activeTool > runtime (when no tool is running yet).
     const reactFlow = useReactFlow();
     useEffect(() => {
-        if (!activeTool) {
-            // Return to overview when idle
+        const focusOnGroup = (ids: string[]) => {
+            const group = nodes.filter((n) => ids.includes(n.id));
+            if (group.length === 0) return;
+            const xs = group.map((n) => n.position.x);
+            const ys = group.map((n) => n.position.y);
+            const minX = Math.min(...xs) - 40;
+            const minY = Math.min(...ys) - 40;
+            const maxX = Math.max(...xs) + 180 + 40;
+            const maxY = Math.max(...ys) + 100 + 40;
+            reactFlow.fitBounds(
+                { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+                { padding: 0.2, duration: 700 }
+            );
+        };
+
+        if (activeTool) {
+            const isMemoryTool = ["save_memory", "recall_memories"].includes(activeTool);
+            const parentId = isMemoryTool ? "memory" : "gateway";
+            // If this tool reveals a downstream resource, include it in focus.
+            const downstream = CONDITIONAL_REVEAL[activeTool];
+            const ids = [parentId, activeTool];
+            if (downstream && nodes.some((n) => n.id === downstream)) ids.push(downstream);
+            focusOnGroup(ids);
+        } else if (runtimeActive) {
+            // Runtime just started — focus on the orchestration core before tools fire.
+            focusOnGroup(["user", "runtime", "guardrails", "memory"]);
+        } else {
             reactFlow.fitView({ padding: 0.15, duration: 500 });
-            return;
         }
-        // Focus on the active tool node + its parent (gateway/memory).
-        const isMemoryTool = ["save_memory", "recall_memories"].includes(activeTool);
-        const parentId = isMemoryTool ? "memory" : "gateway";
-        const active = nodes.find((n) => n.id === activeTool);
-        const parent = nodes.find((n) => n.id === parentId);
-        if (!active || !parent) return;
+    }, [activeTool, runtimeActive, nodes, reactFlow]);
 
-        const minX = Math.min(active.position.x, parent.position.x) - 40;
-        const minY = Math.min(active.position.y, parent.position.y) - 40;
-        const maxX = Math.max(active.position.x + 160, parent.position.x + 160) + 40;
-        const maxY = Math.max(active.position.y + 80, parent.position.y + 80) + 40;
-
-        reactFlow.fitBounds(
-            { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
-            { padding: 0.2, duration: 700 }
-        );
-    }, [activeTool, nodes, reactFlow]);
+    const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
     return (
-        <div className="h-full w-full rounded-lg bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div className="relative h-full w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -299,10 +311,12 @@ function ConciergeFlowInner() {
                 zoomOnPinch={true}
                 minZoom={0.3}
                 maxZoom={1.5}
+                onNodeClick={(_, node) => setSelectedNode(node.id)}
                 proOptions={{ hideAttribution: true }}
             >
                 <Background gap={18} size={1} color="#334155" />
             </ReactFlow>
+            <NodeDetailModal nodeId={selectedNode} onClose={() => setSelectedNode(null)} />
         </div>
     );
 }

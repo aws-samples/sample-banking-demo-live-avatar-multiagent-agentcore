@@ -16,7 +16,7 @@ export function ConciergeFlowSidebar({ onClose }: ConciergeFlowSidebarProps) {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.2 }}
-            className="flex h-full w-[420px] shrink-0 flex-col border-l border-slate-800 bg-slate-950"
+            className="flex h-full w-[540px] shrink-0 flex-col border-l border-slate-800 bg-slate-950"
             aria-label="AgentCore flow diagram"
         >
             <header className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">

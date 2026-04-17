@@ -55,7 +55,7 @@ export function ConciergeNode({ data }: NodeProps<ConciergeNodeType>) {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.25 }}
-                className={`relative ${size} rounded-lg border ${style.border} ${style.bg} ${style.ring} px-2.5 py-2 backdrop-blur-sm transition-all duration-300`}
+                className={`relative ${size} cursor-pointer rounded-lg border ${style.border} ${style.bg} ${style.ring} px-2.5 py-2 backdrop-blur-sm transition-all duration-300 hover:brightness-125`}
             >
                 {data.activity === "active" && (
                     <motion.div
