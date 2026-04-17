@@ -1,5 +1,12 @@
-import { useMemo } from "react";
-import { ReactFlow, Background, ReactFlowProvider, type Node, type Edge } from "@xyflow/react";
+import { useEffect, useMemo } from "react";
+import {
+    ReactFlow,
+    Background,
+    ReactFlowProvider,
+    useReactFlow,
+    type Node,
+    type Edge,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ConciergeNode } from "./ConciergeNode";
 import { ConciergeEdge } from "./ConciergeEdge";
@@ -249,6 +256,32 @@ function ConciergeFlowInner() {
 
         return { nodes: ns, edges: es };
     }, [runtimeActive, activeTool, invokedTools, callCounts, anyActivity]);
+
+    // Auto-zoom: follow the active node (source + target of current flow).
+    const reactFlow = useReactFlow();
+    useEffect(() => {
+        if (!activeTool) {
+            // Return to overview when idle
+            reactFlow.fitView({ padding: 0.15, duration: 500 });
+            return;
+        }
+        // Focus on the active tool node + its parent (gateway/memory).
+        const isMemoryTool = ["save_memory", "recall_memories"].includes(activeTool);
+        const parentId = isMemoryTool ? "memory" : "gateway";
+        const active = nodes.find((n) => n.id === activeTool);
+        const parent = nodes.find((n) => n.id === parentId);
+        if (!active || !parent) return;
+
+        const minX = Math.min(active.position.x, parent.position.x) - 40;
+        const minY = Math.min(active.position.y, parent.position.y) - 40;
+        const maxX = Math.max(active.position.x + 160, parent.position.x + 160) + 40;
+        const maxY = Math.max(active.position.y + 80, parent.position.y + 80) + 40;
+
+        reactFlow.fitBounds(
+            { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+            { padding: 0.2, duration: 700 }
+        );
+    }, [activeTool, nodes, reactFlow]);
 
     return (
         <div className="h-full w-full rounded-lg bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">

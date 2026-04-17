@@ -24,22 +24,57 @@ export function ConciergeEdge({
         borderRadius: 12,
     });
 
-    const stroke = status === "active" ? "#fbbf24" : status === "completed" ? "#34d399" : "#475569";
-    const width = status === "active" ? 2 : 1.25;
+    if (status === "active") {
+        const gradId = `concierge-grad-${id}`;
+        return (
+            <>
+                <defs>
+                    <linearGradient
+                        id={gradId}
+                        gradientUnits="userSpaceOnUse"
+                        x1={sourceX}
+                        y1={sourceY}
+                        x2={targetX}
+                        y2={targetY}
+                    >
+                        <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#fbbf24" stopOpacity="1" />
+                    </linearGradient>
+                </defs>
+                {/* Dim base */}
+                <BaseEdge
+                    id={`${id}-base`}
+                    path={edgePath}
+                    style={{ stroke: "#475569", strokeWidth: 1.25 }}
+                />
+                {/* Flowing overlay */}
+                <BaseEdge
+                    id={id}
+                    path={edgePath}
+                    style={{
+                        stroke: `url(#${gradId})`,
+                        strokeWidth: 2.5,
+                        strokeDasharray: "8 6",
+                        strokeLinecap: "round",
+                    }}
+                    className="concierge-edge-flow"
+                />
+            </>
+        );
+    }
+
+    const stroke = status === "completed" ? "#34d399" : "#475569";
+    const width = status === "completed" ? 1.5 : 1.25;
 
     return (
-        <>
-            <BaseEdge
-                id={id}
-                path={edgePath}
-                style={{
-                    stroke,
-                    strokeWidth: width,
-                    strokeDasharray: status === "active" ? "6 4" : undefined,
-                    transition: "stroke 0.3s ease",
-                }}
-                className={status === "active" ? "concierge-edge-flow" : undefined}
-            />
-        </>
+        <BaseEdge
+            id={id}
+            path={edgePath}
+            style={{
+                stroke,
+                strokeWidth: width,
+                transition: "stroke 0.3s ease",
+            }}
+        />
     );
 }

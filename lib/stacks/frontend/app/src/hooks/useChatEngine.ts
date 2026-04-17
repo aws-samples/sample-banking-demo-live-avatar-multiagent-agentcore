@@ -112,6 +112,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                 const segments: MessageSegment[] = [];
                 const toolCallMap = new Map<string, ToolCall>();
                 const flowStore = useConciergeFlowStore.getState();
+                flowStore.reset();
                 flowStore.runtimeStart();
 
                 const updateMessage = (): void => {

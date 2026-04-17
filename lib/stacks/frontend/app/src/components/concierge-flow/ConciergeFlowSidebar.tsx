@@ -53,11 +53,11 @@ export function ConciergeFlowSidebar({ onClose }: ConciergeFlowSidebarProps) {
                 </button>
             </header>
 
-            <div className="flex min-h-[55%] flex-none border-b border-slate-800">
+            <div className="relative flex-1 border-b border-slate-800">
                 <ConciergeFlowDiagram />
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="h-[35%] min-h-[120px] flex-none overflow-y-auto">
                 {events.length === 0 ? <EmptyState /> : <ToolActivityTimeline />}
             </div>
         </motion.aside>
