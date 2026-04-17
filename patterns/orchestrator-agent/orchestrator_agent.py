@@ -35,6 +35,18 @@ from utils.auth import extract_user_id_from_context, get_gateway_access_token
 from utils.ssm import get_ssm_parameter
 from utils.tool_guard import UserScopeHook
 
+try:
+    from browser_tools import BROWSER_TOOLS
+    from browser_tools import cleanup as browser_cleanup
+    from browser_tools import set_ui_queue as set_browser_ui_queue
+except Exception as _browser_import_err:  # pragma: no cover — browser deps optional
+    BROWSER_TOOLS = []
+
+    def browser_cleanup() -> None: ...
+    def set_browser_ui_queue(_q) -> None: ...
+
+    print(f"[ORCHESTRATOR] Browser tools unavailable: {_browser_import_err}")
+
 _SSE_HEADERS = {
     "X-Accel-Buffering": "no",
     "Cache-Control": "no-cache, no-transform",
@@ -495,6 +507,29 @@ Tool reference:
   - Call with pdf_s3_key and menu JSON. Returns [{name, s3_key}] for each image.
   - Use when the user wants to add PDF images to a website — extract first, then call
     gateway_website_generator mode="add_images" with the results.
+
+BROWSER AUTOMATION (book a reservation, browse a generated website):
+When the user asks to book a reservation, browse their restaurant website, or take an
+action on a live webpage, use the browser_* tools to drive an AgentCore cloud browser.
+A live view is streamed into the chat the moment you call browser_start, so the user
+watches every click.
+
+Workflow:
+1. browser_start — ONCE. Emits the live view to the user.
+2. browser_navigate(url=...) — go to the generated website URL. The user will usually
+   share the presigned S3 URL. If they don't, fall back to gateway_kb_search to find the
+   latest website/menu.
+3. browser_get_text() — read the page (no selector = full page). Let the LLM decide what
+   to interact with based on the text.
+4. browser_type(selector="...", text="...") — fill fields. Prefer simple selectors
+   like input[name="name"], input[type="email"], input[type="date"].
+5. browser_click(selector="...") — click buttons like button:has-text("Reserve").
+6. browser_press_key(key="Enter") — submit forms if no explicit button.
+7. browser_stop() — when done. Always clean up even on failure.
+
+Keep selectors simple and fall back to broader queries (e.g., button[type="submit"]) if
+a specific one fails. If the site has no reservation form, tell the user plainly — don't
+fabricate a success.
 
 Tool limits:
 - If a tool returns no results, try ONE more time with a broader query.
@@ -1033,6 +1068,7 @@ def _create_agent(
     session_id: str,
     gateway_client: MCPClient,
     bedrock_model: BedrockModel,
+    extra_tools: list | None = None,
 ) -> Agent:
     """Create a Strands Agent with Gateway MCP + Memory (identical to standalone pattern)."""
     memory_id = os.environ.get("MEMORY_ID")
@@ -1057,7 +1093,7 @@ def _create_agent(
     agent = Agent(
         name=f"{name.title().replace('_', '')}Agent",
         system_prompt=augmented_prompt,
-        tools=[gateway_client],
+        tools=[gateway_client, *(extra_tools or [])],
         model=bedrock_model,
         hooks=hooks,
         session_manager=session_manager,
@@ -1198,9 +1234,12 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
             session_id,
             gateway_client,
             bedrock_model,
+            extra_tools=BROWSER_TOOLS,
         )
         # Attach our streaming callback handler
         agent.callback_handler = _callback_handler
+        # Bridge browser tool UI events into this turn's SSE queue
+        set_browser_ui_queue(tq)
     except Exception as e:
         print(f"[CHATBOT] Failed to create agent: {e}")
         yield {"status": "error", "error": f"Failed to create chatbot: {e}"}
@@ -1239,6 +1278,9 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
                 raise value
             if tag is _HEARTBEAT:
                 yield {"data": "", "heartbeat": True}
+            elif tag == "ui":
+                # Browser tool pushed a generative UI event
+                yield {"_ui": value}
             elif tag == "stream":
                 # Serialize any non-dict values to ensure JSON compatibility
                 try:
@@ -1255,6 +1297,11 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
         _stop_heartbeat.set()
         heartbeat_thread.join(timeout=2)
         agent_future.cancel()
+        # Ensure any active browser session is released at end of turn
+        try:
+            browser_cleanup()
+        finally:
+            set_browser_ui_queue(None)
 
     yield {"result": {"stop_reason": "end_turn"}}
 
