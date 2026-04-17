@@ -32,6 +32,7 @@
         "@aws-crypto/sha256-js": "^5.2.0",
         "@aws-sdk/client-cognito-identity": "^3.1000.0",
         "@aws-sdk/client-cognito-identity-provider": "^3.1000.0",
+        "@babel/runtime": "^7.29.2",
         "@cloudscape-design/components": "^3.0.1215",
         "@cloudscape-design/design-tokens": "^3.0.72",
         "@cloudscape-design/global-styles": "^1.0.50",
@@ -39,8 +40,10 @@
         "@smithy/signature-v4": "^5.3.10",
         "@xyflow/react": "^12.10.1",
         "animejs": "^4.3.6",
+        "bedrock-agentcore": "^0.2.2",
         "framer-motion": "^12.34.3",
         "lucide-react": "^0.562.0",
+        "prop-types": "^15.8.1",
         "react": "^19.2.4",
         "react-dom": "^19.2.4",
         "react-markdown": "^10.1.0",
@@ -49,6 +52,7 @@
         "react-syntax-highlighter": "^16.1.0",
         "remark-gfm": "^4.0.1",
         "three": "^0.172.0",
+        "vite-plugin-static-copy": "^4.0.1",
         "zustand": "^5.0.11"
     }
 }

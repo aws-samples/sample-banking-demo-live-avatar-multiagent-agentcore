@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { AgentActivityCard } from "./AgentActivityCard";
+import { BrowserLiveViewCard } from "./BrowserLiveViewCard";
 import { PdfDeliveryCard } from "./PdfDeliveryCard";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 
@@ -9,6 +10,7 @@ type AnyComponent = ComponentType<any>;
 /** Registry mapping generative UI component names to React components. */
 const UI_COMPONENTS: Record<string, AnyComponent> = {
     AgentActivity: AgentActivityCard,
+    BrowserLiveView: BrowserLiveViewCard,
     PdfDelivery: PdfDeliveryCard,
     ResearchPlan: ResearchPlanCard,
 };

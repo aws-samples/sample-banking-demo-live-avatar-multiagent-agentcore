@@ -112,12 +112,49 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
         description:
             "Generates or updates a live menu website (HTML/CSS) from the structured menu JSON and extracted dish images, hosted in S3 with a presigned URL.",
     },
+    browser_start: {
+        label: "Browser",
+        icon: "/icons/agentcore/browser-tool.png",
+        description:
+            "Starts an AgentCore cloud browser session (sandboxed Chrome in a Firecracker microVM) and streams a live DCV view into the chat so the user watches the agent work. Followed by browser_navigate / click / type / get_text to drive interactions like booking a reservation.",
+    },
+    browser_navigate: {
+        label: "Browser Navigate",
+        icon: "/icons/agentcore/browser-tool.png",
+        description: "Navigate the AgentCore browser to a URL.",
+    },
+    browser_click: {
+        label: "Browser Click",
+        icon: "/icons/agentcore/browser-tool.png",
+        description: "Click an element in the AgentCore browser by CSS selector.",
+    },
+    browser_type: {
+        label: "Browser Type",
+        icon: "/icons/agentcore/browser-tool.png",
+        description: "Type text into an input element in the AgentCore browser.",
+    },
+    browser_get_text: {
+        label: "Browser Read",
+        icon: "/icons/agentcore/browser-tool.png",
+        description: "Read visible text from the current page in the AgentCore browser.",
+    },
+    browser_press_key: {
+        label: "Browser Press Key",
+        icon: "/icons/agentcore/browser-tool.png",
+        description: "Press a keyboard key in the AgentCore browser.",
+    },
+    browser_stop: {
+        label: "Browser Stop",
+        icon: "/icons/agentcore/browser-tool.png",
+        description: "Stop the AgentCore browser session and release resources.",
+    },
 };
 
 /** Tools that trigger reveal of a conditional downstream node. */
 export const CONDITIONAL_REVEAL: Record<string, string> = {
     kb_search: "knowledge_base",
     extract_pdf_images: "code_interpreter",
+    browser_start: "browser",
 };
 
 /** Rich descriptions for core architecture nodes (non-tools). */
@@ -160,6 +197,12 @@ export const CORE_NODE_META: Record<
         rawName: "bedrock-agentcore-code-interpreter",
         description:
             "Sandboxed Python execution environment used by tools that need to parse PDFs, run data analysis, or execute code. Session-scoped and isolated.",
+    },
+    browser: {
+        label: "Browser",
+        rawName: "bedrock-agentcore-browser",
+        description:
+            "Fast, cloud-sandboxed Chrome browser (Firecracker microVM) that agents drive via CDP/Playwright. A live DCV view can be streamed into the chat so users watch every click in real time.",
     },
     user: {
         label: "User",
