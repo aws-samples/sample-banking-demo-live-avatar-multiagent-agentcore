@@ -7,6 +7,7 @@ import { useModelSelector } from "@/hooks/useModelSelector";
 import { useChatStore } from "@/stores/chatStore";
 import type { ResearchAction } from "@/stores/chatStore";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
+import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
 
 export type { ResearchAction };
 
@@ -224,6 +225,18 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                 break;
                             }
                             case "_ui": {
+                                // BrowserLiveView pops out into a dedicated sidebar,
+                                // not inline in the chat message.
+                                if (event.component === "BrowserLiveView") {
+                                    const p = event.props as Record<string, unknown>;
+                                    useBrowserLiveViewStore.getState().open({
+                                        liveViewUrl: p.liveViewUrl as string,
+                                        sessionId: p.sessionId as string | undefined,
+                                        remoteWidth: p.remoteWidth as number | undefined,
+                                        remoteHeight: p.remoteHeight as number | undefined,
+                                    });
+                                    break;
+                                }
                                 const uiKey = `ui-${(event.props.agent as string) || event.component}`;
                                 const existingIdx = segments.findIndex(
                                     (s) => s.type === "ui" && s.key === uiKey
@@ -355,6 +368,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
     const startNewChat = useCallback((): void => {
         useChatStore.getState().clearSlot(storeKey);
         useConciergeFlowStore.getState().reset();
+        useBrowserLiveViewStore.getState().close();
     }, [storeKey]);
 
     const clearError = useCallback((): void => {

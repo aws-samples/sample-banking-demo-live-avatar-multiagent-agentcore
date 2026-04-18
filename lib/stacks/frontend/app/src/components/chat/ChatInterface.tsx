@@ -10,6 +10,7 @@ import { ToolCallDisplay } from "./ToolCallDisplay";
 import { KbSearchResultCard } from "./KbSearchResultCard";
 import { ConciergeFlowSidebar } from "@/components/concierge-flow/ConciergeFlowSidebar";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
+import { BrowserLiveViewSidebar } from "./BrowserLiveViewSidebar";
 
 import { submitFeedback } from "@/services/feedbackService";
 import { useAuth } from "react-oidc-context";
@@ -206,6 +207,7 @@ export default function ChatInterface({
             {enableFlowSidebar && flowOpen && (
                 <ConciergeFlowSidebar onClose={() => setFlowOpen(false)} />
             )}
+            <BrowserLiveViewSidebar />
         </div>
     );
 }
