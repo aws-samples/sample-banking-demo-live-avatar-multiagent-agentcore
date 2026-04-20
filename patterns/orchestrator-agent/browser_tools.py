@@ -178,22 +178,16 @@ def browser_navigate(url: str) -> str:
 
     async def _go() -> tuple[str, str, int, list[str]]:
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        # DCV compositor only pushes a new frame when Chrome repaints. After
-        # a navigation the tab's DOM is replaced but the old framebuffer may
-        # remain on screen until the next paint. Force one by:
-        #   1. setting the viewport to the live-view dimensions (triggers a
-        #      layout recalc),
-        #   2. scrolling 1px and back (forces a compositor repaint),
-        #   3. bringing the page to front (re-activates the window).
+        # Force a compositor frame via CDP. `Page.bringToFront` + requesting
+        # a screenshot forces Chrome to recomposite the tab, which also
+        # pushes a fresh frame to whatever display DCV is streaming.
         try:
-            await page.set_viewport_size({"width": 1280, "height": 800})
-        except Exception:
-            pass
-        try:
-            await page.evaluate("() => { window.scrollTo(0, 1); window.scrollTo(0, 0); }")
-        except Exception:
-            pass
-        await page.bring_to_front()
+            cdp = await page.context.new_cdp_session(page)
+            await cdp.send("Page.bringToFront")
+            await cdp.send("Page.captureScreenshot", {"format": "png"})
+            await cdp.detach()
+        except Exception as e:
+            print(f"[BROWSER] CDP repaint failed: {e}", flush=True)
         ctx = page.context
         all_pages = [p.url for p in ctx.pages]
         return await page.title(), page.url, len(all_pages), all_pages

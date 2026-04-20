@@ -93,6 +93,7 @@ export function BrowserLiveViewSidebar(): JSX.Element | null {
             <div className="flex flex-1 items-center justify-center overflow-hidden bg-slate-900 p-3">
                 <div className="w-full" style={{ aspectRatio: `${remoteWidth} / ${remoteHeight}` }}>
                     <BrowserLiveView
+                        key={liveViewUrl}
                         signedUrl={liveViewUrl}
                         remoteWidth={remoteWidth}
                         remoteHeight={remoteHeight}
