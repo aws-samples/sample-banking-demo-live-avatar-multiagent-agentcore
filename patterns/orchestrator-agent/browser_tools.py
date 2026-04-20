@@ -117,23 +117,24 @@ def browser_start() -> str:
         pw = await async_playwright().start()
         browser = await pw.chromium.connect_over_cdp(ws_url, headers=headers)
 
-        # Wait for the remote Chrome's default context + page to be exposed
-        # over CDP. Right after connect_over_cdp, browser.contexts and
-        # context.pages can briefly appear empty even though the remote has
-        # the default google.com tab open — and the DCV live view is tied
-        # to THAT tab. If we fall through to new_context()/new_page() here,
-        # Playwright drives a background tab while the user watches the
-        # unchanged visible tab forever.
+        # Wait for the remote Chrome's default context to be exposed over CDP.
         for _ in range(30):
-            if browser.contexts and browser.contexts[0].pages:
+            if browser.contexts:
                 break
             await asyncio.sleep(0.1)
 
-        if not browser.contexts or not browser.contexts[0].pages:
-            raise RuntimeError("AgentCore Browser did not expose a default page over CDP within 3s")
+        if not browser.contexts:
+            raise RuntimeError("AgentCore Browser did not expose a CDP context within 3s")
 
+        # Canonical AgentCore pattern (per AWS docs + internal samples):
+        # attach to the default context but ALWAYS create a fresh page. The
+        # default pages[0] is a setup/blank tab the DCV live view does NOT
+        # follow when Playwright navigates it — the live view stays pinned
+        # to the originally visible tab (google.com). Creating a new page
+        # via context.new_page() gives us a tab the display actually shows,
+        # and bring_to_front() makes it the active one.
         context = browser.contexts[0]
-        page = context.pages[0]
+        page = await context.new_page()
         await page.bring_to_front()
         _state["playwright"] = pw
         _state["browser"] = browser
