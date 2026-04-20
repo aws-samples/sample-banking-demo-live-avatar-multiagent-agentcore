@@ -103,7 +103,12 @@ def browser_start() -> str:
         return f"Browser already running (session {_state['session_id']})."
 
     client = BrowserClient(_REGION)
-    client.start(identifier="aws.browser.v1", name="concierge", session_timeout_seconds=900)
+    client.start(
+        identifier="aws.browser.v1",
+        name="concierge",
+        session_timeout_seconds=900,
+        viewport={"width": 1280, "height": 800},
+    )
 
     ws_url, headers = client.generate_ws_headers()
     live_view_url = client.generate_live_view_url(expires=300)
@@ -113,6 +118,8 @@ def browser_start() -> str:
         browser = await pw.chromium.connect_over_cdp(ws_url, headers=headers)
         context = browser.contexts[0] if browser.contexts else await browser.new_context()
         page = context.pages[0] if context.pages else await context.new_page()
+        # Ensure the page is the active tab in the live view display
+        await page.bring_to_front()
         _state["playwright"] = pw
         _state["browser"] = browser
         _state["page"] = page
