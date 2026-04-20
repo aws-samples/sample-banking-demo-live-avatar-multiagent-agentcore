@@ -126,16 +126,23 @@ def browser_start() -> str:
         if not browser.contexts:
             raise RuntimeError("AgentCore Browser did not expose a CDP context within 3s")
 
-        # Canonical AgentCore pattern (per AWS docs + internal samples):
-        # attach to the default context but ALWAYS create a fresh page. The
-        # default pages[0] is a setup/blank tab the DCV live view does NOT
-        # follow when Playwright navigates it — the live view stays pinned
-        # to the originally visible tab (google.com). Creating a new page
-        # via context.new_page() gives us a tab the display actually shows,
-        # and bring_to_front() makes it the active one.
         context = browser.contexts[0]
+
+        # Create the page we will drive, then close the default pre-existing
+        # page(s). The DCV live view follows the remote Chrome's visible
+        # window. If we leave the default google.com tab open, it remains
+        # the visible window and our new tab stays in the background
+        # forever. Closing the defaults forces the compositor onto our page.
         page = await context.new_page()
         await page.bring_to_front()
+
+        for existing in list(context.pages):
+            if existing is not page:
+                try:
+                    await existing.close()
+                except Exception:
+                    pass
+
         _state["playwright"] = pw
         _state["browser"] = browser
         _state["page"] = page
