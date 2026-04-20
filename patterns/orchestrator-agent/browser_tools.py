@@ -137,9 +137,13 @@ def browser_start() -> str:
         )
 
         # Use the first existing page — this is the one the DCV live view
-        # stream is bound to. We force-navigate it to about:blank up front
-        # so later page.goto() calls are on a known clean state.
+        # stream is bound to. Set its viewport to match what we tell the
+        # frontend, so Chrome's render buffer matches what DCV expects.
         page = context.pages[0] if context.pages else await context.new_page()
+        try:
+            await page.set_viewport_size({"width": 1280, "height": 800})
+        except Exception:
+            pass
         await page.bring_to_front()
         _state["playwright"] = pw
         _state["browser"] = browser
@@ -172,13 +176,24 @@ def browser_navigate(url: str) -> str:
     if not page:
         return "Error: no active browser session. Call browser_start first."
 
-    async def _go() -> tuple[str, str, int]:
+    async def _go() -> tuple[str, str, int, list[str]]:
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        # Some sites swallow the first frame; bring_to_front re-requests a
-        # compositor frame for this window, which kicks DCV to re-render.
+        # DCV compositor only pushes a new frame when Chrome repaints. After
+        # a navigation the tab's DOM is replaced but the old framebuffer may
+        # remain on screen until the next paint. Force one by:
+        #   1. setting the viewport to the live-view dimensions (triggers a
+        #      layout recalc),
+        #   2. scrolling 1px and back (forces a compositor repaint),
+        #   3. bringing the page to front (re-activates the window).
+        try:
+            await page.set_viewport_size({"width": 1280, "height": 800})
+        except Exception:
+            pass
+        try:
+            await page.evaluate("() => { window.scrollTo(0, 1); window.scrollTo(0, 0); }")
+        except Exception:
+            pass
         await page.bring_to_front()
-        # All pages in all contexts — so we can see if Chrome spawned a new
-        # tab (redirect / target=_blank) that stole focus from us.
         ctx = page.context
         all_pages = [p.url for p in ctx.pages]
         return await page.title(), page.url, len(all_pages), all_pages
