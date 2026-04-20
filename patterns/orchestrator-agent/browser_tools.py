@@ -62,6 +62,23 @@ def _emit_ui(component: str, props: dict) -> None:
         _ui_queue.put(("ui", {"component": component, "props": props}))
 
 
+def _emit_screenshot() -> None:
+    """Capture a screenshot and emit it to the frontend for live view."""
+    page = _state.get("page")
+    if not page or _ui_queue is None:
+        return
+    try:
+        import base64
+
+        async def _snap():
+            return base64.b64encode(await page.screenshot(type="jpeg", quality=70)).decode()
+
+        b64 = _run_async(_snap())
+        _ui_queue.put(("ui", {"component": "BrowserScreenshot", "props": {"image": b64}}))
+    except Exception:
+        pass
+
+
 # ─── Event-loop worker thread ─────────────────────────────────────────────────
 # Playwright's async API needs an event loop. We run one in a dedicated thread
 # so sync @tool handlers can submit coroutines via run_coroutine_threadsafe.
@@ -127,28 +144,11 @@ def browser_start() -> str:
             raise RuntimeError("AgentCore Browser did not expose a CDP context within 3s")
 
         context = browser.contexts[0]
-
-        # Diagnostic: see what the remote Chrome actually looks like at attach time.
-        print(
-            f"[BROWSER] attach: contexts={len(browser.contexts)} "
-            f"pages_in_ctx0={len(context.pages)} "
-            f"existing_urls={[p.url for p in context.pages]}",
-            flush=True,
-        )
-
-        # Use the first existing page — this is the one the DCV live view
-        # stream is bound to. Set its viewport to match what we tell the
-        # frontend, so Chrome's render buffer matches what DCV expects.
-        page = context.pages[0] if context.pages else await context.new_page()
-        try:
-            await page.set_viewport_size({"width": 1280, "height": 800})
-        except Exception:
-            pass
-        await page.bring_to_front()
+        page = await context.new_page()
+        await page.set_viewport_size({"width": 1280, "height": 800})
         _state["playwright"] = pw
         _state["browser"] = browser
         _state["page"] = page
-        print(f"[BROWSER] attach: driving page at {page.url!r}", flush=True)
 
     _run_async(_attach())
 
@@ -156,6 +156,8 @@ def browser_start() -> str:
     _state["session_id"] = client.session_id
     _state["live_view_url"] = live_view_url
 
+    # Emit screenshot-based live view instead of DCV.
+    # DCV live view freezes when CDP automation is active simultaneously.
     _emit_ui(
         "BrowserLiveView",
         {
@@ -176,29 +178,13 @@ def browser_navigate(url: str) -> str:
     if not page:
         return "Error: no active browser session. Call browser_start first."
 
-    async def _go() -> tuple[str, str, int, list[str]]:
+    async def _go() -> tuple[str, str]:
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        # Force a compositor frame via CDP. `Page.bringToFront` + requesting
-        # a screenshot forces Chrome to recomposite the tab, which also
-        # pushes a fresh frame to whatever display DCV is streaming.
-        try:
-            cdp = await page.context.new_cdp_session(page)
-            await cdp.send("Page.bringToFront")
-            await cdp.send("Page.captureScreenshot", {"format": "png"})
-            await cdp.detach()
-        except Exception as e:
-            print(f"[BROWSER] CDP repaint failed: {e}", flush=True)
-        ctx = page.context
-        all_pages = [p.url for p in ctx.pages]
-        return await page.title(), page.url, len(all_pages), all_pages
+        return await page.title(), page.url
 
     try:
-        title, landed_url, n_pages, all_urls = _run_async(_go())
-        print(
-            f"[BROWSER] navigate: requested={url!r} landed={landed_url!r} "
-            f"title={title!r} pages_in_ctx={n_pages} all_urls={all_urls}",
-            flush=True,
-        )
+        title, landed_url = _run_async(_go())
+        _emit_screenshot()
         return f"Navigated to {landed_url} — page title: {title}"
     except Exception as e:
         return f"Navigation failed: {e}"
@@ -216,6 +202,7 @@ def browser_click(selector: str) -> str:
 
     try:
         _run_async(_click())
+        _emit_screenshot()
         return f"Clicked: {selector}"
     except Exception as e:
         return f"Click failed: {e}"
@@ -233,6 +220,7 @@ def browser_type(selector: str, text: str) -> str:
 
     try:
         _run_async(_type())
+        _emit_screenshot()
         return f'Typed "{text}" into {selector}'
     except Exception as e:
         return f"Type failed: {e}"

@@ -237,6 +237,13 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                     });
                                     break;
                                 }
+                                if (event.component === "BrowserScreenshot") {
+                                    const p = event.props as Record<string, unknown>;
+                                    useBrowserLiveViewStore
+                                        .getState()
+                                        .setScreenshot(p.image as string);
+                                    break;
+                                }
                                 const uiKey = `ui-${(event.props.agent as string) || event.component}`;
                                 const existingIdx = segments.findIndex(
                                     (s) => s.type === "ui" && s.key === uiKey

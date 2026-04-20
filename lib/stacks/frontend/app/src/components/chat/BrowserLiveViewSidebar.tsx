@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { BrowserLiveView } from "bedrock-agentcore/browser/live-view";
 import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
 
 export function BrowserLiveViewSidebar(): JSX.Element | null {
     const liveViewUrl = useBrowserLiveViewStore((s) => s.liveViewUrl);
     const sessionId = useBrowserLiveViewStore((s) => s.sessionId);
-    const remoteWidth = useBrowserLiveViewStore((s) => s.remoteWidth);
-    const remoteHeight = useBrowserLiveViewStore((s) => s.remoteHeight);
+    const screenshot = useBrowserLiveViewStore((s) => s.screenshot);
     const close = useBrowserLiveViewStore((s) => s.close);
     const [fullscreen, setFullscreen] = useState(false);
 
@@ -45,7 +43,6 @@ export function BrowserLiveViewSidebar(): JSX.Element | null {
                         onClick={() => setFullscreen((v) => !v)}
                         className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
                         aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                        title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
                     >
                         {fullscreen ? (
                             <svg
@@ -91,14 +88,19 @@ export function BrowserLiveViewSidebar(): JSX.Element | null {
             </header>
 
             <div className="flex flex-1 items-center justify-center overflow-hidden bg-slate-900 p-3">
-                <div className="w-full" style={{ aspectRatio: `${remoteWidth} / ${remoteHeight}` }}>
-                    <BrowserLiveView
-                        key={liveViewUrl}
-                        signedUrl={liveViewUrl}
-                        remoteWidth={remoteWidth}
-                        remoteHeight={remoteHeight}
+                {screenshot ? (
+                    <img
+                        src={`data:image/jpeg;base64,${screenshot}`}
+                        alt="Browser screenshot"
+                        className="w-full rounded shadow-lg"
+                        style={{ aspectRatio: "1280 / 800" }}
                     />
-                </div>
+                ) : (
+                    <div className="flex flex-col items-center gap-3 text-slate-500">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-teal-400" />
+                        <p className="text-sm">Waiting for browser activity...</p>
+                    </div>
+                )}
             </div>
         </motion.aside>
     );

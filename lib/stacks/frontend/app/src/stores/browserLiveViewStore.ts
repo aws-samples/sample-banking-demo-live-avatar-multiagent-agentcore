@@ -5,12 +5,14 @@ interface BrowserLiveViewState {
     sessionId: string | null;
     remoteWidth: number;
     remoteHeight: number;
+    screenshot: string | null;
     open: (params: {
         liveViewUrl: string;
         sessionId?: string;
         remoteWidth?: number;
         remoteHeight?: number;
     }) => void;
+    setScreenshot: (image: string) => void;
     close: () => void;
 }
 
@@ -19,6 +21,7 @@ export const useBrowserLiveViewStore = create<BrowserLiveViewState>((set) => ({
     sessionId: null,
     remoteWidth: 1280,
     remoteHeight: 800,
+    screenshot: null,
     open: ({ liveViewUrl, sessionId, remoteWidth, remoteHeight }) =>
         set({
             liveViewUrl,
@@ -26,5 +29,6 @@ export const useBrowserLiveViewStore = create<BrowserLiveViewState>((set) => ({
             remoteWidth: remoteWidth ?? 1280,
             remoteHeight: remoteHeight ?? 800,
         }),
-    close: () => set({ liveViewUrl: null, sessionId: null }),
+    setScreenshot: (image) => set({ screenshot: image }),
+    close: () => set({ liveViewUrl: null, sessionId: null, screenshot: null }),
 }));
