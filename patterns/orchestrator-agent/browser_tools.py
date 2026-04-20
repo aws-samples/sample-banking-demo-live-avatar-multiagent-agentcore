@@ -128,24 +128,23 @@ def browser_start() -> str:
 
         context = browser.contexts[0]
 
-        # Create the page we will drive, then close the default pre-existing
-        # page(s). The DCV live view follows the remote Chrome's visible
-        # window. If we leave the default google.com tab open, it remains
-        # the visible window and our new tab stays in the background
-        # forever. Closing the defaults forces the compositor onto our page.
-        page = await context.new_page()
+        # Diagnostic: see what the remote Chrome actually looks like at attach time.
+        print(
+            f"[BROWSER] attach: contexts={len(browser.contexts)} "
+            f"pages_in_ctx0={len(context.pages)} "
+            f"existing_urls={[p.url for p in context.pages]}",
+            flush=True,
+        )
+
+        # Use the first existing page — this is the one the DCV live view
+        # stream is bound to. We force-navigate it to about:blank up front
+        # so later page.goto() calls are on a known clean state.
+        page = context.pages[0] if context.pages else await context.new_page()
         await page.bring_to_front()
-
-        for existing in list(context.pages):
-            if existing is not page:
-                try:
-                    await existing.close()
-                except Exception:
-                    pass
-
         _state["playwright"] = pw
         _state["browser"] = browser
         _state["page"] = page
+        print(f"[BROWSER] attach: driving page at {page.url!r}", flush=True)
 
     _run_async(_attach())
 
@@ -173,13 +172,25 @@ def browser_navigate(url: str) -> str:
     if not page:
         return "Error: no active browser session. Call browser_start first."
 
-    async def _go() -> str:
+    async def _go() -> tuple[str, str, int]:
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        return await page.title()
+        # Some sites swallow the first frame; bring_to_front re-requests a
+        # compositor frame for this window, which kicks DCV to re-render.
+        await page.bring_to_front()
+        # All pages in all contexts — so we can see if Chrome spawned a new
+        # tab (redirect / target=_blank) that stole focus from us.
+        ctx = page.context
+        all_pages = [p.url for p in ctx.pages]
+        return await page.title(), page.url, len(all_pages), all_pages
 
     try:
-        title = _run_async(_go())
-        return f"Navigated to {url} — page title: {title}"
+        title, landed_url, n_pages, all_urls = _run_async(_go())
+        print(
+            f"[BROWSER] navigate: requested={url!r} landed={landed_url!r} "
+            f"title={title!r} pages_in_ctx={n_pages} all_urls={all_urls}",
+            flush=True,
+        )
+        return f"Navigated to {landed_url} — page title: {title}"
     except Exception as e:
         return f"Navigation failed: {e}"
 
