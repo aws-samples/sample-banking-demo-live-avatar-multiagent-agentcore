@@ -1,6 +1,5 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { viteStaticCopy } from "vite-plugin-static-copy";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -24,16 +23,12 @@ const dcvSdkDir = path.join(
     "dist/src/tools/browser/live-view/nice-dcv-web-client-sdk"
 );
 
+// Note: DCV runtime files (workers, WASM) are synced into public/nice-dcv-web-client-sdk/
+// by scripts/sync-dcv-sdk.mjs (runs in predev / prebuild). The BrowserLiveView
+// component loads them from the absolute path /nice-dcv-web-client-sdk/dcvjs-esm.
+
 export default defineConfig({
-    plugins: [
-        react(),
-        viteStaticCopy({
-            targets: [
-                { src: path.resolve(dcvSdkDir, "dcvjs-esm"), dest: "nice-dcv-web-client-sdk" },
-                { src: path.resolve(dcvSdkDir, "dcv-ui"), dest: "nice-dcv-web-client-sdk" },
-            ],
-        }),
-    ],
+    plugins: [react()],
 
     resolve: {
         alias: {
