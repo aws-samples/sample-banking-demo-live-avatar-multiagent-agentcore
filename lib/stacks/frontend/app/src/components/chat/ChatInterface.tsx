@@ -37,6 +37,8 @@ export default function ChatInterface({
     const [flowOpen, setFlowOpen] = useState(false);
     const auth = useAuth();
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const isNearBottomRef = useRef(true);
     const runtimeActive = useConciergeFlowStore((s) => s.runtimeActive);
 
     const {
@@ -59,13 +61,16 @@ export default function ChatInterface({
     ));
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (isNearBottomRef.current) {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
     }, [messages]);
 
     const handleSubmit = (e: React.FormEvent): void => {
         e.preventDefault();
         sendMessage(input);
         setInput("");
+        isNearBottomRef.current = true;
     };
 
     const handleExampleClick = (question: string): void => {
@@ -121,7 +126,15 @@ export default function ChatInterface({
     const handleNewChat = (): void => {
         startNewChat();
         setInput("");
+        isNearBottomRef.current = true;
     };
+
+    const handleScroll = useCallback((): void => {
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        const threshold = 150;
+        isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    }, []);
 
     // Auto-open the flow sidebar when the first message is sent.
     const hasAutoOpened = useRef(false);
@@ -185,6 +198,8 @@ export default function ChatInterface({
                                 <ChatMessages
                                     messages={messages}
                                     messagesEndRef={messagesEndRef}
+                                    scrollContainerRef={scrollContainerRef}
+                                    onScroll={handleScroll}
                                     sessionId={sessionId}
                                     onFeedbackSubmit={handleFeedbackSubmit}
                                     onUIAction={handleUIAction}

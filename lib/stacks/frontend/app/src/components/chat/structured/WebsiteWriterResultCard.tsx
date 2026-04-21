@@ -14,16 +14,27 @@ export function WebsiteWriterResultCard({ data }: { data: WebsiteWriterResult })
                     {data.sections.length} sections · {data.item_count ?? "—"} dishes
                 </p>
             )}
-            <a
-                href={data.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold
-                           bg-gradient-to-r from-cyan-500 to-teal-400 text-gray-900
-                           hover:shadow-[0_0_20px_rgba(0,212,255,0.3)] transition-all duration-300"
-            >
-                View Website ↗
-            </a>
+            <div className="flex flex-wrap gap-3">
+                <a
+                    href={data.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold
+                               bg-gradient-to-r from-cyan-500 to-teal-400 text-gray-900
+                               hover:shadow-[0_0_20px_rgba(0,212,255,0.3)] transition-all duration-300"
+                >
+                    View Website ↗
+                </a>
+                {data.download_url && (
+                    <a
+                        href={data.download_url}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold
+                                   border border-cyan-500/50 text-cyan-300 hover:bg-cyan-500/10 transition-all duration-300"
+                    >
+                        Download ↓
+                    </a>
+                )}
+            </div>
         </div>
     );
 }

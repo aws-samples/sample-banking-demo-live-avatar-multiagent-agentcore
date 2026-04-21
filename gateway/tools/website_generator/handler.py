@@ -1,10 +1,13 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import io
 import json
 import logging
 import os
+import re
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from html import escape
 
@@ -34,8 +37,59 @@ def _get_image_url(s3_key: str, image_url: str = "") -> str:
     return image_url or ""
 
 
-def _upload_html(html: str, s3_key: str, user_id: str = "") -> str:
-    """Upload HTML to S3 and return presigned URL."""
+def _zip_key_for(html_key: str) -> str:
+    """Deterministic zip key next to the HTML — overwritten on every update."""
+    return html_key.rsplit("/", 1)[0] + "/site.zip"
+
+
+def _build_and_upload_zip(html: str, html_key: str) -> str:
+    """Bundle HTML + referenced S3 images into a zip, rewrite img srcs to local paths, return presigned URL."""
+    # Collect {s3_key: local_filename} for each image referenced via data-s3-key
+    image_keys: dict[str, str] = {}
+    for match in re.finditer(r'data-s3-key="([^"]+)"', html):
+        s3_key = match.group(1)
+        if s3_key and s3_key not in image_keys:
+            image_keys[s3_key] = f"images/{os.path.basename(s3_key)}"
+
+    # Rewrite <img src="..."> to local paths for images we're bundling
+    offline_html = html
+    for s3_key, local_path in image_keys.items():
+        offline_html = re.sub(
+            rf'(<img\s[^>]*?)src="[^"]*"([^>]*data-s3-key="{re.escape(s3_key)}")',
+            rf'\1src="{local_path}"\2',
+            offline_html,
+        )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("index.html", offline_html)
+        for s3_key, local_path in image_keys.items():
+            try:
+                obj = s3_client.get_object(Bucket=IMAGES_BUCKET, Key=s3_key)
+                zf.writestr(local_path, obj["Body"].read())
+            except Exception:
+                logger.warning("Failed to bundle image %s", s3_key, exc_info=True)
+
+    zip_key = _zip_key_for(html_key)
+    s3_client.put_object(
+        Bucket=REPORTS_BUCKET,
+        Key=zip_key,
+        Body=buf.getvalue(),
+        ContentType="application/zip",
+    )
+    return s3_client.generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": REPORTS_BUCKET,
+            "Key": zip_key,
+            "ResponseContentDisposition": 'attachment; filename="site.zip"',
+        },
+        ExpiresIn=3600,
+    )
+
+
+def _upload_html(html: str, s3_key: str, user_id: str = "") -> tuple[str, str]:
+    """Upload HTML + zip bundle to S3. Returns (view_url, download_url)."""
     s3_client.put_object(
         Bucket=REPORTS_BUCKET,
         Key=s3_key,
@@ -47,11 +101,17 @@ def _upload_html(html: str, s3_key: str, user_id: str = "") -> str:
             **({"user_id": user_id} if user_id else {}),
         },
     )
-    return s3_client.generate_presigned_url(
+    view_url = s3_client.generate_presigned_url(
         "get_object",
         Params={"Bucket": REPORTS_BUCKET, "Key": s3_key},
         ExpiresIn=3600,
     )
+    try:
+        download_url = _build_and_upload_zip(html, s3_key)
+    except Exception:
+        logger.warning("Failed to build download zip", exc_info=True)
+        download_url = ""
+    return view_url, download_url
 
 
 def _render_html(title: str, menu: dict) -> str:
@@ -151,9 +211,6 @@ bedrock_runtime = boto3.client(
 EDIT_MODEL_ID = os.environ.get("WEBSITE_EDIT_MODEL_ID", "us.amazon.nova-pro-v1:0")
 
 
-import re
-
-
 def _add_images_to_website(s3_key: str, images: list, user_id: str = "") -> dict:
     """Patch images into an existing website HTML by matching dish names."""
     resp = s3_client.get_object(Bucket=REPORTS_BUCKET, Key=s3_key)
@@ -191,8 +248,8 @@ def _add_images_to_website(s3_key: str, images: list, user_id: str = "") -> dict
             html,
         )
 
-    presigned_url = _upload_html(html, s3_key, user_id)
-    return {"success": True, "url": presigned_url, "s3_key": s3_key}
+    view_url, download_url = _upload_html(html, s3_key, user_id)
+    return {"success": True, "url": view_url, "download_url": download_url, "s3_key": s3_key}
 
 
 def _refresh_image_urls(html: str) -> str:
@@ -306,7 +363,7 @@ def _ai_edit_website(s3_key: str, edit_instructions: str, user_id: str = "") -> 
         updated_html = _inject_images(updated_html, image_map)
 
     presigned_url = _upload_html(updated_html, s3_key, user_id)
-    return {"success": True, "url": presigned_url, "s3_key": s3_key}
+    return {"success": True, "url": presigned_url[0], "download_url": presigned_url[1], "s3_key": s3_key}
 
 
 def handler(event, context):
@@ -352,9 +409,9 @@ def handler(event, context):
                 except Exception:
                     logger.warning("Could not carry images from old site", exc_info=True)
                 html = _refresh_image_urls(html)
-                presigned_url = _upload_html(html, s3_key, user_id)
+                view_url, download_url = _upload_html(html, s3_key, user_id)
                 logger.info("Update (html) successful: s3_key=%s", s3_key)
-                result = {"success": True, "url": presigned_url, "s3_key": s3_key}
+                result = {"success": True, "url": view_url, "download_url": download_url, "s3_key": s3_key}
             elif edit_instructions:
                 # AI-powered edit (avatar mode with Nova Sonic)
                 logger.info("Update (ai_edit) starting: s3_key=%s", s3_key)
@@ -386,7 +443,8 @@ def handler(event, context):
                         "text": json.dumps(
                             {
                                 "success": True,
-                                "url": presigned_url,
+                                "url": presigned_url[0],
+                                "download_url": presigned_url[1],
                                 "s3_key": s3_key,
                                 "bucket": REPORTS_BUCKET,
                                 "title": title,

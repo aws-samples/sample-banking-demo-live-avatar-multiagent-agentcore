@@ -70,6 +70,7 @@ export interface PdfWriterResult {
 export interface WebsiteWriterResult {
     success: boolean;
     url: string;
+    download_url?: string;
     s3_key: string;
     title?: string;
     sections?: string[];
