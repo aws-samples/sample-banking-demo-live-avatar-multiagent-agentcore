@@ -1,10 +1,10 @@
 # Gartner AppDev Research Agent
 
-A multi-agent research platform built on **Amazon Bedrock AgentCore** that produces comprehensive PDF research reports through a human-in-the-loop pipeline. Two AgentCore Runtimes, 16 Gateway tools, four CDK stacks, zero cost when idle.
+A multi-agent research platform built on **Amazon Bedrock AgentCore** that produces comprehensive PDF research reports through a human-in-the-loop pipeline. Two AgentCore Runtimes, 17 Gateway tools, four CDK stacks, zero cost when idle.
 
 **Demo flow**: Home &rarr; Research &rarr; Menu &rarr; Chat &rarr; Avatar
 
-Users plan a research topic (with editable objectives, methodology, and questions), approve the plan, and receive a 12-section PDF report. Alternatively, they create AI-generated menus with Nova Canvas dish photography, chat with a guardrailed concierge, or speak to a real-time voice avatar powered by Nova Sonic.
+Users plan a research topic (with editable objectives, methodology, and questions), approve the plan, and receive a 12-section PDF report. Alternatively, they create AI-generated menus with Nova Canvas dish photography and Code Interpreter-extracted dish photos, chat with a guardrailed concierge that can drive an AgentCore Browser session live on screen, or speak to a real-time voice avatar powered by Nova Sonic.
 
 ---
 
@@ -23,9 +23,11 @@ graph LR
             OR[Orchestrator Runtime<br/>HTTP/SSE — Claude Sonnet 4.6]
             AV[Avatar Runtime<br/>WebSocket — Nova 2 Sonic]
         end
-        GW[Gateway<br/>MCP Protocol — 16 Tools]
+        GW[Gateway<br/>MCP Protocol — 17 Tools]
         MEM[Memory<br/>Episodic + Semantic + Preferences]
         GR[Guardrails<br/>Content + Topic + Word]
+        BR[Browser<br/>Chromium microVM + DCV Live View]
+        CI[Code Interpreter<br/>Sandboxed Python for PDF image extraction]
     end
 
     subgraph "AWS Services"
@@ -47,6 +49,8 @@ graph LR
     LAM --> DDB
     OR --> MEM
     OR -.->|Chatbot mode| GR
+    OR -.->|Chatbot mode| BR
+    GW -.->|extract_pdf_images| CI
     AV --> MEM
 ```
 
@@ -58,14 +62,17 @@ graph LR
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Multi-Agent Research**   | Planner &rarr; Researcher &rarr; Synthesizer &rarr; PDF Writer pipeline with human-in-the-loop plan approval                                              |
 | **12-Section PDF Reports** | Cover page, TOC, executive summary, methodology, key findings, evidence, data analysis, conclusions, recommendations, limitations, appendices, references |
-| **AI Menu Creation**       | Menu Designer + Menu PDF Writer with Nova Canvas-generated dish photography                                                                               |
+| **AI Menu Creation**       | Menu Designer + Menu PDF Writer with Nova Canvas-generated dish photography, plus AgentCore Code Interpreter for extracting dish images out of the PDF    |
+| **Website Generation**     | `website_generator` tool produces single-page HTML menus that the Avatar can modify live through Nova Sonic voice commands                                |
 | **Guardrailed Chat**       | Restaurant concierge with Bedrock Guardrails (content, topic, and word policies)                                                                          |
+| **Browser Sub-agent**      | Concierge can spawn an AgentCore Browser microVM, drive it via Playwright/CDP, and stream it into the chat via DCV live view with screenshot fallback     |
+| **Concierge Flow Diagram** | Live ReactFlow sidebar visualizes AgentCore components (Runtime, Gateway, Memory, Browser, Code Interpreter) activating in real time during chat turns    |
 | **Voice Avatar**           | Real-time speech-to-speech via Nova 2 Sonic with 5 selectable personas                                                                                    |
-| **Knowledge Base**         | S3 Vectors + Nova Multimodal Embeddings. Auto-ingests generated PDFs for cross-experience queries                                                         |
+| **Knowledge Base**         | S3 Vectors + Nova Multimodal Embeddings. Auto-ingests generated PDFs via an S3-triggered Lambda for cross-experience queries                              |
 | **AgentCore Memory**       | Episodic (session-scoped with reflection), semantic (cross-session facts), and user preference strategies                                                 |
-| **16 MCP Gateway Tools**   | KB search, web search, PDF generation, Nova Canvas/Reel, memory, user profiles, orders                                                                    |
+| **17 MCP Gateway Tools**   | KB search, web search, PDF generation, Nova Canvas/Reel, memory, user profiles, orders, website generator, PDF image extraction                           |
 | **M2M OAuth2**             | Agent-to-Gateway auth via Cognito client credentials. Token cached with 60s safety margin                                                                 |
-| **Generative UI**          | SSE-streamed agent phases, research plan approval cards, tool activity indicators                                                                         |
+| **Generative UI**          | SSE-streamed agent phases, research plan approval cards, tool activity indicators, browser live view                                                      |
 
 ---
 
@@ -131,8 +138,11 @@ gateway/tools/
 ├── retrieve_user_profile/  # DynamoDB customer lookup
 ├── place_order/            # Order placement
 ├── data_sources/           # Data source listings
+├── website_generator/      # Single-page HTML menu generation
+├── extract_pdf_images/     # PDF image extraction via AgentCore Code Interpreter
 ├── sample_tool/            # Minimal reference implementation
-└── research_orchestrator/  # Lambda Durable Functions stub (feature-gated)
+├── research_orchestrator/  # Lambda Durable Functions stub (feature-gated)
+└── kb_ingest/              # Not a Gateway tool — S3-triggered Lambda that auto-ingests generated PDFs into the KB
 ```
 
 Each tool is a self-contained directory with `handler.py` and `tool_spec.json`. The Gateway authenticates via Cognito JWT and routes MCP tool calls to the corresponding Lambda function.
@@ -193,6 +203,7 @@ Edit `cdk.json` to set your project configuration:
             "avatar": true,
             "knowledge_base": true,
             "guardrails": true,
+            "browser": true,
             "neptune": false
         }
     }
@@ -270,13 +281,20 @@ gartner-app-dev-research-agent/
 │       └── frontend/                # S3 + CloudFront + CodeBuild deployment
 ├── patterns/                        # AgentCore Runtime agents (Python)
 │   ├── orchestrator-agent/          # 6-mode in-process pipeline + chatbot
+│   │   ├── orchestrator_agent.py    # Entry point + mode routing
+│   │   └── browser_tools.py         # In-process Strands @tools driving AgentCore Browser via Playwright/CDP
 │   ├── planner-agent/               # Research plan decomposition
 │   ├── researcher-agent/            # KB + web search with citations
 │   ├── synthesizer-agent/           # Cross-reference → executive summary
 │   ├── pdf-writer-agent/            # 12-section PDF generation
 │   ├── avatar-agent/                # BidiAgent WebSocket (Nova 2 Sonic)
 │   └── utils/                       # auth.py, ssm.py, heartbeat.py
-├── gateway/tools/                   # 16 Lambda-backed MCP tools
+├── gateway/tools/                   # 17 Lambda-backed MCP tools + kb_ingest S3 trigger
+├── lib/stacks/frontend/app/
+│   ├── scripts/sync-dcv-sdk.mjs     # Sync NICE DCV Web Client SDK into public/ for browser live view
+│   └── src/components/
+│       ├── chat/BrowserLiveViewSidebar.tsx   # Renders DCV WebSocket stream of the browser session
+│       └── concierge-flow/          # ReactFlow diagram + timeline for live AgentCore component activity
 ├── tools/
 │   ├── kit.ts                       # Interactive CLI
 │   └── export.ts                    # @export directive processor
@@ -294,7 +312,9 @@ gartner-app-dev-research-agent/
 | AgentCore Runtimes (2)       | Per-invocation          | $0                |
 | AgentCore Gateway            | Per-tool-call           | $0                |
 | AgentCore Memory             | Per-event               | $0                |
-| Lambda Functions (16+)       | Per-invocation          | $0                |
+| AgentCore Browser            | Per microVM-minute      | $0                |
+| AgentCore Code Interpreter   | Per sandbox session     | $0                |
+| Lambda Functions (17+)       | Per-invocation          | $0                |
 | Cognito                      | Free tier (50 users)    | $0                |
 | DynamoDB (3 tables)          | On-demand billing       | $0                |
 | S3 (4 buckets)               | Storage only            | ~$0.02/GB/mo      |
