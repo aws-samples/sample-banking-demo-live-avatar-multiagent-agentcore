@@ -1,6 +1,96 @@
-import { ReactNode, useEffect, useState, useMemo, PropsWithChildren } from "react";
+import { ReactNode, useEffect, useState, useMemo, PropsWithChildren, FormEvent } from "react";
 import { useAuth } from "react-oidc-context";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Eye, EyeOff, Loader2 } from "lucide-react";
+import {
+    CognitoIdentityProviderClient,
+    InitiateAuthCommand,
+    RespondToAuthChallengeCommand,
+} from "@aws-sdk/client-cognito-identity-provider";
+
+/* ── Cognito direct auth ──────────────────────────────────────── */
+
+const REGION = import.meta.env.VITE_COGNITO_REGION || "us-east-1";
+const CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID || "";
+const USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID || "";
+
+const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+
+interface AuthTokens {
+    idToken: string;
+    accessToken: string;
+    refreshToken?: string;
+    expiresIn: number;
+}
+
+type SignInResult =
+    | { type: "success"; tokens: AuthTokens }
+    | { type: "newPasswordRequired"; session: string };
+
+async function signInWithPassword(email: string, password: string): Promise<SignInResult> {
+    const response = await cognitoClient.send(
+        new InitiateAuthCommand({
+            AuthFlow: "USER_PASSWORD_AUTH",
+            ClientId: CLIENT_ID,
+            AuthParameters: { USERNAME: email, PASSWORD: password },
+        })
+    );
+
+    if (response.ChallengeName === "NEW_PASSWORD_REQUIRED") {
+        return { type: "newPasswordRequired", session: response.Session! };
+    }
+
+    const r = response.AuthenticationResult!;
+    return {
+        type: "success",
+        tokens: {
+            idToken: r.IdToken!,
+            accessToken: r.AccessToken!,
+            refreshToken: r.RefreshToken,
+            expiresIn: r.ExpiresIn ?? 3600,
+        },
+    };
+}
+
+async function completeNewPassword(
+    email: string,
+    newPassword: string,
+    session: string
+): Promise<AuthTokens> {
+    const response = await cognitoClient.send(
+        new RespondToAuthChallengeCommand({
+            ChallengeName: "NEW_PASSWORD_REQUIRED",
+            ClientId: CLIENT_ID,
+            ChallengeResponses: { USERNAME: email, NEW_PASSWORD: newPassword },
+            Session: session,
+        })
+    );
+    const r = response.AuthenticationResult!;
+    return {
+        idToken: r.IdToken!,
+        accessToken: r.AccessToken!,
+        refreshToken: r.RefreshToken,
+        expiresIn: r.ExpiresIn ?? 3600,
+    };
+}
+
+/** Inject tokens into the OIDC UserManager store so react-oidc-context picks them up. */
+function storeOidcUser(tokens: AuthTokens): void {
+    const authority = `https://cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`;
+    const storageKey = `oidc.user:${authority}:${CLIENT_ID}`;
+
+    const now = Math.floor(Date.now() / 1000);
+    const user: Record<string, unknown> = {
+        id_token: tokens.idToken,
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
+        token_type: "Bearer",
+        scope: "email openid profile",
+        expires_at: now + tokens.expiresIn,
+        profile: JSON.parse(atob(tokens.idToken.split(".")[1])),
+    };
+
+    localStorage.setItem(storageKey, JSON.stringify(user));
+}
 
 /* ── Particle config ──────────────────────────────────────────── */
 
@@ -30,18 +120,15 @@ function makeParticles(n: number): Particle[] {
     }));
 }
 
-/* ── Feature pills ────────────────────────────────────────────── */
-
 const FEATURES = ["Deep Research", "Voice Avatar", "Menu AI", "Concierge Chat"] as const;
 
-/* ── Shared backdrop (background + particles + overlay) ───────── */
+/* ── Shared backdrop ──────────────────────────────────────────── */
 
 function Backdrop({ children }: PropsWithChildren): JSX.Element {
     const particles = useMemo(() => makeParticles(12), []);
 
     return (
         <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
-            {/* Keyframes injected once */}
             <style>{`
         @keyframes float-particle {
           0%, 100% { transform: translateY(0) translateX(0); opacity: var(--p-opacity); }
@@ -55,18 +142,14 @@ function Backdrop({ children }: PropsWithChildren): JSX.Element {
         }
       `}</style>
 
-            {/* AI-generated background */}
             <img
                 src="/signin-bg.png"
                 alt=""
                 aria-hidden
                 className="absolute inset-0 h-full w-full object-cover"
             />
-
-            {/* Gradient overlay for text contrast */}
             <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
 
-            {/* Floating particles */}
             {particles.map((p) => (
                 <div
                     key={p.id}
@@ -99,7 +182,6 @@ function LoadingState(): JSX.Element {
     return (
         <Backdrop>
             <div className="relative z-10 flex flex-col items-center gap-4 animate-in fade-in duration-700">
-                {/* Pulsing AgentCore icon */}
                 <div className="relative">
                     <div className="animate-pulse-ring absolute inset-0 rounded-full bg-amber-400/30" />
                     <img
@@ -116,13 +198,68 @@ function LoadingState(): JSX.Element {
     );
 }
 
-/* ── Sign-in card ─────────────────────────────────────────────── */
+/* ── Sign-in card with inline Cognito form ────────────────────── */
 
-function SignInCard({ onSignIn }: { onSignIn: () => void }): JSX.Element {
+type FormMode = "signIn" | "newPassword";
+
+function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX.Element {
+    const [mode, setMode] = useState<FormMode>("signIn");
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [challengeSession, setChallengeSession] = useState("");
+
+    async function handleSignIn(e: FormEvent) {
+        e.preventDefault();
+        setError("");
+        setLoading(true);
+
+        try {
+            const result = await signInWithPassword(email, password);
+            if (result.type === "newPasswordRequired") {
+                setChallengeSession(result.session);
+                setMode("newPassword");
+                setPassword("");
+            } else {
+                storeOidcUser(result.tokens);
+                window.location.reload();
+            }
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Sign in failed";
+            setError(msg);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleNewPassword(e: FormEvent) {
+        e.preventDefault();
+        setError("");
+        setLoading(true);
+
+        try {
+            const tokens = await completeNewPassword(email, newPassword, challengeSession);
+            storeOidcUser(tokens);
+            window.location.reload();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Failed to set new password";
+            setError(msg);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    const inputClass =
+        "w-full rounded-xl border border-amber-400/30 bg-white/10 px-4 py-3 text-white placeholder-white/50 outline-none backdrop-blur-sm transition-colors focus:border-amber-400/60 focus:bg-white/15";
+
     return (
         <Backdrop>
             <div
-                className="relative z-10 mx-4 flex w-full max-w-md flex-col items-center gap-6 rounded-2xl px-8 py-10 animate-in fade-in slide-in-from-bottom-4 duration-700"
+                className="relative z-10 mx-4 flex w-full max-w-md flex-col items-center gap-5 rounded-2xl px-8 py-10 animate-in fade-in slide-in-from-bottom-4 duration-700"
                 style={{
                     background: "var(--glass-bg)",
                     backdropFilter: "var(--glass-blur)",
@@ -132,10 +269,7 @@ function SignInCard({ onSignIn }: { onSignIn: () => void }): JSX.Element {
                 }}
             >
                 {/* Heading */}
-                <div
-                    className="flex flex-col items-center gap-1 animate-in fade-in slide-in-from-bottom-3 duration-700"
-                    style={{ animationDelay: "100ms", animationFillMode: "backwards" }}
-                >
+                <div className="flex flex-col items-center gap-1">
                     <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-md">
                         Ocean View Bistro
                     </h1>
@@ -146,10 +280,7 @@ function SignInCard({ onSignIn }: { onSignIn: () => void }): JSX.Element {
                 </div>
 
                 {/* Feature pills */}
-                <div
-                    className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-3 duration-700"
-                    style={{ animationDelay: "200ms", animationFillMode: "backwards" }}
-                >
+                <div className="flex flex-wrap justify-center gap-2">
                     {FEATURES.map((f) => (
                         <span
                             key={f}
@@ -160,25 +291,128 @@ function SignInCard({ onSignIn }: { onSignIn: () => void }): JSX.Element {
                     ))}
                 </div>
 
-                {/* Sign-in button */}
-                <div
-                    className="w-full animate-in fade-in slide-in-from-bottom-3 duration-700"
-                    style={{ animationDelay: "300ms", animationFillMode: "backwards" }}
+                {/* Error message */}
+                {error && (
+                    <div className="w-full rounded-lg border border-red-400/40 bg-red-500/15 px-4 py-2.5 text-sm text-red-200">
+                        {error}
+                    </div>
+                )}
+
+                {mode === "signIn" ? (
+                    <form onSubmit={handleSignIn} className="flex w-full flex-col gap-3">
+                        <label className="sr-only" htmlFor="email">
+                            Email
+                        </label>
+                        <input
+                            id="email"
+                            type="email"
+                            required
+                            autoComplete="email"
+                            placeholder="Email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className={inputClass}
+                        />
+
+                        <label className="sr-only" htmlFor="password">
+                            Password
+                        </label>
+                        <div className="relative">
+                            <input
+                                id="password"
+                                type={showPassword ? "text" : "password"}
+                                required
+                                autoComplete="current-password"
+                                placeholder="Password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className={inputClass}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80"
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                            >
+                                {showPassword ? (
+                                    <EyeOff className="h-4.5 w-4.5" />
+                                ) : (
+                                    <Eye className="h-4.5 w-4.5" />
+                                )}
+                            </button>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-3 text-base font-semibold text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:hover:scale-100"
+                            style={
+                                loading
+                                    ? undefined
+                                    : { animation: "glow-btn 2.5s ease-in-out infinite" }
+                            }
+                        >
+                            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Sign In
+                        </button>
+                    </form>
+                ) : (
+                    <form onSubmit={handleNewPassword} className="flex w-full flex-col gap-3">
+                        <p className="text-center text-sm text-amber-200/80">
+                            Please set a new password to continue.
+                        </p>
+
+                        <label className="sr-only" htmlFor="newPassword">
+                            New Password
+                        </label>
+                        <div className="relative">
+                            <input
+                                id="newPassword"
+                                type={showNewPassword ? "text" : "password"}
+                                required
+                                autoComplete="new-password"
+                                placeholder="New Password"
+                                minLength={8}
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                className={inputClass}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowNewPassword(!showNewPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80"
+                                aria-label={showNewPassword ? "Hide password" : "Show password"}
+                            >
+                                {showNewPassword ? (
+                                    <EyeOff className="h-4.5 w-4.5" />
+                                ) : (
+                                    <Eye className="h-4.5 w-4.5" />
+                                )}
+                            </button>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-3 text-base font-semibold text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:hover:scale-100"
+                        >
+                            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Set Password & Continue
+                        </button>
+                    </form>
+                )}
+
+                {/* Federate sign-in option */}
+                <button
+                    type="button"
+                    onClick={onFederateSignIn}
+                    className="w-full cursor-pointer rounded-xl border border-amber-400/30 bg-white/5 px-6 py-2.5 text-sm font-medium text-amber-100/80 transition-colors hover:bg-white/10"
                 >
-                    <button
-                        onClick={onSignIn}
-                        className="w-full cursor-pointer rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-3 text-base font-semibold text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                        style={{ animation: "glow-btn 2.5s ease-in-out infinite" }}
-                    >
-                        Sign In
-                    </button>
-                </div>
+                    Sign in with SSO
+                </button>
 
                 {/* Powered-by footer */}
-                <div
-                    className="flex flex-col items-center gap-2 animate-in fade-in slide-in-from-bottom-3 duration-700"
-                    style={{ animationDelay: "400ms", animationFillMode: "backwards" }}
-                >
+                <div className="flex flex-col items-center gap-2">
                     <div className="flex items-center gap-2 text-xs text-white/60">
                         <span>Powered by</span>
                         <img
@@ -197,7 +431,7 @@ function SignInCard({ onSignIn }: { onSignIn: () => void }): JSX.Element {
     );
 }
 
-/* ── Main component (preserves existing contract) ─────────────── */
+/* ── Main component ───────────────────────────────────────────── */
 
 function AutoSigninContent({ children }: PropsWithChildren): JSX.Element {
     const auth = useAuth();
@@ -207,7 +441,7 @@ function AutoSigninContent({ children }: PropsWithChildren): JSX.Element {
     }
 
     if (!auth.isAuthenticated) {
-        return <SignInCard onSignIn={() => auth.signinRedirect()} />;
+        return <SignInCard onFederateSignIn={() => auth.signinRedirect()} />;
     }
 
     return <>{children}</>;

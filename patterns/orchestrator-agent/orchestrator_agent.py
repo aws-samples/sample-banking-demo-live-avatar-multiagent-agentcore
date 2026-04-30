@@ -35,6 +35,18 @@ from utils.auth import extract_user_id_from_context, get_gateway_access_token
 from utils.ssm import get_ssm_parameter
 from utils.tool_guard import UserScopeHook
 
+try:
+    from browser_tools import BROWSER_TOOLS
+    from browser_tools import cleanup as browser_cleanup
+    from browser_tools import set_ui_queue as set_browser_ui_queue
+except Exception as _browser_import_err:  # pragma: no cover — browser deps optional
+    BROWSER_TOOLS = []
+
+    def browser_cleanup() -> None: ...
+    def set_browser_ui_queue(_q) -> None: ...
+
+    print(f"[ORCHESTRATOR] Browser tools unavailable: {_browser_import_err}")
+
 _SSE_HEADERS = {
     "X-Accel-Buffering": "no",
     "Cache-Control": "no-cache, no-transform",
@@ -393,6 +405,34 @@ Output confirmation as JSON:
 }
 """
 
+MENU_WEBSITE_WRITER_PROMPT = """You are a Menu Website Writer Agent. Your role is to take the designed
+menu and generate a restaurant website using the website_generator Gateway tool.
+
+Your responsibilities:
+1. Accept the menu data from the previous agent (structured JSON with sections and items)
+2. Call the gateway_website_generator tool with mode="create", the title, and menu data
+3. Return the website URL to the caller
+
+When calling the website_generator tool, provide:
+- mode: "create"
+- title: The restaurant/menu title
+- menu: The complete menu object with sections and items, including s3_key for each item's photo
+
+IMPORTANT:
+- Pass s3_key for each item (preferred for reliable image embedding)
+- Also pass image_url as fallback
+- Do NOT modify the menu data — pass it through exactly as received
+
+Output confirmation as JSON:
+{
+  "status": "success",
+  "website_url": "presigned URL to view the website",
+  "s3_key": "the S3 key for future updates",
+  "sections_included": ["Appetizers", "Entrees", "Desserts"],
+  "item_count": 9
+}
+"""
+
 MENU_PHASES = [
     {
         "name": "menu_designer",
@@ -417,31 +457,81 @@ MENU_PHASES = [
             "Finalizing layout...",
         ],
     },
+    {
+        "name": "menu_website_writer",
+        "role": "export",
+        "prompt": MENU_WEBSITE_WRITER_PROMPT,
+        "estimated_duration": 30,
+        "messages": [
+            "Building restaurant website...",
+            "Embedding dish photos...",
+            "Publishing site...",
+        ],
+    },
 ]
 
 CHATBOT_PROMPT = """You are a helpful AI assistant. You can discuss any topic and help with
 a wide range of questions including research, analysis, creative tasks, and general knowledge.
 
-Guidelines:
-- Be warm, professional, and knowledgeable
-- Keep responses conversational and concise — this is a chat, not a research report
-- Do not produce structured JSON output — respond in natural language
-- Use available tools when they would enhance your response
+RESPONSE STYLE — MANDATORY:
+- Answer in 1-2 sentences. No filler, no preamble, no follow-up questions unless truly ambiguous.
+- NEVER say "I don't have access to real-time information" or "Would you like me to search".
+- NEVER narrate what you are doing. Just do it and give the answer.
+- After a tool returns results, state the answer directly. Do not mention the tool or the search process.
+- Do not offer unsolicited extra information. Answer exactly what was asked.
 
-Tool usage:
-- Use gateway_kb_search to search previously generated research reports, menus, and other documents
-  in the knowledge base. The kb_search results include presigned URLs (in the "url" field) to
-  view actual source PDF documents.
-- Use gateway_web_search for current information not in the knowledge base.
-- Use gateway_place_order to help users place orders.
+AUTO TOOL USE — MANDATORY:
+- If the user asks about current events, dates, times, news, weather, prices, or anything that
+  requires up-to-date information: IMMEDIATELY call gateway_web_search. Do NOT ask for permission.
+- If the user asks about previously generated reports or menus: IMMEDIATELY call gateway_kb_search.
+- Do not produce structured JSON output — respond in natural language.
 
-Showing source documents — CRITICAL:
-- When kb_search results include "url" fields, you MUST include them in your response so the user
-  can view the source document. Format as: "View the source document: <url>"
-- The "documents" array in kb_search results contains deduplicated source PDFs with presigned URLs.
-  Always mention these so users can see where the information came from.
+Tool reference:
+- gateway_kb_search: search knowledge base (reports, menus, documents). Include "url" fields from
+  results so users can view source PDFs.
+- gateway_web_search: current/real-time information from the web. Use automatically — never ask first.
+- gateway_place_order: place orders for users.
+- gateway_website_generator: generate or update restaurant websites.
+  - To create: call with mode="create", title, and menu data.
+  - To update/redesign: you MUST generate the complete new HTML yourself, then call with
+    mode="update", s3_key (from the original generation result), and html (the full HTML string
+    you wrote). Do NOT ask the tool to generate the HTML — you write it.
+  - When writing HTML for updates: use Tailwind CDN, Google Fonts, and inline CSS for animations.
+    Write production-quality, visually stunning HTML that fully implements the user's design vision.
+    For EVERY dish, include an <img> tag with alt="exact dish name" (e.g. alt="Seared Scallops with Pea Purée").
+    The src can be empty or a placeholder — the tool will fill in the correct image URL automatically.
+    Images are matched by alt text, so the alt MUST exactly match the dish name.
+  - To add images: call with mode="add_images", s3_key, and images array [{name, s3_key}].
+  - Remember the s3_key from website generation results so you can apply edits later.
+- gateway_extract_pdf_images: extract dish images from a menu PDF using Code Interpreter.
+  - Call with pdf_s3_key and menu JSON. Returns [{name, s3_key}] for each image.
+  - Use when the user wants to add PDF images to a website — extract first, then call
+    gateway_website_generator mode="add_images" with the results.
 
-Tool limits — IMPORTANT:
+BROWSER AUTOMATION (book a reservation, browse a generated website):
+When the user asks to book a reservation, browse their restaurant website, or take an
+action on a live webpage, use the browser_* tools to drive an AgentCore cloud browser.
+A live view is streamed into the chat the moment you call browser_start, so the user
+watches every click.
+
+Workflow:
+1. browser_start — ONCE. Emits the live view to the user.
+2. browser_navigate(url=...) — go to the generated website URL. The user will usually
+   share the presigned S3 URL. If they don't, fall back to gateway_kb_search to find the
+   latest website/menu.
+3. browser_get_text() — read the page (no selector = full page). Let the LLM decide what
+   to interact with based on the text.
+4. browser_type(selector="...", text="...") — fill fields. Prefer simple selectors
+   like input[name="name"], input[type="email"], input[type="date"].
+5. browser_click(selector="...") — click buttons like button:has-text("Reserve").
+6. browser_press_key(key="Enter") — submit forms if no explicit button.
+7. browser_stop() — when done. Always clean up even on failure.
+
+Keep selectors simple and fall back to broader queries (e.g., button[type="submit"]) if
+a specific one fails. If the site has no reservation form, tell the user plainly — don't
+fabricate a success.
+
+Tool limits:
 - If a tool returns no results, try ONE more time with a broader query.
 - Never call the same tool more than 3 times total in a single response.
 """
@@ -978,6 +1068,7 @@ def _create_agent(
     session_id: str,
     gateway_client: MCPClient,
     bedrock_model: BedrockModel,
+    extra_tools: list | None = None,
 ) -> Agent:
     """Create a Strands Agent with Gateway MCP + Memory (identical to standalone pattern)."""
     memory_id = os.environ.get("MEMORY_ID")
@@ -1002,7 +1093,7 @@ def _create_agent(
     agent = Agent(
         name=f"{name.title().replace('_', '')}Agent",
         system_prompt=augmented_prompt,
-        tools=[gateway_client],
+        tools=[gateway_client, *(extra_tools or [])],
         model=bedrock_model,
         hooks=hooks,
         session_manager=session_manager,
@@ -1143,9 +1234,12 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
             session_id,
             gateway_client,
             bedrock_model,
+            extra_tools=BROWSER_TOOLS,
         )
         # Attach our streaming callback handler
         agent.callback_handler = _callback_handler
+        # Bridge browser tool UI events into this turn's SSE queue
+        set_browser_ui_queue(tq)
     except Exception as e:
         print(f"[CHATBOT] Failed to create agent: {e}")
         yield {"status": "error", "error": f"Failed to create chatbot: {e}"}
@@ -1184,6 +1278,9 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
                 raise value
             if tag is _HEARTBEAT:
                 yield {"data": "", "heartbeat": True}
+            elif tag == "ui":
+                # Browser tool pushed a generative UI event
+                yield {"_ui": value}
             elif tag == "stream":
                 # Serialize any non-dict values to ensure JSON compatibility
                 try:
@@ -1200,6 +1297,11 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
         _stop_heartbeat.set()
         heartbeat_thread.join(timeout=2)
         agent_future.cancel()
+        # Ensure any active browser session is released at end of turn
+        try:
+            browser_cleanup()
+        finally:
+            set_browser_ui_queue(None)
 
     yield {"result": {"stop_reason": "end_turn"}}
 
@@ -1493,6 +1595,7 @@ async def _run_pipeline(phases, query, user_id, session_id, requested_model="", 
         return
 
     accumulated = initial_accumulated or query
+    menu_designer_output = ""
 
     for phase in phases:
         agent_name = phase["name"]
@@ -1748,9 +1851,20 @@ async def _run_pipeline(phases, query, user_id, session_id, requested_model="", 
         }
         yield {"agent_phase": {"agent": agent_name, "phase": role, "status": "end"}}
 
-        # Feed this agent's output to the next agent
+        # Feed this agent's output to the next agent.
+        # For menu pipelines, preserve the designer's menu JSON so later phases
+        # (pdf_writer, website_writer) can access the full menu with s3_key fields.
         if agent_text:
-            accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
+            if agent_name == "menu_designer":
+                menu_designer_output = agent_text
+                accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
+            elif menu_designer_output:
+                accumulated = (
+                    f"Menu designer output (contains menu JSON with s3_key for images):\n{menu_designer_output}\n\n"
+                    f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
+                )
+            else:
+                accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
 
     yield {"result": {"stop_reason": "end_turn"}}
 

@@ -5,6 +5,7 @@ import Box from "@cloudscape-design/components/box";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Header from "@cloudscape-design/components/header";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 import { ResearchDepthSelector } from "./ResearchDepthSelector";
 
 type ChatHeaderProps = {
@@ -12,6 +13,9 @@ type ChatHeaderProps = {
     onNewChat: () => void;
     canStartNewChat: boolean;
     mode?: string;
+    onToggleFlow?: () => void;
+    flowOpen?: boolean;
+    flowPulse?: boolean;
 };
 
 export function ChatHeader({
@@ -19,10 +23,15 @@ export function ChatHeader({
     onNewChat,
     canStartNewChat,
     mode,
+    onToggleFlow,
+    flowOpen,
+    flowPulse,
 }: ChatHeaderProps): JSX.Element {
     const { isAuthenticated, signOut } = useAuth();
     const [logoutVisible, setLogoutVisible] = useState(false);
+    const navigate = useNavigate();
     const isResearchMode = mode === "research" || mode === "generic_research";
+    const isConciergeMode = mode === "chatbot";
 
     return (
         <div className="border-b p-4">
@@ -30,9 +39,25 @@ export function ChatHeader({
                 actions={
                     <SpaceBetween direction="horizontal" size="xs">
                         {isResearchMode && <ResearchDepthSelector />}
+                        {onToggleFlow && (
+                            <Button
+                                variant={flowOpen ? "primary" : "normal"}
+                                onClick={onToggleFlow}
+                                iconName="share"
+                                ariaLabel="Toggle AgentCore flow diagram"
+                                className={flowPulse ? "concierge-flow-toggle-pulse" : undefined}
+                            >
+                                Flow
+                            </Button>
+                        )}
                         <Button onClick={onNewChat} disabled={!canStartNewChat} iconName="add-plus">
                             New Chat
                         </Button>
+                        {isConciergeMode && (
+                            <Button variant="normal" onClick={() => navigate("/archive")} iconName="search">
+                                Report Archive
+                            </Button>
+                        )}
                         {isAuthenticated && (
                             <Button variant="normal" onClick={() => setLogoutVisible(true)}>
                                 Logout

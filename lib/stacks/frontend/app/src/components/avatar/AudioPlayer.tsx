@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect, useState } from "react";
-import { pcmBase64ToAudioBuffer, OUTPUT_SAMPLE_RATE } from "@/lib/websocket-client/audio-utils";
+import { pcmBase64ToAudioBuffer } from "@/lib/websocket-client/audio-utils";
 import { Volume2, VolumeX } from "lucide-react";
 
 /**
@@ -18,7 +18,8 @@ export function useAudioPlayer() {
 
     const getAudioContext = useCallback((): AudioContext => {
         if (!audioContextRef.current || audioContextRef.current.state === "closed") {
-            audioContextRef.current = new AudioContext({ sampleRate: OUTPUT_SAMPLE_RATE });
+            // Use default system sample rate — browser handles upsampling from 24kHz AudioBuffers
+            audioContextRef.current = new AudioContext();
             gainNodeRef.current = audioContextRef.current.createGain();
             gainNodeRef.current.connect(audioContextRef.current.destination);
             gainNodeRef.current.gain.value = isMuted ? 0 : volume;

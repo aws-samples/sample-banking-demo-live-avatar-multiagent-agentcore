@@ -1,0 +1,83 @@
+[
+    {
+        "name": "website_generator",
+        "description": "Generate or update a static restaurant website on S3. Returns a presigned URL to view the site. Three modes: 'create' builds from menu JSON. 'update' with 'html' uploads agent-generated HTML. 'update' with 'edit_instructions' fetches the current site and applies changes via AI.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["create", "update", "add_images"],
+                    "default": "create",
+                    "description": "'create' to build from menu data, 'update' to modify an existing site, 'add_images' to attach generated images to dishes on an existing site"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Restaurant or website title (required for create)"
+                },
+                "menu": {
+                    "type": "object",
+                    "description": "Menu content with sections and items (required for create)",
+                    "properties": {
+                        "title": { "type": "string" },
+                        "sections": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": { "type": "string" },
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": { "type": "string" },
+                                                "description": { "type": "string" },
+                                                "price": { "type": "string" },
+                                                "dietary": { "type": "array", "items": { "type": "string" } },
+                                                "s3_key": { "type": "string" },
+                                                "image_url": { "type": "string" }
+                                            },
+                                            "required": ["name"]
+                                        }
+                                    }
+                                },
+                                "required": ["name", "items"]
+                            }
+                        }
+                    }
+                },
+                "s3_key": {
+                    "type": "string",
+                    "description": "S3 key of the existing website to update (required for update)"
+                },
+                "html": {
+                    "type": "string",
+                    "description": "Complete HTML to upload directly (for update mode when the agent generates HTML itself)"
+                },
+                "edit_instructions": {
+                    "type": "string",
+                    "description": "Natural language description of changes to apply (for update mode). The tool fetches the current site and applies changes via AI. Use this when you cannot generate HTML yourself."
+                },
+                "images": {
+                    "type": "array",
+                    "description": "Array of dish images to add to the website (for add_images mode). Each item has 'name' (dish name to match) and 's3_key' or 'image_url'.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string", "description": "Dish name to match in the website" },
+                            "s3_key": { "type": "string", "description": "S3 key of the image" },
+                            "image_url": { "type": "string", "description": "Presigned URL of the image (fallback)" }
+                        },
+                        "required": ["name"]
+                    }
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "Authenticated user identifier (injected by runtime)"
+                }
+            },
+            "required": []
+        }
+    }
+]

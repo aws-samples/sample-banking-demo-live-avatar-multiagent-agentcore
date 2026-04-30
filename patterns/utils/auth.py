@@ -80,7 +80,7 @@ def extract_user_id_from_context(context: RequestContext) -> str:
 
     # Decode without signature verification — Runtime already validated the token.
     # We use options to skip all verification since this is a trusted, pre-validated token.
-    claims = jwt.decode(
+    claims = jwt.decode(  # nosemgrep: unverified-jwt-decode
         jwt=token,
         options={"verify_signature": False},
         algorithms=["RS256"],

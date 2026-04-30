@@ -181,5 +181,22 @@ export function createAgentCoreRole(
         })
     );
 
+    // Browser
+    role.addToPolicy(
+        new PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: [
+                "bedrock-agentcore:StartBrowserSession",
+                "bedrock-agentcore:StopBrowserSession",
+                "bedrock-agentcore:GetBrowserSession",
+                "bedrock-agentcore:ListBrowserSessions",
+                "bedrock-agentcore:UpdateBrowserStream",
+                "bedrock-agentcore:ConnectBrowserAutomationStream",
+                "bedrock-agentcore:ConnectBrowserLiveViewStream",
+            ],
+            resources: ["*"],
+        })
+    );
+
     return role;
 }

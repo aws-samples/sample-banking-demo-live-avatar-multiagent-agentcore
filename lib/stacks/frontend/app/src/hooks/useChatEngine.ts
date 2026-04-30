@@ -6,6 +6,8 @@ import { useAuth } from "react-oidc-context";
 import { useModelSelector } from "@/hooks/useModelSelector";
 import { useChatStore } from "@/stores/chatStore";
 import type { ResearchAction } from "@/stores/chatStore";
+import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
+import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
 
 export type { ResearchAction };
 
@@ -110,6 +112,9 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
 
                 const segments: MessageSegment[] = [];
                 const toolCallMap = new Map<string, ToolCall>();
+                const flowStore = useConciergeFlowStore.getState();
+                flowStore.reset();
+                flowStore.runtimeStart();
 
                 const updateMessage = (): void => {
                     const content = segments
@@ -186,6 +191,9 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                 };
                                 toolCallMap.set(event.toolUseId, tc);
                                 segments.push({ type: "tool", toolCall: tc });
+                                useConciergeFlowStore
+                                    .getState()
+                                    .toolStart(event.toolUseId, event.name);
                                 updateMessage();
                                 break;
                             }
@@ -203,6 +211,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                     tc.result = event.result;
                                     tc.status = "complete";
                                 }
+                                useConciergeFlowStore.getState().toolEnd(event.toolUseId);
                                 updateMessage();
                                 break;
                             }
@@ -216,6 +225,25 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                 break;
                             }
                             case "_ui": {
+                                // BrowserLiveView pops out into a dedicated sidebar,
+                                // not inline in the chat message.
+                                if (event.component === "BrowserLiveView") {
+                                    const p = event.props as Record<string, unknown>;
+                                    useBrowserLiveViewStore.getState().open({
+                                        liveViewUrl: p.liveViewUrl as string,
+                                        sessionId: p.sessionId as string | undefined,
+                                        remoteWidth: p.remoteWidth as number | undefined,
+                                        remoteHeight: p.remoteHeight as number | undefined,
+                                    });
+                                    break;
+                                }
+                                if (event.component === "BrowserScreenshot") {
+                                    const p = event.props as Record<string, unknown>;
+                                    useBrowserLiveViewStore
+                                        .getState()
+                                        .setScreenshot(p.image as string);
+                                    break;
+                                }
                                 const uiKey = `ui-${(event.props.agent as string) || event.component}`;
                                 const existingIdx = segments.findIndex(
                                     (s) => s.type === "ui" && s.key === uiKey
@@ -297,6 +325,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                 });
             } finally {
                 setLoading(storeKey, false);
+                useConciergeFlowStore.getState().runtimeEnd();
             }
         },
         [client, sessionId, auth.user?.access_token, researchDispatch, modelId, storeKey]
@@ -345,6 +374,8 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
 
     const startNewChat = useCallback((): void => {
         useChatStore.getState().clearSlot(storeKey);
+        useConciergeFlowStore.getState().reset();
+        useBrowserLiveViewStore.getState().close();
     }, [storeKey]);
 
     const clearError = useCallback((): void => {

@@ -84,7 +84,7 @@ export class Shared extends Stack {
         // BucketInjector handles blockPublicAccess, enforceSSL, autoDelete, DESTROY
         this.reportsBucket = new Bucket(this, "ReportsBucket", {
             bucketName: `${stackName}-reports-${Aws.ACCOUNT_ID}`,
-            encryption: Bucket.prototype.constructor ? undefined : undefined, // S3_MANAGED default
+            encryption: undefined, // S3_MANAGED default
             lifecycleRules: [{ expiration: Duration.days(90) }],
             cors: [
                 {

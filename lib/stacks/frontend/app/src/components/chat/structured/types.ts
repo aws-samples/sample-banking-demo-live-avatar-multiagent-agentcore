@@ -67,12 +67,32 @@ export interface PdfWriterResult {
     metadata?: Record<string, unknown>;
 }
 
-export type StructuredType = "planner" | "researcher" | "synthesizer" | "pdf_writer";
+export interface WebsiteWriterResult {
+    success: boolean;
+    url: string;
+    download_url?: string;
+    s3_key: string;
+    title?: string;
+    sections?: string[];
+    item_count?: number;
+}
+
+export type StructuredType =
+    | "planner"
+    | "researcher"
+    | "synthesizer"
+    | "pdf_writer"
+    | "website_writer";
 
 export type ContentPart =
     | { type: "text"; content: string }
     | {
           type: "structured";
-          data: PlannerResult | ResearcherResult | SynthesizerResult | PdfWriterResult;
+          data:
+              | PlannerResult
+              | ResearcherResult
+              | SynthesizerResult
+              | PdfWriterResult
+              | WebsiteWriterResult;
           structuredType: StructuredType;
       };

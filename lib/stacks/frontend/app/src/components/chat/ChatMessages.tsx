@@ -5,6 +5,8 @@ import { ChatMessage } from "./ChatMessage";
 interface ChatMessagesProps {
     messages: Message[];
     messagesEndRef: RefObject<HTMLDivElement | null>;
+    scrollContainerRef?: RefObject<HTMLDivElement | null>;
+    onScroll?: () => void;
     sessionId: string;
     onFeedbackSubmit: (
         messageContent: string,
@@ -17,12 +19,16 @@ interface ChatMessagesProps {
 export function ChatMessages({
     messages,
     messagesEndRef,
+    scrollContainerRef,
+    onScroll,
     sessionId,
     onFeedbackSubmit,
     onUIAction,
 }: ChatMessagesProps): JSX.Element {
     return (
         <div
+            ref={scrollContainerRef}
+            onScroll={onScroll}
             className={`h-full p-4 space-y-4 w-full ${
                 messages.length > 0 ? "overflow-y-auto" : "overflow-hidden"
             }`}

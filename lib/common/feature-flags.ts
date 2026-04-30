@@ -17,6 +17,7 @@ export interface FeatureFlags {
     server_side_tools: boolean;
     durable_functions: boolean;
     guardrails: boolean;
+    browser: boolean;
 }
 
 export interface ModelConfig {
@@ -39,6 +40,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
     server_side_tools: true,
     durable_functions: false,
     guardrails: true,
+    browser: true,
 };
 
 const DEFAULT_MODELS: ModelConfig = {

@@ -137,3 +137,27 @@
 [class*="awsui_header_"][class*="awsui_visual-context_top-navigation"] {
     background: linear-gradient(135deg, #232f3e 0%, #1a4b6e 50%, #01a88d 100%) !important;
 }
+
+/* Concierge flow — animated dashed edge */
+.concierge-edge-flow {
+    animation: concierge-dash-flow 0.8s linear infinite;
+}
+@keyframes concierge-dash-flow {
+    to {
+        stroke-dashoffset: -20;
+    }
+}
+
+.concierge-flow-toggle-pulse button,
+.concierge-flow-toggle-pulse [class*="awsui_button"] {
+    animation: concierge-toggle-pulse 1.6s ease-in-out infinite;
+}
+@keyframes concierge-toggle-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgba(251, 191, 36, 0);
+    }
+}

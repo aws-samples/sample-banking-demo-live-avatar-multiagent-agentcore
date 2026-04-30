@@ -29,12 +29,22 @@ export function createPCMProcessorUrl(): string {
         const channelData = input[0];
         if (!channelData) return true;
 
-        // Downsample from native rate to 16kHz
         const ratio = sampleRate / ${SAMPLE_RATE};
-        for (let i = 0; i < channelData.length; i += ratio) {
-          const idx = Math.floor(i);
-          if (idx < channelData.length) {
-            this._buffer.push(channelData[idx]);
+
+        if (ratio <= 1.01) {
+          // Already at target rate — pass through
+          for (let i = 0; i < channelData.length; i++) {
+            this._buffer.push(channelData[i]);
+          }
+        } else {
+          // Downsample with linear interpolation to avoid aliasing
+          const outLen = Math.floor(channelData.length / ratio);
+          for (let i = 0; i < outLen; i++) {
+            const srcIdx = i * ratio;
+            const idx0 = Math.floor(srcIdx);
+            const idx1 = Math.min(idx0 + 1, channelData.length - 1);
+            const frac = srcIdx - idx0;
+            this._buffer.push(channelData[idx0] * (1 - frac) + channelData[idx1] * frac);
           }
         }
 

@@ -1,4 +1,4 @@
-import { Aws, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
+import { Aws, Duration, RemovalPolicy, StackProps, Stage } from "aws-cdk-lib";
 import {
     AccountRecovery,
     CfnIdentityPool,
@@ -47,6 +47,8 @@ export class Auth extends Stack {
         const { urls, hydrationFunction } = props;
         const stackNameBase = getStackNameBase(this.node);
         const adminUserEmail = getAdminUserEmail(this.node);
+        const stageName = Stage.of(this)!.stageName;
+        const isMidway = this.node.getContext("accounts")?.[stageName]?.midway === true;
 
         // @export {"replace": "FederateUserPool", "with": "UserPool"}
         const userPool = new FederateUserPool(this, "UserPool", {
@@ -114,6 +116,7 @@ export class Auth extends Stack {
             idTokenValidity: tokenValidity,
             authFlows: {
                 userSrp: true,
+                userPassword: true,
                 user: true,
             },
             oAuth: {
@@ -147,7 +150,12 @@ export class Auth extends Stack {
             settings: {
                 categories: {
                     auth: {
-                        authMethodOrder: [[{ display: "INPUT", type: "USERNAME_PASSWORD" }]],
+                        authMethodOrder: [
+                            [{ display: "INPUT", type: "USERNAME_PASSWORD" }],
+                            ...(isMidway
+                                ? [[{ display: "BUTTON", type: "FEDERATED_SIGN_IN" }]]
+                                : []),
+                        ],
                     },
                     form: {
                         displayGraphics: true,
