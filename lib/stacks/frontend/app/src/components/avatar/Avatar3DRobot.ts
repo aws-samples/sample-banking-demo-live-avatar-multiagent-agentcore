@@ -1,6 +1,8 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three-stdlib";
+import { RoundedBoxGeometry } from "three-stdlib";
 import { Avatar3D } from "./Avatar3D";
-import type { AvatarVariant } from "./AvatarVariant";
+import type { AvatarVariant, QualityTier } from "./AvatarVariant";
 
 // ---------------------------------------------------------------------------
 // Mouth-shape (viseme) helpers
@@ -82,10 +84,25 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     // Status lights on chest panel
     private statusLights: THREE.Mesh[] = [];
 
+    // Main directional light (shadow caster) — kept as a field so quality tier
+    // changes can adjust shadow map size / enablement without rebuilding.
+    private mainLight!: THREE.DirectionalLight;
+
+    // Cached PBR environment texture so quality tier "low" can null out
+    // this.scene.environment and higher tiers can restore it.
+    private envMap: THREE.Texture | null = null;
+
     // Animation state
     private isSpeaking = false;
     private jawOpenAmount = 0;
     private interruptionTime: number | null = null;
+
+    // Eye-gaze + blink (idle only)
+    private gazeTarget = new THREE.Vector2(0, 0);
+    private currentGaze = new THREE.Vector2(0, 0);
+    private nextBlinkAt = 0;
+    private blinkStartedAt: number | null = null;
+    private onMouseMove: ((e: MouseEvent) => void) | null = null;
 
     // Viseme tracking
     private currentMouthShape: MouthShape = "neutral";
@@ -105,6 +122,15 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         this.buildKitchenBackground();
         this.buildRobot();
 
+        // Track mouse position in canvas-local normalised coords [-1, 1].
+        // Stored as a field so dispose() can remove it without leaking.
+        this.onMouseMove = (e: MouseEvent) => {
+            const rect = this.renderer.domElement.getBoundingClientRect();
+            this.gazeTarget.x = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
+            this.gazeTarget.y = -((e.clientY - rect.top) / rect.height - 0.5) * 2;
+        };
+        this.renderer.domElement.addEventListener("mousemove", this.onMouseMove);
+
         this.setAnimationCallback(this.onAnimate.bind(this));
     }
 
@@ -122,11 +148,11 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
             this.jawOpenAmount = 0;
             this.resetMouth();
             this.statusLights.forEach((l) => {
-                (l.material as THREE.MeshPhongMaterial).color.setHex(this.accentColor);
+                (l.material as THREE.MeshStandardMaterial).color.setHex(this.accentColor);
             });
         } else {
             this.statusLights.forEach((l) => {
-                (l.material as THREE.MeshPhongMaterial).color.setHex(0x00ff00);
+                (l.material as THREE.MeshStandardMaterial).color.setHex(0x00ff00);
             });
         }
     }
@@ -140,6 +166,40 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
     showInterruption(): void {
         this.interruptionTime = performance.now();
+    }
+
+    override dispose(): void {
+        if (this.onMouseMove) {
+            this.renderer.domElement.removeEventListener("mousemove", this.onMouseMove);
+            this.onMouseMove = null;
+        }
+        super.dispose();
+    }
+
+    /**
+     * Quality tier selector.
+     *  - low:    no shadows, no environment map. Flat PBR only.
+     *  - medium: soft shadows at 1024², env map on.
+     *  - high:   soft shadows at 2048², env map on.
+     */
+    setQuality(tier: QualityTier): void {
+        if (tier === "low") {
+            this.renderer.shadowMap.enabled = false;
+            this.scene.environment = null;
+        } else if (tier === "medium") {
+            this.renderer.shadowMap.enabled = true;
+            this.mainLight.shadow.mapSize.set(1024, 1024);
+            // Three.js requires regenerating the shadow map after resize.
+            this.mainLight.shadow.map?.dispose();
+            this.mainLight.shadow.map = null;
+            this.scene.environment = this.envMap;
+        } else {
+            this.renderer.shadowMap.enabled = true;
+            this.mainLight.shadow.mapSize.set(2048, 2048);
+            this.mainLight.shadow.map?.dispose();
+            this.mainLight.shadow.map = null;
+            this.scene.environment = this.envMap;
+        }
     }
 
     // =========================================================================
@@ -158,21 +218,38 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         this.robotGroup.add(this.head);
         this.scene.add(this.robotGroup);
+
+        // All robot meshes cast + receive shadows. Lights (eye pixels, particle
+        // points, emissive-only meshes) still render; they just cast nothing.
+        this.robotGroup.traverse((obj) => {
+            if (obj instanceof THREE.Mesh) {
+                obj.castShadow = true;
+                obj.receiveShadow = true;
+            }
+        });
+
+        // PBR room environment map gives MeshStandardMaterial metals a subtle
+        // built-in reflection without requiring an external HDR asset.
+        const pmrem = new THREE.PMREMGenerator(this.renderer);
+        this.envMap = pmrem.fromScene(RoomEnvironment(), 0.04).texture;
+        this.scene.environment = this.envMap;
+        pmrem.dispose();
     }
 
     // -- Head ----------------------------------------------------------------
 
     private buildHead(): void {
-        const headGeo = new THREE.BoxGeometry(1.4, 1.3, 1.2);
-        const headMat = new THREE.MeshPhongMaterial({
+        const headGeo = new RoundedBoxGeometry(1.4, 1.3, 1.2, 6, 0.12);
+        const headMat = new THREE.MeshStandardMaterial({
             color: this.robotColor,
-            shininess: 100,
+            metalness: 0.85,
+            roughness: 0.25,
         });
         this.head = new THREE.Mesh(headGeo, headMat);
 
         // Rounded-edge overlay
         const edgeGeo = new THREE.BoxGeometry(1.45, 1.35, 1.25);
-        const edgeMat = new THREE.MeshPhongMaterial({
+        const edgeMat = new THREE.MeshStandardMaterial({
             color: this.robotColor,
             transparent: true,
             opacity: 0.3,
@@ -195,11 +272,12 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Face screen
         const screenGeo = new THREE.PlaneGeometry(1.3, 1.0);
-        const screenMat = new THREE.MeshPhongMaterial({
+        const screenMat = new THREE.MeshStandardMaterial({
             color: 0x000511,
             emissive: 0x001122,
             emissiveIntensity: 0.2,
-            shininess: 150,
+            metalness: 0.2,
+            roughness: 0.15,
             transparent: true,
             opacity: 0.9,
         });
@@ -263,7 +341,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Background panel
         const bgGeo = new THREE.BoxGeometry(1.8, 0.35, 0.08);
-        const bgMat = new THREE.MeshPhongMaterial({
+        const bgMat = new THREE.MeshStandardMaterial({
             color: 0x0a0a0a,
             emissive: 0x001122,
             emissiveIntensity: 0.1,
@@ -275,8 +353,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Frame
         const frameGeo = new THREE.BoxGeometry(1.85, 0.4, 0.02);
-        const frameMat = new THREE.MeshPhongMaterial({
+        const frameMat = new THREE.MeshStandardMaterial({
             color: this.robotColor,
+            metalness: 0.6,
+            roughness: 0.3,
         });
         const frame = new THREE.Mesh(frameGeo, frameMat);
         frame.position.z = -0.05;
@@ -290,10 +370,12 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         for (let i = 0; i < barCount; i++) {
             const barGeo = new THREE.BoxGeometry(barWidth, maxBarHeight, 0.02);
-            const barMat = new THREE.MeshPhongMaterial({
+            const barMat = new THREE.MeshStandardMaterial({
                 color: this.accentColor,
                 emissive: this.accentColor,
                 emissiveIntensity: 0.4,
+                metalness: 0.6,
+                roughness: 0.3,
             });
             const bar = new THREE.Mesh(barGeo, barMat);
             bar.position.set((i - barCount / 2 + 0.5) * barSpacing, 0, 0);
@@ -346,9 +428,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Tall pleated cylinder
         const topGeo = new THREE.CylinderGeometry(0.55, 0.62, 2.0, 20);
-        const topMat = new THREE.MeshPhongMaterial({
+        const topMat = new THREE.MeshStandardMaterial({
             color: this.hatColor,
-            shininess: 30,
+            metalness: 0.0,
+            roughness: 0.8,
             side: THREE.DoubleSide,
         });
         const hatTop = new THREE.Mesh(topGeo, topMat);
@@ -360,9 +443,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         for (let i = 0; i < pleatCount; i++) {
             const angle = (i / pleatCount) * Math.PI * 2;
             const pleatGeo = new THREE.BoxGeometry(0.02, 2.0, 0.12);
-            const pleatMat = new THREE.MeshPhongMaterial({
+            const pleatMat = new THREE.MeshStandardMaterial({
                 color: 0xf8f8f8,
-                shininess: 20,
+                metalness: 0.0,
+                roughness: 0.85,
             });
             const pleat = new THREE.Mesh(pleatGeo, pleatMat);
             pleat.position.set(Math.cos(angle) * 0.58, 0.6, Math.sin(angle) * 0.58);
@@ -372,9 +456,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Crown
         const crownGeo = new THREE.SphereGeometry(0.5, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2.5);
-        const crownMat = new THREE.MeshPhongMaterial({
+        const crownMat = new THREE.MeshStandardMaterial({
             color: this.hatColor,
-            shininess: 40,
+            metalness: 0.0,
+            roughness: 0.8,
         });
         const crown = new THREE.Mesh(crownGeo, crownMat);
         crown.position.y = 1.6;
@@ -383,9 +468,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Band
         const bandGeo = new THREE.CylinderGeometry(0.52, 0.54, 0.3, 32);
-        const bandMat = new THREE.MeshPhongMaterial({
+        const bandMat = new THREE.MeshStandardMaterial({
             color: this.hatColor,
-            shininess: 50,
+            metalness: 0.0,
+            roughness: 0.75,
         });
         const band = new THREE.Mesh(bandGeo, bandMat);
         band.position.y = -0.2;
@@ -393,9 +479,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Decorative ring
         const decorGeo = new THREE.TorusGeometry(0.53, 0.02, 8, 32);
-        const decorMat = new THREE.MeshPhongMaterial({
+        const decorMat = new THREE.MeshStandardMaterial({
             color: 0xe0e0e0,
-            shininess: 60,
+            metalness: 0.7,
+            roughness: 0.3,
         });
         const decor = new THREE.Mesh(decorGeo, decorMat);
         decor.position.set(0, -0.05, 0);
@@ -404,10 +491,12 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Gold emblem
         const emblemGeo = new THREE.CircleGeometry(0.08, 16);
-        const emblemMat = new THREE.MeshPhongMaterial({
+        const emblemMat = new THREE.MeshStandardMaterial({
             color: 0xffd700,
             emissive: 0xffd700,
             emissiveIntensity: 0.2,
+            metalness: 1.0,
+            roughness: 0.3,
         });
         const emblem = new THREE.Mesh(emblemGeo, emblemMat);
         emblem.position.set(0, -0.2, 0.55);
@@ -419,10 +508,11 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     // -- Body ---------------------------------------------------------------
 
     private buildBody(): void {
-        const bodyGeo = new THREE.BoxGeometry(1.0, 1.4, 0.8);
-        const bodyMat = new THREE.MeshPhongMaterial({
+        const bodyGeo = new RoundedBoxGeometry(1.0, 1.4, 0.8, 6, 0.08);
+        const bodyMat = new THREE.MeshStandardMaterial({
             color: this.robotColor,
-            shininess: 100,
+            metalness: 0.85,
+            roughness: 0.25,
         });
         this.body = new THREE.Mesh(bodyGeo, bodyMat);
         this.body.position.set(0, -1.6, 0);
@@ -436,10 +526,11 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         const apronGroup = new THREE.Group();
 
         const apronGeo = new THREE.PlaneGeometry(0.9, 1.2);
-        const apronMat = new THREE.MeshPhongMaterial({
+        const apronMat = new THREE.MeshStandardMaterial({
             color: this.apronColor,
             side: THREE.DoubleSide,
-            shininess: 15,
+            metalness: 0.0,
+            roughness: 0.85,
         });
         const apron = new THREE.Mesh(apronGeo, apronMat);
         apron.position.set(0, -0.2, 0.42);
@@ -447,9 +538,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Straps
         const strapGeo = new THREE.BoxGeometry(0.05, 0.8, 0.05);
-        const strapMat = new THREE.MeshPhongMaterial({
+        const strapMat = new THREE.MeshStandardMaterial({
             color: this.apronColor,
-            shininess: 10,
+            metalness: 0.0,
+            roughness: 0.9,
         });
         const lStrap = new THREE.Mesh(strapGeo, strapMat);
         lStrap.position.set(-0.3, 0.5, 0.4);
@@ -463,7 +555,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Pocket
         const pocketGeo = new THREE.PlaneGeometry(0.3, 0.25);
-        const pocketMat = new THREE.MeshPhongMaterial({
+        const pocketMat = new THREE.MeshStandardMaterial({
             color: 0xf5f5f5,
             side: THREE.DoubleSide,
         });
@@ -473,7 +565,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Wooden spoon in pocket
         const spoonHandleGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.4, 8);
-        const spoonMat = new THREE.MeshPhongMaterial({ color: 0x8b4513 });
+        const spoonMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
         const spoonHandle = new THREE.Mesh(spoonHandleGeo, spoonMat);
         spoonHandle.position.set(0.1, -0.1, 0.45);
         spoonHandle.rotation.z = 0.2;
@@ -501,9 +593,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
     private buildChestPanel(): void {
         const panelGeo = new THREE.PlaneGeometry(0.6, 0.4);
-        const panelMat = new THREE.MeshPhongMaterial({
+        const panelMat = new THREE.MeshStandardMaterial({
             color: 0x2d3748,
-            shininess: 80,
+            metalness: 0.85,
+            roughness: 0.25,
         });
         const panel = new THREE.Mesh(panelGeo, panelMat);
         panel.position.set(0, 0.5, 0.41);
@@ -511,7 +604,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         for (let i = 0; i < 3; i++) {
             const lightGeo = new THREE.CircleGeometry(0.08, 16);
-            const lightMat = new THREE.MeshPhongMaterial({
+            const lightMat = new THREE.MeshStandardMaterial({
                 color: this.accentColor,
                 emissive: this.accentColor,
                 emissiveIntensity: 0.8,
@@ -528,19 +621,22 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     private buildArms(): void {
         const upperGeo = new THREE.CylinderGeometry(0.12, 0.1, 0.8, 12);
         const lowerGeo = new THREE.CylinderGeometry(0.1, 0.08, 0.7, 12);
-        const armMat = new THREE.MeshPhongMaterial({
+        const armMat = new THREE.MeshStandardMaterial({
             color: this.robotColor,
-            shininess: 120,
+            metalness: 0.9,
+            roughness: 0.2,
         });
         const jointGeo = new THREE.SphereGeometry(0.12, 16, 16);
-        const jointMat = new THREE.MeshPhongMaterial({
+        const jointMat = new THREE.MeshStandardMaterial({
             color: 0x2d3748,
-            shininess: 150,
+            metalness: 0.9,
+            roughness: 0.15,
         });
         const handGeo = new THREE.SphereGeometry(0.1, 12, 12);
-        const handMat = new THREE.MeshPhongMaterial({
+        const handMat = new THREE.MeshStandardMaterial({
             color: 0x3a3a3a,
-            shininess: 100,
+            metalness: 0.85,
+            roughness: 0.25,
         });
 
         // --- Left arm (whisk) ---
@@ -595,7 +691,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         g.rotation.z = Math.PI / 12;
 
         const handleGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.35, 8);
-        const handleMat = new THREE.MeshPhongMaterial({ color: 0x8b4513 });
+        const handleMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
         const handle = new THREE.Mesh(handleGeo, handleMat);
         handle.position.y = -0.15;
         g.add(handle);
@@ -611,7 +707,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
                 new THREE.Vector3(0, -0.58, 0),
             ]);
             const wireGeo = new THREE.TubeGeometry(curve, 16, 0.006, 4, false);
-            const wireMat = new THREE.MeshPhongMaterial({ color: 0xc0c0c0 });
+            const wireMat = new THREE.MeshStandardMaterial({ color: 0xc0c0c0 });
             g.add(new THREE.Mesh(wireGeo, wireMat));
         }
         return g;
@@ -624,7 +720,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         g.rotation.z = -Math.PI / 12;
 
         const handleGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.4, 8);
-        const handleMat = new THREE.MeshPhongMaterial({ color: 0x654321 });
+        const handleMat = new THREE.MeshStandardMaterial({ color: 0x654321 });
         const handle = new THREE.Mesh(handleGeo, handleMat);
         handle.position.y = -0.2;
         g.add(handle);
@@ -644,9 +740,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
             bevelSize: 0.003,
             bevelSegments: 2,
         });
-        const bladeMat = new THREE.MeshPhongMaterial({
+        const bladeMat = new THREE.MeshStandardMaterial({
             color: 0xd3d3d3,
-            shininess: 200,
+            metalness: 0.9,
+            roughness: 0.15,
         });
         const blade = new THREE.Mesh(bladeGeo, bladeMat);
         blade.position.set(0, -0.45, 0);
@@ -672,16 +769,17 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
     private buildBase(): void {
         const baseGeo = new THREE.CylinderGeometry(0.8, 1.0, 0.3, 32);
-        const baseMat = new THREE.MeshPhongMaterial({
+        const baseMat = new THREE.MeshStandardMaterial({
             color: 0x2d3748,
-            shininess: 100,
+            metalness: 0.8,
+            roughness: 0.3,
         });
         this.base = new THREE.Mesh(baseGeo, baseMat);
         this.base.position.set(0, -1.0, 0);
         this.body.add(this.base);
 
         const ringGeo = new THREE.TorusGeometry(0.9, 0.1, 8, 32);
-        const ringMat = new THREE.MeshPhongMaterial({
+        const ringMat = new THREE.MeshStandardMaterial({
             color: 0x87ceeb,
             emissive: 0x87ceeb,
             emissiveIntensity: 0.3,
@@ -714,41 +812,50 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Floor
         const floorGeo = new THREE.PlaneGeometry(30, 30);
-        const floorMat = new THREE.MeshPhongMaterial({
+        const floorMat = new THREE.MeshStandardMaterial({
             color: 0xf0f0f0,
-            shininess: 40,
+            metalness: 0.0,
+            roughness: 0.3,
             transparent: true,
             opacity: 0.8,
         });
         const floor = new THREE.Mesh(floorGeo, floorMat);
         floor.rotation.x = -Math.PI / 2;
         floor.position.y = -4;
+        floor.receiveShadow = true;
         this.scene.add(floor);
 
         this.buildCheckerboard();
 
         // Back wall
         const wallGeo = new THREE.PlaneGeometry(30, 15);
-        const wallMat = new THREE.MeshPhongMaterial({ color: 0xfaf0e6 });
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xfaf0e6 });
         const wall = new THREE.Mesh(wallGeo, wallMat);
         wall.position.set(0, 3, -8);
         this.scene.add(wall);
 
         // Counter
         const counterGeo = new THREE.BoxGeometry(12, 1, 3);
-        const counterMat = new THREE.MeshPhongMaterial({ color: 0x8b7355 });
+        const counterMat = new THREE.MeshStandardMaterial({
+            color: 0x8b7355,
+            metalness: 0.0,
+            roughness: 0.6,
+        });
         const counter = new THREE.Mesh(counterGeo, counterMat);
         counter.position.set(0, -1.5, -4);
+        counter.receiveShadow = true;
         this.scene.add(counter);
 
         // Counter top
         const topGeo = new THREE.BoxGeometry(12.2, 0.2, 3.2);
-        const topMat = new THREE.MeshPhongMaterial({
+        const topMat = new THREE.MeshStandardMaterial({
             color: 0xf5f5f5,
-            shininess: 80,
+            metalness: 0.1,
+            roughness: 0.2,
         });
         const top = new THREE.Mesh(topGeo, topMat);
         top.position.set(0, -0.9, -4);
+        top.receiveShadow = true;
         this.scene.add(top);
 
         this.buildStove();
@@ -760,6 +867,16 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         const mainLight = new THREE.DirectionalLight(0xffdab9, 0.8);
         mainLight.position.set(2, 8, 4);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.set(2048, 2048);
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 30;
+        mainLight.shadow.camera.left = -10;
+        mainLight.shadow.camera.right = 10;
+        mainLight.shadow.camera.top = 10;
+        mainLight.shadow.camera.bottom = -10;
+        mainLight.shadow.bias = -0.0005;
+        this.mainLight = mainLight;
         this.scene.add(mainLight);
 
         const windowLight = new THREE.DirectionalLight(0xffffff, 0.4);
@@ -777,9 +894,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         for (let i = 0; i < n; i++) {
             for (let j = 0; j < n; j++) {
                 const geo = new THREE.PlaneGeometry(size, size);
-                const mat = new THREE.MeshPhongMaterial({
+                const mat = new THREE.MeshStandardMaterial({
                     color: (i + j) % 2 === 0 ? 0xffffff : 0x333333,
-                    shininess: 60,
+                    metalness: 0.05,
+                    roughness: 0.3,
                 });
                 const tile = new THREE.Mesh(geo, mat);
                 tile.rotation.x = -Math.PI / 2;
@@ -795,14 +913,14 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
     private buildStove(): void {
         const stoveGeo = new THREE.BoxGeometry(3, 0.8, 2);
-        const stoveMat = new THREE.MeshPhongMaterial({ color: 0x2c3e50 });
+        const stoveMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50 });
         const stove = new THREE.Mesh(stoveGeo, stoveMat);
         stove.position.set(0, -0.5, -4);
         this.scene.add(stove);
 
         for (let i = 0; i < 4; i++) {
             const burnerGeo = new THREE.TorusGeometry(0.3, 0.1, 8, 16);
-            const burnerMat = new THREE.MeshPhongMaterial({ color: 0x1c1c1c });
+            const burnerMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1c });
             const burner = new THREE.Mesh(burnerGeo, burnerMat);
             const x = (i % 2) * 0.8 - 0.4;
             const z = Math.floor(i / 2) * 0.8 - 3.6;
@@ -825,14 +943,14 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Oven door
         const doorGeo = new THREE.PlaneGeometry(2.8, 0.6);
-        const doorMat = new THREE.MeshPhongMaterial({ color: 0x34495e });
+        const doorMat = new THREE.MeshStandardMaterial({ color: 0x34495e });
         const door = new THREE.Mesh(doorGeo, doorMat);
         door.position.set(0, -0.5, -2.99);
         this.scene.add(door);
 
         // Handle
         const hGeo = new THREE.BoxGeometry(2.5, 0.08, 0.08);
-        const hMat = new THREE.MeshPhongMaterial({ color: 0xc0c0c0 });
+        const hMat = new THREE.MeshStandardMaterial({ color: 0xc0c0c0 });
         const h = new THREE.Mesh(hGeo, hMat);
         h.position.set(0, -0.3, -2.95);
         this.scene.add(h);
@@ -840,13 +958,13 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
     private buildHangingUtensils(): void {
         const rackGeo = new THREE.BoxGeometry(4, 0.1, 0.1);
-        const rackMat = new THREE.MeshPhongMaterial({ color: 0x4a4a4a });
+        const rackMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
         const rack = new THREE.Mesh(rackGeo, rackMat);
         rack.position.set(0, 2, -5);
         this.scene.add(rack);
 
         const hookGeo = new THREE.TorusGeometry(0.05, 0.02, 4, 8, Math.PI);
-        const metalMat = new THREE.MeshPhongMaterial({ color: 0x808080 });
+        const metalMat = new THREE.MeshStandardMaterial({ color: 0x808080 });
 
         const items: { type: string; x: number }[] = [
             { type: "pot", x: -1.5 },
@@ -863,7 +981,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
             if (item.type === "pot") {
                 const potGeo = new THREE.CylinderGeometry(0.25, 0.22, 0.3, 16);
-                const potMat = new THREE.MeshPhongMaterial({ color: 0x696969 });
+                const potMat = new THREE.MeshStandardMaterial({ color: 0x696969 });
                 const pot = new THREE.Mesh(potGeo, potMat);
                 pot.position.set(item.x, 1.7, -5);
                 this.scene.add(pot);
@@ -875,7 +993,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
                 this.scene.add(ph);
             } else if (item.type === "pan") {
                 const panGeo = new THREE.CylinderGeometry(0.3, 0.28, 0.08, 16);
-                const panMat = new THREE.MeshPhongMaterial({ color: 0x2c2c2c });
+                const panMat = new THREE.MeshStandardMaterial({ color: 0x2c2c2c });
                 const pan = new THREE.Mesh(panGeo, panMat);
                 pan.position.set(item.x, 1.7, -5);
                 this.scene.add(pan);
@@ -887,7 +1005,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
                 this.scene.add(ph);
             } else if (item.type === "ladle") {
                 const lhGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.5, 8);
-                const lhMat = new THREE.MeshPhongMaterial({ color: 0x8b4513 });
+                const lhMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
                 const lh = new THREE.Mesh(lhGeo, lhMat);
                 lh.position.set(item.x, 1.6, -5);
                 lh.rotation.z = 0.1;
@@ -904,7 +1022,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
     private buildShelves(): void {
         const shelfGeo = new THREE.BoxGeometry(3, 0.1, 0.8);
-        const shelfMat = new THREE.MeshPhongMaterial({ color: 0x8b7355 });
+        const shelfMat = new THREE.MeshStandardMaterial({ color: 0x8b7355 });
 
         const lShelf = new THREE.Mesh(shelfGeo, shelfMat);
         lShelf.position.set(-5, 2.5, -6);
@@ -921,7 +1039,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     private addKitchenItems(x: number, y: number, z: number): void {
         // Jar
         const jarGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.3, 12);
-        const jarMat = new THREE.MeshPhongMaterial({
+        const jarMat = new THREE.MeshStandardMaterial({
             color: 0xe6e6fa,
             transparent: true,
             opacity: 0.8,
@@ -931,7 +1049,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         this.scene.add(jar);
 
         const lidGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.05, 12);
-        const lidMat = new THREE.MeshPhongMaterial({ color: 0x8b7d6b });
+        const lidMat = new THREE.MeshStandardMaterial({ color: 0x8b7d6b });
         const lid = new THREE.Mesh(lidGeo, lidMat);
         lid.position.set(x - 0.8, y + 0.17, z);
         this.scene.add(lid);
@@ -940,7 +1058,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         const spiceColors = [0xcd853f, 0x8b4513, 0xdc143c];
         for (let i = 0; i < 3; i++) {
             const sGeo = new THREE.BoxGeometry(0.15, 0.25, 0.15);
-            const sMat = new THREE.MeshPhongMaterial({ color: spiceColors[i] });
+            const sMat = new THREE.MeshStandardMaterial({ color: spiceColors[i] });
             const s = new THREE.Mesh(sGeo, sMat);
             s.position.set(x + i * 0.3, y, z);
             this.scene.add(s);
@@ -948,7 +1066,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         // Oil bottle
         const bGeo = new THREE.CylinderGeometry(0.08, 0.12, 0.35, 8);
-        const bMat = new THREE.MeshPhongMaterial({
+        const bMat = new THREE.MeshStandardMaterial({
             color: 0x556b2f,
             transparent: true,
             opacity: 0.7,
@@ -987,7 +1105,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         // Status light blink
         this.statusLights.forEach((light, i) => {
             const t = time * 0.001 + i * 0.5;
-            (light.material as THREE.MeshPhongMaterial).emissiveIntensity =
+            (light.material as THREE.MeshStandardMaterial).emissiveIntensity =
                 0.3 + Math.sin(t * 3) * 0.5;
         });
 
@@ -1001,6 +1119,44 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
                 (p.material as THREE.MeshBasicMaterial).opacity = i === scanIdx ? 1.0 : 0.7;
             });
         }
+
+        // Eye-gaze follows mouse (idle only — speaking keeps eyes forward)
+        if (!this.isSpeaking) {
+            this.currentGaze.lerp(this.gazeTarget, 0.08);
+            const maxOffset = 0.04;
+            this.leftEyeGroup.position.x = -0.35 + this.currentGaze.x * maxOffset;
+            this.leftEyeGroup.position.y = 0.25 + this.currentGaze.y * maxOffset;
+            this.rightEyeGroup.position.x = 0.35 + this.currentGaze.x * maxOffset;
+            this.rightEyeGroup.position.y = 0.25 + this.currentGaze.y * maxOffset;
+        }
+
+        // Periodic blinks — squash eye groups on Y for ~120ms every 3–5s.
+        if (this.blinkStartedAt === null) {
+            if (this.nextBlinkAt === 0) {
+                this.nextBlinkAt = time + 3000 + Math.random() * 2000;
+            } else if (time >= this.nextBlinkAt) {
+                this.blinkStartedAt = time;
+            } else {
+                this.leftEyeGroup.scale.y = 1;
+                this.rightEyeGroup.scale.y = 1;
+            }
+        } else {
+            const elapsed = time - this.blinkStartedAt;
+            const duration = 120;
+            if (elapsed >= duration) {
+                this.leftEyeGroup.scale.y = 1;
+                this.rightEyeGroup.scale.y = 1;
+                this.blinkStartedAt = null;
+                this.nextBlinkAt = time + 3000 + Math.random() * 2000;
+            } else {
+                // Triangular 1 → 0.1 → 1 profile.
+                const half = duration / 2;
+                const phase = elapsed < half ? elapsed / half : 1 - (elapsed - half) / half;
+                const scale = 1 - phase * 0.9;
+                this.leftEyeGroup.scale.y = scale;
+                this.rightEyeGroup.scale.y = scale;
+            }
+        }
     }
 
     // -- Speech / waveform --------------------------------------------------
@@ -1012,7 +1168,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
             this.waveformBars.forEach((bar, i) => {
                 const idle = Math.sin(this.wavePhase * 0.3 + i * 0.4) * 0.05 + 0.08;
                 bar.scale.y = idle;
-                const mat = bar.material as THREE.MeshPhongMaterial;
+                const mat = bar.material as THREE.MeshStandardMaterial;
                 mat.emissiveIntensity = 0.2;
                 mat.color.setHex(this.secondaryAccent);
                 mat.emissive.setHex(this.secondaryAccent);
@@ -1081,7 +1237,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
             bar.scale.y = Math.max(0.02, Math.min(2.0, finalH));
 
-            const mat = bar.material as THREE.MeshPhongMaterial;
+            const mat = bar.material as THREE.MeshStandardMaterial;
             const shapeColor = this.getMouthShapeColor(this.currentMouthShape);
             const color = new THREE.Color();
 
@@ -1135,7 +1291,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
                 ((this.wavePhase % (Math.PI * 2)) / (Math.PI * 2)) * this.waveformBars.length
             );
             [scanIdx, (scanIdx + 1) % this.waveformBars.length].forEach((idx) => {
-                const mat = this.waveformBars[idx].material as THREE.MeshPhongMaterial;
+                const mat = this.waveformBars[idx].material as THREE.MeshStandardMaterial;
                 mat.emissiveIntensity = Math.min(mat.emissiveIntensity + 0.5, 3.0);
             });
         }
@@ -1158,9 +1314,12 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     // -- Arm idle -----------------------------------------------------------
 
     private animateArms(time: number): void {
+        // Sticking with euler (not SLERP) — single-axis rotation doesn't
+        // suffer gimbal lock, and widening amplitude to 0.15 rad is enough
+        // visible motion without introducing quaternion math overhead.
         const t = time * 0.0005;
-        this.leftLowerArm.rotation.x = Math.sin(t) * 0.1;
-        this.rightLowerArm.rotation.x = Math.sin(t + Math.PI) * 0.1;
+        this.leftLowerArm.rotation.x = Math.sin(t) * 0.15;
+        this.rightLowerArm.rotation.x = Math.sin(t + Math.PI) * 0.15;
     }
 
     // -- Reset mouth --------------------------------------------------------

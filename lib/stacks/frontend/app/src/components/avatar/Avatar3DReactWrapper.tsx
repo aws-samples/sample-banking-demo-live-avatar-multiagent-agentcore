@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Avatar3DRobot } from "./Avatar3DRobot";
 import { Avatar3DBlob } from "./Avatar3DBlob";
 import { Avatar3DCrystal } from "./Avatar3DCrystal";
-import type { AvatarVariant, AvatarVariantName } from "./AvatarVariant";
+import type { AvatarVariant, AvatarVariantName, QualityTier } from "./AvatarVariant";
 
 interface Avatar3DReactWrapperProps {
     audioLevel?: number;
@@ -10,6 +10,7 @@ interface Avatar3DReactWrapperProps {
     isListening?: boolean;
     className?: string;
     variant?: AvatarVariantName;
+    quality?: QualityTier;
 }
 
 const EYE_COLOR_IDLE = 0x4488ff;
@@ -33,6 +34,7 @@ export default function Avatar3DReactWrapper({
     isListening = false,
     className,
     variant = "robot",
+    quality = "medium",
 }: Avatar3DReactWrapperProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const avatarRef = useRef<AvatarVariant | null>(null);
@@ -49,6 +51,7 @@ export default function Avatar3DReactWrapper({
         avatar.setSpeaking(isSpeaking);
         avatar.setEyeColor(isSpeaking ? EYE_COLOR_SPEAKING : EYE_COLOR_IDLE);
         avatar.updateLipSync(isSpeaking ? audioLevel : 0);
+        avatar.setQuality?.(quality);
 
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
@@ -90,6 +93,10 @@ export default function Avatar3DReactWrapper({
             avatar.setEyeColor(EYE_COLOR_IDLE);
         }
     }, [isSpeaking, isListening]);
+
+    useEffect(() => {
+        avatarRef.current?.setQuality?.(quality);
+    }, [quality]);
 
     return (
         <div
