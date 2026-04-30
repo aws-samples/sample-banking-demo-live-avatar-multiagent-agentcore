@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three-stdlib";
 import { Avatar3D } from "./Avatar3D";
 import type { AvatarVariant } from "./AvatarVariant";
 
@@ -9,7 +10,7 @@ import type { AvatarVariant } from "./AvatarVariant";
 export class Avatar3DBlob extends Avatar3D implements AvatarVariant {
     private blobMesh: THREE.Mesh;
     private blobGeo: THREE.IcosahedronGeometry;
-    private blobMat: THREE.MeshPhongMaterial;
+    private blobMat: THREE.MeshStandardMaterial;
     private originalPositions: Float32Array;
     private particleSystem: THREE.Points;
     private particlePositions: Float32Array;
@@ -18,26 +19,53 @@ export class Avatar3DBlob extends Avatar3D implements AvatarVariant {
 
     private audioLevel = 0;
     private isSpeaking = false;
-    private baseColor = new THREE.Color(0x4488ff);
-    private hotColor = new THREE.Color(0xff6622);
+    private baseColor = new THREE.Color(0x3ab0d8); // teal-aqua, reads "friendly"
+    private hotColor = new THREE.Color(0xff7a4a); // warm coral for speech peaks
 
     constructor(container: HTMLElement) {
         super(container);
 
-        // Camera setup for blob
-        this.camera.position.set(0, 0, 3.5);
+        // Camera — framed a hair closer so the blob fills the canvas without
+        // getting clipped by vertex displacement at high audio levels.
+        this.camera.position.set(0, 0, 3.2);
         this.camera.lookAt(0, 0, 0);
         this.updateControlsTarget(0, 0, 0);
 
-        // Core blob mesh
+        // ACES tone-mapping + sRGB output so the emissive bloom reads as light
+        // rather than saturated pixels.
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.0;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+        // Radial gradient background via canvas texture so the blob is
+        // centred in a soft halo rather than floating in flat transparency.
+        const bg = document.createElement("canvas");
+        bg.width = 512;
+        bg.height = 512;
+        const ctx = bg.getContext("2d")!;
+        const grad = ctx.createRadialGradient(256, 256, 80, 256, 256, 360);
+        grad.addColorStop(0, "#1a2f4a");
+        grad.addColorStop(1, "#050812");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 512, 512);
+        this.scene.background = new THREE.CanvasTexture(bg);
+
+        // PBR env map for metallic shimmer on the blob surface.
+        const pmrem = new THREE.PMREMGenerator(this.renderer);
+        this.scene.environment = pmrem.fromScene(RoomEnvironment(), 0.04).texture;
+        pmrem.dispose();
+
+        // Core blob mesh — PBR with subtle metalness so the ring lights and
+        // env map catch across the displaced surface.
         this.blobGeo = new THREE.IcosahedronGeometry(1.2, 5);
-        this.blobMat = new THREE.MeshPhongMaterial({
-            color: 0x4488ff,
-            emissive: 0x112244,
+        this.blobMat = new THREE.MeshStandardMaterial({
+            color: this.baseColor,
+            emissive: this.baseColor,
+            emissiveIntensity: 0.15,
+            metalness: 0.6,
+            roughness: 0.25,
             transparent: true,
-            opacity: 0.85,
-            shininess: 80,
-            wireframe: false,
+            opacity: 0.9,
         });
         this.blobMesh = new THREE.Mesh(this.blobGeo, this.blobMat);
         this.scene.add(this.blobMesh);
@@ -81,11 +109,14 @@ export class Avatar3DBlob extends Avatar3D implements AvatarVariant {
         // Orbiting rings
         for (let i = 0; i < 3; i++) {
             const ringGeo = new THREE.TorusGeometry(1.6 + i * 0.2, 0.01, 8, 64);
-            const ringMat = new THREE.MeshPhongMaterial({
-                color: 0x6699ff,
-                emissive: 0x224488,
+            const ringMat = new THREE.MeshStandardMaterial({
+                color: 0x6ecfe8,
+                emissive: 0x2a6a88,
+                emissiveIntensity: 0.6,
+                metalness: 0.3,
+                roughness: 0.3,
                 transparent: true,
-                opacity: 0.4,
+                opacity: 0.45,
             });
             const ring = new THREE.Mesh(ringGeo, ringMat);
             ring.rotation.x = Math.PI / 3 + i * 0.4;
@@ -162,7 +193,7 @@ export class Avatar3DBlob extends Avatar3D implements AvatarVariant {
             ring.rotation.z = t * spinSpeed;
             const ringScale = 1 + intensity * 0.5;
             ring.scale.setScalar(ringScale);
-            (ring.material as THREE.MeshPhongMaterial).opacity = 0.3 + intensity * 0.5;
+            (ring.material as THREE.MeshStandardMaterial).opacity = 0.3 + intensity * 0.5;
         });
 
         // Rotation — wobble when speaking

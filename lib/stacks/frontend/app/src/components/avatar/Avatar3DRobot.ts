@@ -114,10 +114,19 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     constructor(container: HTMLElement) {
         super(container);
 
-        // Adjust camera for the chef robot's proportions — pulled back for full scene
-        this.camera.position.set(0, 3.5, 12);
-        this.camera.lookAt(0, 2.2, 0);
-        this.updateControlsTarget(0, 2.2, 0);
+        // Frame the robot as the hero — head near top-third, counter visible at
+        // bottom. Previous setup (y=3.5, z=12) shrank the robot into the upper
+        // quarter of portrait-shaped containers. Bringing the camera in and
+        // lowering it centres the robot's torso instead.
+        this.camera.position.set(0, 2.2, 7.5);
+        this.camera.lookAt(0, 2.4, 0);
+        this.updateControlsTarget(0, 2.4, 0);
+
+        // ACES tone-mapping + sRGB output so PBR materials don't blow out
+        // against the warm kitchen background.
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 0.9;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
         this.buildKitchenBackground();
         this.buildRobot();
@@ -797,15 +806,17 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     // =========================================================================
 
     private buildKitchenBackground(): void {
-        // Gradient background via canvas texture
+        // Softer warm gradient — the previous cream-to-wheat palette was
+        // blowing out under the new PBR lighting and looked clinical-white on
+        // most monitors. Keep warmth but drop overall luminance.
         const canvas = document.createElement("canvas");
         canvas.width = 512;
         canvas.height = 512;
         const ctx = canvas.getContext("2d")!;
         const grad = ctx.createLinearGradient(0, 0, 0, 512);
-        grad.addColorStop(0, "#FFF8E7");
-        grad.addColorStop(0.5, "#F5F5DC");
-        grad.addColorStop(1, "#F0E68C");
+        grad.addColorStop(0, "#d9c9a8"); // warm toast
+        grad.addColorStop(0.55, "#c9b088"); // wheat
+        grad.addColorStop(1, "#8a6f4a"); // tawny counter shadow
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, 512, 512);
         this.scene.background = new THREE.CanvasTexture(canvas);
@@ -827,9 +838,14 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
 
         this.buildCheckerboard();
 
-        // Back wall
+        // Back wall — darker warm neutral instead of linen-white so it doesn't
+        // dominate the frame or wash out the robot.
         const wallGeo = new THREE.PlaneGeometry(30, 15);
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0xfaf0e6 });
+        const wallMat = new THREE.MeshStandardMaterial({
+            color: 0x8a6a4a,
+            roughness: 0.95,
+            metalness: 0,
+        });
         const wall = new THREE.Mesh(wallGeo, wallMat);
         wall.position.set(0, 3, -8);
         this.scene.add(wall);
@@ -846,12 +862,13 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         counter.receiveShadow = true;
         this.scene.add(counter);
 
-        // Counter top
+        // Counter top — warm butcher-block rather than stark white so it
+        // reads as "kitchen" not "lab bench".
         const topGeo = new THREE.BoxGeometry(12.2, 0.2, 3.2);
         const topMat = new THREE.MeshStandardMaterial({
-            color: 0xf5f5f5,
-            metalness: 0.1,
-            roughness: 0.2,
+            color: 0xc9a880,
+            metalness: 0.05,
+            roughness: 0.55,
         });
         const top = new THREE.Mesh(topGeo, topMat);
         top.position.set(0, -0.9, -4);
@@ -862,10 +879,12 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         this.buildHangingUtensils();
         this.buildShelves();
 
-        // Warm kitchen lighting
-        this.scene.add(new THREE.AmbientLight(0xffe4b5, 0.6));
+        // Warm kitchen lighting — dimmed from the original values; the added
+        // PBR env map now carries most of the ambient fill, so we don't need
+        // a 0.6 AmbientLight on top (which was blowing out the walls).
+        this.scene.add(new THREE.AmbientLight(0xffe4b5, 0.3));
 
-        const mainLight = new THREE.DirectionalLight(0xffdab9, 0.8);
+        const mainLight = new THREE.DirectionalLight(0xffdab9, 0.65);
         mainLight.position.set(2, 8, 4);
         mainLight.castShadow = true;
         mainLight.shadow.mapSize.set(2048, 2048);
@@ -879,7 +898,7 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         this.mainLight = mainLight;
         this.scene.add(mainLight);
 
-        const windowLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        const windowLight = new THREE.DirectionalLight(0xffffff, 0.2);
         windowLight.position.set(-5, 5, 2);
         this.scene.add(windowLight);
 
@@ -894,10 +913,13 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         for (let i = 0; i < n; i++) {
             for (let j = 0; j < n; j++) {
                 const geo = new THREE.PlaneGeometry(size, size);
+                // Softer checker — cream and slate rather than pure white/
+                // near-black. Bumps roughness so tiles stop catching so much
+                // specular and competing with the robot for attention.
                 const mat = new THREE.MeshStandardMaterial({
-                    color: (i + j) % 2 === 0 ? 0xffffff : 0x333333,
-                    metalness: 0.05,
-                    roughness: 0.3,
+                    color: (i + j) % 2 === 0 ? 0xd9cdb5 : 0x3a3a42,
+                    metalness: 0.0,
+                    roughness: 0.6,
                 });
                 const tile = new THREE.Mesh(geo, mat);
                 tile.rotation.x = -Math.PI / 2;

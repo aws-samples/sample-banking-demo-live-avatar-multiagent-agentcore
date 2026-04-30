@@ -13,8 +13,11 @@ interface Avatar3DReactWrapperProps {
     quality?: QualityTier;
 }
 
-const EYE_COLOR_IDLE = 0x4488ff;
-const EYE_COLOR_SPEAKING = 0x00ff88;
+// Single friendly cyan — the previous idle/speaking split (blue → lime-green)
+// flashed green every utterance and read as uncanny rather than expressive.
+// Speaking cues are now carried by the chest status lights and waveform
+// mouth animation instead.
+const EYE_COLOR = 0x6cc4ff;
 
 function createAvatar(variant: AvatarVariantName, container: HTMLElement): AvatarVariant {
     switch (variant) {
@@ -49,7 +52,7 @@ export default function Avatar3DReactWrapper({
         // Sync current props into the new avatar instance immediately so it
         // picks up any in-progress speaking/audio state after a variant switch.
         avatar.setSpeaking(isSpeaking);
-        avatar.setEyeColor(isSpeaking ? EYE_COLOR_SPEAKING : EYE_COLOR_IDLE);
+        avatar.setEyeColor(EYE_COLOR);
         avatar.updateLipSync(isSpeaking ? audioLevel : 0);
         avatar.setQuality?.(quality);
 
@@ -84,14 +87,7 @@ export default function Avatar3DReactWrapper({
     useEffect(() => {
         const avatar = avatarRef.current;
         if (!avatar) return;
-
         avatar.setSpeaking(isSpeaking);
-
-        if (isSpeaking) {
-            avatar.setEyeColor(EYE_COLOR_SPEAKING);
-        } else {
-            avatar.setEyeColor(EYE_COLOR_IDLE);
-        }
     }, [isSpeaking, isListening]);
 
     useEffect(() => {

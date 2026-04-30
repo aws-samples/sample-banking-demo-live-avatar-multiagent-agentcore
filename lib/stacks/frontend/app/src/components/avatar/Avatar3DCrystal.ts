@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { RoomEnvironment } from "three-stdlib";
 import { Avatar3D } from "./Avatar3D";
 import type { AvatarVariant } from "./AvatarVariant";
 
@@ -7,11 +8,11 @@ import type { AvatarVariant } from "./AvatarVariant";
  */
 export class Avatar3DCrystal extends Avatar3D implements AvatarVariant {
     private coreMesh: THREE.Mesh;
-    private coreMat: THREE.MeshPhongMaterial;
+    private coreMat: THREE.MeshPhysicalMaterial;
     private shards: THREE.Mesh[] = [];
     private shardBasePositions: THREE.Vector3[] = [];
     private sparkleRing: THREE.Points;
-    private accentColor = new THREE.Color(0x88ccff);
+    private accentColor = new THREE.Color(0x9ad9ff);
 
     private audioLevel = 0;
     private isSpeaking = false;
@@ -20,33 +21,70 @@ export class Avatar3DCrystal extends Avatar3D implements AvatarVariant {
         super(container);
 
         // Camera for crystal
-        this.camera.position.set(0, 0, 3.5);
+        this.camera.position.set(0, 0, 3.2);
         this.camera.lookAt(0, 0, 0);
         this.updateControlsTarget(0, 0, 0);
 
-        // Core octahedron
+        // ACES tone-mapping for proper highlight rolloff on glass facets.
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.0;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+        // Radial gradient background — cool twilight so the crystal's
+        // icy highlights pop without the orb floating in a black void.
+        const bg = document.createElement("canvas");
+        bg.width = 512;
+        bg.height = 512;
+        const ctx = bg.getContext("2d")!;
+        const grad = ctx.createRadialGradient(256, 256, 60, 256, 256, 360);
+        grad.addColorStop(0, "#162a3f");
+        grad.addColorStop(1, "#04060c");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 512, 512);
+        this.scene.background = new THREE.CanvasTexture(bg);
+
+        // PBR env map drives the facet reflections — without this the
+        // Physical material falls back to flat-shaded grey.
+        const pmrem = new THREE.PMREMGenerator(this.renderer);
+        this.scene.environment = pmrem.fromScene(RoomEnvironment(), 0.04).texture;
+        pmrem.dispose();
+
+        // Core octahedron — MeshPhysicalMaterial with transmission gives real
+        // glass refraction rather than the old Phong fake-shininess.
         const coreGeo = new THREE.OctahedronGeometry(1, 0);
-        this.coreMat = new THREE.MeshPhongMaterial({
-            color: 0x88ccff,
-            emissive: 0x224466,
-            shininess: 200,
+        this.coreMat = new THREE.MeshPhysicalMaterial({
+            color: 0x9ad9ff,
+            emissive: 0x2a5a82,
+            emissiveIntensity: 0.4,
+            metalness: 0.0,
+            roughness: 0.08,
+            transmission: 0.6, // glass-like see-through
+            thickness: 0.8,
+            ior: 1.5,
+            attenuationColor: 0x88ccff,
+            attenuationDistance: 2.5,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.05,
             transparent: true,
-            opacity: 0.85,
+            opacity: 0.92,
             flatShading: true,
         });
         this.coreMesh = new THREE.Mesh(coreGeo, this.coreMat);
         this.scene.add(this.coreMesh);
 
-        // Floating shards
+        // Floating shards — share the same glass look but simpler (no
+        // transmission, which would be too expensive on 10 cones).
         const shardCount = 10;
         for (let i = 0; i < shardCount; i++) {
             const shardGeo = new THREE.ConeGeometry(0.1, 0.6 + Math.random() * 0.4, 4);
-            const shardMat = new THREE.MeshPhongMaterial({
-                color: 0xaaddff,
-                emissive: 0x112244,
+            const shardMat = new THREE.MeshStandardMaterial({
+                color: 0xbae4ff,
+                emissive: 0x224a6c,
+                emissiveIntensity: 0.4,
+                metalness: 0.4,
+                roughness: 0.15,
                 transparent: true,
-                opacity: 0.7,
-                shininess: 150,
+                opacity: 0.75,
                 flatShading: true,
             });
             const shard = new THREE.Mesh(shardGeo, shardMat);
@@ -132,7 +170,7 @@ export class Avatar3DCrystal extends Avatar3D implements AvatarVariant {
             shard.rotation.z = t * (0.5 + intensity * 4);
 
             // Emissive on shards — bright flicker
-            const shardMat = shard.material as THREE.MeshPhongMaterial;
+            const shardMat = shard.material as THREE.MeshStandardMaterial;
             shardMat.emissive.copy(this.accentColor).multiplyScalar(emissiveIntensity * 0.8);
             shardMat.opacity = 0.5 + intensity * 0.5;
         });
