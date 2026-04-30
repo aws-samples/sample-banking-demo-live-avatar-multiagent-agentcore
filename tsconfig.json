@@ -21,6 +21,7 @@
         "esModuleInterop": true,
         "stripInternal": true,
         "resolveJsonModule": true,
+        "skipLibCheck": true,
         "noEmit": true
     },
     "exclude": ["node_modules", "cdk.out", "lib/stacks/frontend/app"]

@@ -102,13 +102,12 @@ def handler(event, context):
     try:
         delimiter = "___"
         original_tool_name = context.client_context.custom["bedrockAgentCoreToolName"]
-        tool_name = original_tool_name[original_tool_name.index(delimiter) + len(delimiter):]
+        tool_name = original_tool_name[original_tool_name.index(delimiter) + len(delimiter) :]
         if tool_name != "extract_pdf_images":
             return {"error": f"Unexpected tool: {tool_name}"}
 
         pdf_s3_key = event.get("pdf_s3_key", "")
         menu = event.get("menu", {})
-        user_id = event.get("user_id", "")
 
         if not menu.get("sections"):
             return {"error": "Requires menu with sections"}
@@ -127,10 +126,7 @@ def handler(event, context):
         if not actual_key:
             # Find most recent menu PDF in the bucket
             resp = s3_client.list_objects_v2(Bucket=REPORTS_BUCKET, Prefix="menus/", MaxKeys=50)
-            pdfs = [
-                obj for obj in resp.get("Contents", [])
-                if obj["Key"].endswith(".pdf")
-            ]
+            pdfs = [obj for obj in resp.get("Contents", []) if obj["Key"].endswith(".pdf")]
             if not pdfs:
                 return {"error": "No menu PDFs found in the reports bucket"}
             actual_key = sorted(pdfs, key=lambda o: o["LastModified"], reverse=True)[0]["Key"]
@@ -162,22 +158,20 @@ def handler(event, context):
                 time.sleep(1)
 
             # Upload PDF to session using blob
-            _invoke_ci(session_id, "writeFiles", {
-                "content": [{"path": "menu.pdf", "blob": pdf_bytes}]
-            })
+            _invoke_ci(session_id, "writeFiles", {"content": [{"path": "menu.pdf", "blob": pdf_bytes}]})
 
             # Run extraction code
-            result = _invoke_ci(session_id, "executeCode", {
-                "language": "python",
-                "code": EXTRACT_CODE,
-            })
+            result = _invoke_ci(
+                session_id,
+                "executeCode",
+                {
+                    "language": "python",
+                    "code": EXTRACT_CODE,
+                },
+            )
 
             # Parse stdout to get image filenames
-            stdout = (
-                result.get("stdout", "")
-                or result.get("output", "")
-                or ""
-            )
+            stdout = result.get("stdout", "") or result.get("output", "") or ""
             # Also check structuredContent (Code Interpreter wraps output there)
             sc = result.get("structuredContent", {})
             if not stdout and isinstance(sc, dict):
@@ -194,19 +188,33 @@ def handler(event, context):
             logger.info("Extract stderr: %s", stderr[:500])
 
             if not stdout.strip():
-                return {"content": [{"type": "text", "text": json.dumps({
-                    "success": False,
-                    "error": f"Code produced no output. stderr: {stderr[:300]}",
-                    "result_dump": json.dumps(result, default=str)[:500],
-                })}]}
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                {
+                                    "success": False,
+                                    "error": f"Code produced no output. stderr: {stderr[:300]}",
+                                    "result_dump": json.dumps(result, default=str)[:500],
+                                }
+                            ),
+                        }
+                    ]
+                }
 
             image_files = json.loads(stdout.strip().split("\n")[-1])
 
             # Read extracted images from session
             if not image_files:
-                return {"content": [{"type": "text", "text": json.dumps({
-                    "success": True, "images": [], "message": "No images found in PDF"
-                })}]}
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps({"success": True, "images": [], "message": "No images found in PDF"}),
+                        }
+                    ]
+                }
 
             # Read base64-encoded images from the JSON file we wrote
             read_result = _invoke_ci(session_id, "readFiles", {"paths": ["images_b64.json"]})
@@ -226,15 +234,20 @@ def handler(event, context):
                 # Fallback: re-run code to print base64 data directly
                 b64_code = 'import json; f=open("images_b64.json"); print(f.read()); f.close()'
                 b64_result = _invoke_ci(session_id, "executeCode", {"language": "python", "code": b64_code})
-                img_json_text = (
-                    b64_result.get("structuredContent", {}).get("stdout", "")
-                    or next((c.get("text", "") for c in b64_result.get("content", []) if isinstance(c, dict) and c.get("text")), "")
+                img_json_text = b64_result.get("structuredContent", {}).get("stdout", "") or next(
+                    (c.get("text", "") for c in b64_result.get("content", []) if isinstance(c, dict) and c.get("text")),
+                    "",
                 )
 
             if not img_json_text:
-                return {"content": [{"type": "text", "text": json.dumps({
-                    "success": False, "error": "Could not retrieve extracted images"
-                })}]}
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps({"success": False, "error": "Could not retrieve extracted images"}),
+                        }
+                    ]
+                }
 
             extracted = json.loads(img_json_text)
 
@@ -258,11 +271,20 @@ def handler(event, context):
                 images.append({"name": dish_name, "s3_key": img_s3_key})
                 logger.info("Uploaded %s -> %s", dish_name, img_s3_key)
 
-            return {"content": [{"type": "text", "text": json.dumps({
-                "success": True,
-                "images": images,
-                "count": len(images),
-            })}]}
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "success": True,
+                                "images": images,
+                                "count": len(images),
+                            }
+                        ),
+                    }
+                ]
+            }
 
         finally:
             # Clean up session

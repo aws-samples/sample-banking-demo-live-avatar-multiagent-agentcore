@@ -5,6 +5,7 @@ import json
 import logging
 import urllib.parse
 import urllib.request
+
 import defusedxml.ElementTree as ET
 
 logger = logging.getLogger()
