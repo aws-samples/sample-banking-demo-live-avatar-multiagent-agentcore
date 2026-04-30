@@ -1,9 +1,8 @@
-import { Aws, Duration, RemovalPolicy, StackProps, Stage } from "aws-cdk-lib";
+import { Aws, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
 import {
     AccountRecovery,
     CfnIdentityPool,
     CfnIdentityPoolRoleAttachment,
-    CfnManagedLoginBranding,
     CfnUserPoolUser,
     FeaturePlan,
     OAuthScope,
@@ -18,8 +17,6 @@ import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { CfnWebACL, CfnWebACLAssociation } from "aws-cdk-lib/aws-wafv2";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
-import * as fs from "fs";
-import * as path from "path";
 // @export {"deleteLines": 1}
 import { FederateUserPool, FederateUserPoolClient } from "../common/constructs/federate";
 import { Stack } from "../common/constructs/stack";
@@ -47,8 +44,6 @@ export class Auth extends Stack {
         const { urls, hydrationFunction } = props;
         const stackNameBase = getStackNameBase(this.node);
         const adminUserEmail = getAdminUserEmail(this.node);
-        const stageName = Stage.of(this)!.stageName;
-        const isMidway = this.node.getContext("accounts")?.[stageName]?.midway === true;
 
         // @export {"replace": "FederateUserPool", "with": "UserPool"}
         const userPool = new FederateUserPool(this, "UserPool", {
@@ -124,241 +119,6 @@ export class Auth extends Stack {
                 scopes: [OAuthScope.OPENID, OAuthScope.EMAIL, OAuthScope.PROFILE],
                 callbackUrls: urls,
                 logoutUrls: urls,
-            },
-        });
-
-        // ─── Managed Login Branding ───────────────────────────────────
-        const bgBytes = fs.readFileSync(path.join(__dirname, "cognito-bg.jpg")).toString("base64");
-        const logoBytes = fs
-            .readFileSync(path.join(__dirname, "cognito-logo.png"))
-            .toString("base64");
-
-        new CfnManagedLoginBranding(this, "ManagedLoginBranding", {
-            userPoolId: userPool.userPoolId,
-            clientId: userPoolClient.userPoolClientId,
-            useCognitoProvidedValues: false,
-            returnMergedResources: true,
-            assets: [
-                {
-                    bytes: bgBytes,
-                    category: "PAGE_BACKGROUND",
-                    colorMode: "DARK",
-                    extension: "JPEG",
-                },
-                { bytes: logoBytes, category: "FORM_LOGO", colorMode: "DARK", extension: "PNG" },
-            ],
-            settings: {
-                categories: {
-                    auth: {
-                        authMethodOrder: [
-                            [{ display: "INPUT", type: "USERNAME_PASSWORD" }],
-                            ...(isMidway
-                                ? [[{ display: "BUTTON", type: "FEDERATED_SIGN_IN" }]]
-                                : []),
-                        ],
-                    },
-                    form: {
-                        displayGraphics: true,
-                        location: { horizontal: "CENTER", vertical: "CENTER" },
-                        sessionTimerDisplay: "NONE",
-                        languageSelector: { enabled: false },
-                        instructions: { enabled: false },
-                    },
-                    global: {
-                        colorSchemeMode: "DARK",
-                        pageHeader: { enabled: false },
-                        pageFooter: { enabled: false },
-                    },
-                    signUp: { acceptanceElements: [{ enforcement: "NONE", textKey: "en" }] },
-                },
-                componentClasses: {
-                    buttons: { borderRadius: 12 },
-                    divider: {
-                        darkMode: { borderColor: "d4a35740" },
-                        lightMode: { borderColor: "d4a35740" },
-                    },
-                    focusState: {
-                        darkMode: { borderColor: "e88c2eff" },
-                        lightMode: { borderColor: "e88c2eff" },
-                    },
-                    input: {
-                        borderRadius: 10,
-                        darkMode: {
-                            defaults: { backgroundColor: "1a120a80", borderColor: "d4a35760" },
-                            placeholderColor: "b89a7bff",
-                        },
-                        lightMode: {
-                            defaults: { backgroundColor: "fffaf5cc", borderColor: "d4a35780" },
-                            placeholderColor: "8b7355ff",
-                        },
-                    },
-                    inputDescription: {
-                        darkMode: { textColor: "c4a882ff" },
-                        lightMode: { textColor: "6b5438ff" },
-                    },
-                    inputLabel: {
-                        darkMode: { textColor: "f0dcc0ff" },
-                        lightMode: { textColor: "3d2b14ff" },
-                    },
-                    link: {
-                        darkMode: {
-                            defaults: { textColor: "e8a642ff" },
-                            hover: { textColor: "f0c878ff" },
-                        },
-                        lightMode: {
-                            defaults: { textColor: "b87a1eff" },
-                            hover: { textColor: "8b5a10ff" },
-                        },
-                    },
-                    optionControls: {
-                        darkMode: {
-                            defaults: { backgroundColor: "1a120aff", borderColor: "d4a35780" },
-                            selected: { backgroundColor: "e88c2eff", foregroundColor: "ffffffff" },
-                        },
-                        lightMode: {
-                            defaults: { backgroundColor: "fffaf5ff", borderColor: "d4a35780" },
-                            selected: { backgroundColor: "e88c2eff", foregroundColor: "ffffffff" },
-                        },
-                    },
-                    statusIndicator: {
-                        darkMode: {
-                            error: {
-                                backgroundColor: "2a0a0aff",
-                                borderColor: "eb6f6fff",
-                                indicatorColor: "eb6f6fff",
-                            },
-                            pending: { indicatorColor: "d4a357ff" },
-                            success: {
-                                backgroundColor: "0a1a0aff",
-                                borderColor: "4caf50ff",
-                                indicatorColor: "4caf50ff",
-                            },
-                            warning: {
-                                backgroundColor: "2a1a0aff",
-                                borderColor: "e8a642ff",
-                                indicatorColor: "e8a642ff",
-                            },
-                        },
-                        lightMode: {
-                            error: {
-                                backgroundColor: "fff0f0ff",
-                                borderColor: "d91515ff",
-                                indicatorColor: "d91515ff",
-                            },
-                            pending: { indicatorColor: "d4a357ff" },
-                            success: {
-                                backgroundColor: "f0fff0ff",
-                                borderColor: "2e7d32ff",
-                                indicatorColor: "2e7d32ff",
-                            },
-                            warning: {
-                                backgroundColor: "fff8f0ff",
-                                borderColor: "e88c2eff",
-                                indicatorColor: "e88c2eff",
-                            },
-                        },
-                    },
-                },
-                components: {
-                    alert: {
-                        borderRadius: 12,
-                        darkMode: {
-                            error: { backgroundColor: "2a0a0aff", borderColor: "eb6f6fff" },
-                        },
-                        lightMode: {
-                            error: { backgroundColor: "fff0f0ff", borderColor: "d91515ff" },
-                        },
-                    },
-                    form: {
-                        backgroundImage: { enabled: false },
-                        borderRadius: 16,
-                        darkMode: { backgroundColor: "1a120ae0", borderColor: "d4a35740" },
-                        lightMode: { backgroundColor: "ffffffe0", borderColor: "d4a35740" },
-                        logo: {
-                            enabled: true,
-                            formInclusion: "IN",
-                            location: "CENTER",
-                            position: "TOP",
-                        },
-                    },
-                    pageBackground: {
-                        darkMode: { color: "1a0f05ff" },
-                        image: { enabled: true },
-                        lightMode: { color: "faf5eeff" },
-                    },
-                    pageHeader: {
-                        backgroundImage: { enabled: false },
-                        darkMode: { background: { color: "00000000" }, borderColor: "00000000" },
-                        lightMode: { background: { color: "00000000" }, borderColor: "00000000" },
-                        logo: { enabled: false, location: "START" },
-                    },
-                    pageFooter: {
-                        backgroundImage: { enabled: false },
-                        darkMode: { background: { color: "00000000" }, borderColor: "00000000" },
-                        lightMode: { background: { color: "00000000" }, borderColor: "00000000" },
-                        logo: { enabled: false, location: "START" },
-                    },
-                    pageText: {
-                        darkMode: {
-                            bodyColor: "c4a882ff",
-                            descriptionColor: "c4a882ff",
-                            headingColor: "f0dcc0ff",
-                        },
-                        lightMode: {
-                            bodyColor: "6b5438ff",
-                            descriptionColor: "6b5438ff",
-                            headingColor: "3d2b14ff",
-                        },
-                    },
-                    primaryButton: {
-                        darkMode: {
-                            active: { backgroundColor: "c97a20ff", textColor: "ffffffff" },
-                            defaults: { backgroundColor: "e88c2eff", textColor: "ffffffff" },
-                            hover: { backgroundColor: "f0a040ff", textColor: "ffffffff" },
-                        },
-                        lightMode: {
-                            active: { backgroundColor: "c97a20ff", textColor: "ffffffff" },
-                            defaults: { backgroundColor: "e88c2eff", textColor: "ffffffff" },
-                            hover: { backgroundColor: "f0a040ff", textColor: "ffffffff" },
-                        },
-                    },
-                    secondaryButton: {
-                        darkMode: {
-                            active: {
-                                backgroundColor: "d4a35720",
-                                borderColor: "e88c2eff",
-                                textColor: "e88c2eff",
-                            },
-                            defaults: {
-                                backgroundColor: "00000000",
-                                borderColor: "d4a35780",
-                                textColor: "e8a642ff",
-                            },
-                            hover: {
-                                backgroundColor: "d4a35710",
-                                borderColor: "e88c2eff",
-                                textColor: "f0c878ff",
-                            },
-                        },
-                        lightMode: {
-                            active: {
-                                backgroundColor: "d4a35720",
-                                borderColor: "b87a1eff",
-                                textColor: "b87a1eff",
-                            },
-                            defaults: {
-                                backgroundColor: "00000000",
-                                borderColor: "d4a35780",
-                                textColor: "b87a1eff",
-                            },
-                            hover: {
-                                backgroundColor: "d4a35710",
-                                borderColor: "b87a1eff",
-                                textColor: "8b5a10ff",
-                            },
-                        },
-                    },
-                },
             },
         });
 
