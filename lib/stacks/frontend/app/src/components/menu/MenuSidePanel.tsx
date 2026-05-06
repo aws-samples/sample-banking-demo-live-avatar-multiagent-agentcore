@@ -33,7 +33,7 @@ export default function MenuSidePanel(): JSX.Element {
 
     return (
         <div
-            className="w-80 lg:w-96 flex-none overflow-y-auto flex flex-col glass-panel-strong"
+            className="h-full w-full min-w-0 overflow-y-auto flex flex-col glass-panel-strong"
             style={{ borderLeft: "1px solid var(--glass-border)" }}
         >
             <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--glass-border)" }}>

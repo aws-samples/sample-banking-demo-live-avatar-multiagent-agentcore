@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ChatInterface from "@/components/chat/ChatInterface";
 import { AgentFlowVisualization, type FlowConfig } from "@/components/flow/AgentFlowVisualization";
 import {
@@ -15,6 +15,9 @@ import { useChatStore } from "@/stores/chatStore";
 import type { PipelinePhase } from "@/lib/agentcore-client/types";
 import Button from "@cloudscape-design/components/button";
 import { PanelRight, PanelRightClose } from "lucide-react";
+import ResizablePanelLayout, {
+    type ResizablePanelConfig,
+} from "@/components/common/resizable/ResizablePanelLayout";
 
 const MODE = "menu";
 
@@ -55,7 +58,7 @@ function MenuPipelineSidebar({
     if (collapsed) {
         return (
             <div
-                className="flex-none flex flex-col items-center py-3 glass-panel-strong"
+                className="h-full w-full min-w-0 flex flex-col items-center py-3 glass-panel-strong"
                 style={{ borderLeft: "1px solid var(--glass-border)" }}
             >
                 <Button
@@ -70,7 +73,7 @@ function MenuPipelineSidebar({
 
     return (
         <div
-            className="w-80 lg:w-96 flex-none overflow-y-auto flex flex-col glass-panel-strong"
+            className="h-full w-full min-w-0 overflow-y-auto flex flex-col glass-panel-strong"
             style={{ borderLeft: "1px solid var(--glass-border)" }}
         >
             <div
@@ -102,6 +105,22 @@ export default function MenuPage(): JSX.Element {
     const research = useResearchState(MODE);
     const showSidebar = research.isActive || research.completedPhases.length > 0;
 
+    // Panel configs: main chat takes most of the width; sidebar adds a panel
+    // entry only when shown. Collapsed state just shrinks its defaultSize.
+    const menuPanels = useMemo(() => {
+        const configs: ResizablePanelConfig[] = [{ id: "menu-main", defaultSize: 75, minSize: 40 }];
+        if (showSidebar) {
+            configs.push({
+                id: "menu-sidebar",
+                defaultSize: sidebarCollapsed ? 5 : 25,
+                minSize: 3,
+                maxSize: 45,
+            });
+        }
+        const total = configs.reduce((s, c) => s + c.defaultSize, 0);
+        return configs.map((c) => ({ ...c, defaultSize: (c.defaultSize / total) * 100 }));
+    }, [showSidebar, sidebarCollapsed]);
+
     useToolRenderer("nova_canvas_generate", ({ result }) => (
         <CanvasResultCard
             result={result ?? "{}"}
@@ -112,8 +131,13 @@ export default function MenuPage(): JSX.Element {
     ));
 
     return (
-        <div className="flex h-full">
-            <div className="flex-1 min-w-0">
+        <ResizablePanelLayout
+            autoSaveId="menu-v2"
+            direction="horizontal"
+            panels={menuPanels}
+            className="h-full"
+        >
+            <div className="h-full min-w-0">
                 <ChatInterface
                     mode="menu"
                     title="Menu Builder"
@@ -122,12 +146,12 @@ export default function MenuPage(): JSX.Element {
                     )}
                 />
             </div>
-            {showSidebar && (
+            {showSidebar ? (
                 <MenuPipelineSidebar
                     collapsed={sidebarCollapsed}
                     onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                 />
-            )}
-        </div>
+            ) : null}
+        </ResizablePanelLayout>
     );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatHeader } from "./ChatHeader";
 import { ChatInput } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
@@ -11,6 +11,10 @@ import { KbSearchResultCard } from "./KbSearchResultCard";
 import { ConciergeFlowSidebar } from "@/components/concierge-flow/ConciergeFlowSidebar";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 import { BrowserLiveViewSidebar } from "./BrowserLiveViewSidebar";
+import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
+import ResizablePanelLayout, {
+    type ResizablePanelConfig,
+} from "@/components/common/resizable/ResizablePanelLayout";
 
 import { submitFeedback } from "@/services/feedbackService";
 import { useAuth } from "react-oidc-context";
@@ -149,9 +153,35 @@ export default function ChatInterface({
     const isInitialState = messages.length === 0;
     const hasAssistantMessages = messages.some((message) => message.role === "assistant");
 
+    // ── Compute which side panels are present so the resizable layout only allocates panels for live nodes.
+    const browserLiveViewUrl = useBrowserLiveViewStore((s) => s.liveViewUrl);
+    const showFlowPanel = !!enableFlowSidebar && flowOpen;
+    const showBrowserPanel = !!browserLiveViewUrl;
+
+    // Panel configs — defaults are percentages; the remainder after sidebars goes to the main chat.
+    const panelConfigs = useMemo(() => {
+        const configs: ResizablePanelConfig[] = [
+            { id: "chat-main", defaultSize: 60, minSize: 30 },
+        ];
+        if (showFlowPanel) {
+            configs.push({ id: "chat-flow", defaultSize: 22, minSize: 16, maxSize: 45 });
+        }
+        if (showBrowserPanel) {
+            configs.push({ id: "chat-browser", defaultSize: 25, minSize: 20, maxSize: 55 });
+        }
+        // Re-normalise defaults so they sum to 100 (required by react-resizable-panels).
+        const total = configs.reduce((s, c) => s + c.defaultSize, 0);
+        return configs.map((c) => ({ ...c, defaultSize: (c.defaultSize / total) * 100 }));
+    }, [showFlowPanel, showBrowserPanel]);
+
     return (
-        <div className="flex h-full w-full">
-            <div className="flex flex-col h-full min-w-0 flex-1">
+        <ResizablePanelLayout
+            autoSaveId="chat-v2"
+            direction="horizontal"
+            panels={panelConfigs}
+            className="h-full w-full"
+        >
+            <div className="flex flex-col h-full w-full min-w-0">
                 <div className="flex-none">
                     <ChatHeader
                         title={title}
@@ -219,10 +249,8 @@ export default function ChatInterface({
                     </>
                 )}
             </div>
-            {enableFlowSidebar && flowOpen && (
-                <ConciergeFlowSidebar onClose={() => setFlowOpen(false)} />
-            )}
-            <BrowserLiveViewSidebar />
-        </div>
+            {showFlowPanel ? <ConciergeFlowSidebar onClose={() => setFlowOpen(false)} /> : null}
+            {showBrowserPanel ? <BrowserLiveViewSidebar /> : null}
+        </ResizablePanelLayout>
     );
 }

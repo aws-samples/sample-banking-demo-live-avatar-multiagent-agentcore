@@ -1,0 +1,136 @@
+/* Shared styles for ResizablePanelLayout — keeps handles visible but subtle,
+   matches the glass-panel theme used elsewhere in the app.
+
+   react-resizable-panels v4 renders each separator with `data-separator` and
+   role="separator" on a bare div; it does NOT set a dragging attribute, so we
+   rely on :hover + :focus-visible for visual affordance.
+
+   Hit-target strategy:
+   - Visible strip is 6 px wide (just enough to see a grip).
+   - ::before extends the pointer hit area to ~16 px so the handle is easy to
+     grab on high-DPI displays and touch targets.
+   - Grip dots are shown at low opacity idle so users know the handle is
+     interactive without needing to hover-hunt.
+*/
+
+.resizable-layout {
+    height: 100%;
+    width: 100%;
+}
+
+/* Horizontal handle: a thin vertical strip between two side-by-side panels. */
+.resizable-handle--horizontal {
+    width: 6px;
+    background: var(--glass-border, rgba(255, 255, 255, 0.12));
+    position: relative;
+    cursor: col-resize;
+    transition: background 0.15s ease;
+    flex-shrink: 0;
+    touch-action: none;
+}
+
+/* Wider invisible hit target so pointers can grab the handle from up to ~5 px
+   on either side. Sits behind the visible strip but above panel content. */
+.resizable-handle--horizontal::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -5px;
+    right: -5px;
+    z-index: 1;
+}
+
+.resizable-handle--horizontal:hover,
+.resizable-handle--horizontal:active,
+.resizable-handle--horizontal[data-separator]:focus-within {
+    background: #FF9900; /* AWS orange accent on hover / active / focus */
+}
+
+/* Centred grip dots so the user can see where to grab — visible idle, more
+   prominent on hover. */
+.resizable-handle--horizontal::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 28px;
+    background: var(--app-text-secondary, rgba(255, 255, 255, 0.7));
+    border-radius: 1px;
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.resizable-handle--horizontal:hover::after,
+.resizable-handle--horizontal:active::after {
+    opacity: 1;
+}
+
+/* Vertical handle: a thin horizontal strip between stacked panels. */
+.resizable-handle--vertical {
+    height: 6px;
+    background: var(--glass-border, rgba(255, 255, 255, 0.12));
+    position: relative;
+    cursor: row-resize;
+    transition: background 0.15s ease;
+    flex-shrink: 0;
+    touch-action: none;
+}
+
+.resizable-handle--vertical::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -5px;
+    bottom: -5px;
+    z-index: 1;
+}
+
+.resizable-handle--vertical:hover,
+.resizable-handle--vertical:active,
+.resizable-handle--vertical[data-separator]:focus-within {
+    background: #FF9900;
+}
+
+.resizable-handle--vertical::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 2px;
+    width: 28px;
+    background: var(--app-text-secondary, rgba(255, 255, 255, 0.7));
+    border-radius: 1px;
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.resizable-handle--vertical:hover::after,
+.resizable-handle--vertical:active::after {
+    opacity: 1;
+}
+
+/* Keyboard focus outline for accessibility. */
+.resizable-handle--horizontal:focus-visible,
+.resizable-handle--vertical:focus-visible {
+    outline: 2px solid #FF9900;
+    outline-offset: -1px;
+    z-index: 10;
+}
+
+/* Ensure Panel content clips so flex children don't overflow past the panel
+   edge. Uses Panel root element (data-panel attribute), not the inner wrapper
+   that the `className` prop targets. */
+.resizable-layout [data-panel] {
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+}
