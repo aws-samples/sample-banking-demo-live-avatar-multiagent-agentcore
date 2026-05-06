@@ -159,15 +159,17 @@ export default function ChatInterface({
     const showBrowserPanel = !!browserLiveViewUrl;
 
     // Panel configs — defaults are percentages; the remainder after sidebars goes to the main chat.
+    // Constraints are deliberately loose so the drag bar has a wide usable range on any viewport.
+    // - main: can shrink to 5% (mostly-collapsed chat) but not vanish
+    // - flow: 10-70% so it can grow to dominate the view for deep-flow debugging
+    // - browser: 15-75% so the live view can take over when the user is watching the agent
     const panelConfigs = useMemo(() => {
-        const configs: ResizablePanelConfig[] = [
-            { id: "chat-main", defaultSize: 60, minSize: 30 },
-        ];
+        const configs: ResizablePanelConfig[] = [{ id: "chat-main", defaultSize: 60, minSize: 5 }];
         if (showFlowPanel) {
-            configs.push({ id: "chat-flow", defaultSize: 22, minSize: 16, maxSize: 45 });
+            configs.push({ id: "chat-flow", defaultSize: 22, minSize: 10, maxSize: 70 });
         }
         if (showBrowserPanel) {
-            configs.push({ id: "chat-browser", defaultSize: 25, minSize: 20, maxSize: 55 });
+            configs.push({ id: "chat-browser", defaultSize: 25, minSize: 15, maxSize: 75 });
         }
         // Re-normalise defaults so they sum to 100 (required by react-resizable-panels).
         const total = configs.reduce((s, c) => s + c.defaultSize, 0);

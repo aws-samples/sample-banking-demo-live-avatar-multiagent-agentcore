@@ -12,6 +12,9 @@ import "./styles/globals.css";
  * defaults without needing to clear their browser manually.
  *
  * Idempotent: safe to run on every mount, no-ops after the first sweep.
+ *
+ * Build tag: panel-fix-v2.1 (forces CDK asset-hash change so CodeBuild
+ * re-runs even if the rest of the app source didn't change).
  */
 function migrateResizablePanelLayouts(): void {
     try {

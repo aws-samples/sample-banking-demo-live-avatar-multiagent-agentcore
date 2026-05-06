@@ -21,7 +21,7 @@ export function ConciergeFlowSidebar({ onClose }: ConciergeFlowSidebarProps) {
             className={
                 fullscreen
                     ? "fixed inset-0 z-50 flex flex-col bg-slate-950"
-                    : "flex h-full w-[540px] shrink-0 flex-col border-l border-slate-800 bg-slate-950"
+                    : "flex h-full w-full min-w-0 flex-col border-l border-slate-800 bg-slate-950"
             }
             aria-label="AgentCore flow diagram"
         >

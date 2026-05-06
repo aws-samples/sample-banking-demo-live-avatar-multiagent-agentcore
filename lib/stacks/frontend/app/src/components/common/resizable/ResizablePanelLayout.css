@@ -44,7 +44,7 @@
 .resizable-handle--horizontal:hover,
 .resizable-handle--horizontal:active,
 .resizable-handle--horizontal[data-separator]:focus-within {
-    background: #FF9900; /* AWS orange accent on hover / active / focus */
+    background: #ff9900; /* AWS orange accent on hover / active / focus */
 }
 
 /* Centred grip dots so the user can see where to grab — visible idle, more
@@ -94,7 +94,7 @@
 .resizable-handle--vertical:hover,
 .resizable-handle--vertical:active,
 .resizable-handle--vertical[data-separator]:focus-within {
-    background: #FF9900;
+    background: #ff9900;
 }
 
 .resizable-handle--vertical::after {
@@ -121,16 +121,24 @@
 /* Keyboard focus outline for accessibility. */
 .resizable-handle--horizontal:focus-visible,
 .resizable-handle--vertical:focus-visible {
-    outline: 2px solid #FF9900;
+    outline: 2px solid #ff9900;
     outline-offset: -1px;
     z-index: 10;
 }
 
 /* Ensure Panel content clips so flex children don't overflow past the panel
    edge. Uses Panel root element (data-panel attribute), not the inner wrapper
-   that the `className` prop targets. */
+   that the `className` prop targets. Also forces first-level descendants to
+   allow shrinking — the Panel itself has `min-width: 0` via the library, but
+   tall heavy content (ReactFlow, DCV embeds) can still push an intrinsic
+   minimum that limits drag range. */
 .resizable-layout [data-panel] {
     overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+}
+
+.resizable-layout [data-panel] > * {
     min-width: 0;
     min-height: 0;
 }
