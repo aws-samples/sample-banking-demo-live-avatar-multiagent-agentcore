@@ -177,6 +177,11 @@
                     "type": "string",
                     "description": "Authenticated user identifier (injected by runtime)"
                 },
+                "pipeline": {
+                    "type": "string",
+                    "enum": ["bistro_research", "open_research", "menu"],
+                    "description": "Logical pipeline tag stored in S3 object metadata so downstream KB ingestion can categorize this document. Defaults: 'menu' when format=menu, 'bistro_research' when format=research. Pass 'open_research' explicitly for the Open Research / Research Studio pipeline."
+                },
                 "menu": {
                     "type": "object",
                     "description": "Menu content with sections and items (required when format=menu)",

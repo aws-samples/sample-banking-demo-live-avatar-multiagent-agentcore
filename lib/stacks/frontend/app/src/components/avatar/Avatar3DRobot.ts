@@ -2,24 +2,11 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three-stdlib";
 import { RoundedBoxGeometry } from "three-stdlib";
 import { Avatar3D } from "./Avatar3D";
-import type { AvatarVariant, QualityTier } from "./AvatarVariant";
+import type { AvatarVariant, MouthShape } from "./AvatarVariant";
 
 // ---------------------------------------------------------------------------
 // Mouth-shape (viseme) helpers
 // ---------------------------------------------------------------------------
-
-type MouthShape =
-    | "open"
-    | "ah"
-    | "oh"
-    | "ee"
-    | "oo"
-    | "wide"
-    | "narrow"
-    | "mm"
-    | "ff"
-    | "th"
-    | "neutral";
 
 interface MouthShapePhysics {
     heightMultiplier: number;
@@ -29,14 +16,6 @@ interface MouthShapePhysics {
     yOffset: number;
     zOffset: number;
     rotation: number;
-}
-
-const HIGH_SHAPES: MouthShape[] = ["open", "ah", "wide", "oh"];
-const MEDIUM_SHAPES: MouthShape[] = ["ee", "oo", "oh", "ah", "narrow"];
-const LOW_SHAPES: MouthShape[] = ["mm", "ff", "th", "narrow", "neutral"];
-
-function pickRandom<T>(arr: T[]): T {
-    return arr[Math.floor(Math.random() * arr.length)];
 }
 
 // ---------------------------------------------------------------------------
@@ -84,14 +63,6 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     // Status lights on chest panel
     private statusLights: THREE.Mesh[] = [];
 
-    // Main directional light (shadow caster) — kept as a field so quality tier
-    // changes can adjust shadow map size / enablement without rebuilding.
-    private mainLight!: THREE.DirectionalLight;
-
-    // Cached PBR environment texture so quality tier "low" can null out
-    // this.scene.environment and higher tiers can restore it.
-    private envMap: THREE.Texture | null = null;
-
     // Animation state
     private isSpeaking = false;
     private jawOpenAmount = 0;
@@ -104,12 +75,12 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     private blinkStartedAt: number | null = null;
     private onMouseMove: ((e: MouseEvent) => void) | null = null;
 
-    // Viseme tracking
+    // Viseme tracking — `currentMouthShape` is driven externally by
+    // `setMouthShape()` (from the lip-sync analyser) or falls back to
+    // intensity-bucket random picks when nothing has been set yet.
     private currentMouthShape: MouthShape = "neutral";
     private previousMouthShape: MouthShape = "neutral";
     private shapeTransitionProgress = 1;
-    private nextVisemeChange = 0;
-    private lastIntensityRange = "low";
 
     constructor(container: HTMLElement) {
         super(container);
@@ -148,7 +119,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     // =========================================================================
 
     updateLipSync(audioLevel: number): void {
-        this.jawOpenAmount = Math.min(audioLevel * 8, 1.0);
+        // ×4 pre-multiplier (was ×8) — rms≈0.25 saturates the jaw rather than
+        // rms≈0.125, cutting peak amplitude roughly in half so the mouth reads
+        // as a subtle waveform instead of a stretching rectangle.
+        this.jawOpenAmount = Math.min(audioLevel * 4, 1.0);
     }
 
     setSpeaking(speaking: boolean): void {
@@ -186,29 +160,24 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
     }
 
     /**
-     * Quality tier selector.
-     *  - low:    no shadows, no environment map. Flat PBR only.
-     *  - medium: soft shadows at 1024², env map on.
-     *  - high:   soft shadows at 2048², env map on.
+     * Reframe on aspect change so the robot fills the canvas consistently
+     * from narrow-portrait panels up to 4K-ultrawide. Design aspect ≈ 1.4.
      */
-    setQuality(tier: QualityTier): void {
-        if (tier === "low") {
-            this.renderer.shadowMap.enabled = false;
-            this.scene.environment = null;
-        } else if (tier === "medium") {
-            this.renderer.shadowMap.enabled = true;
-            this.mainLight.shadow.mapSize.set(1024, 1024);
-            // Three.js requires regenerating the shadow map after resize.
-            this.mainLight.shadow.map?.dispose();
-            this.mainLight.shadow.map = null;
-            this.scene.environment = this.envMap;
-        } else {
-            this.renderer.shadowMap.enabled = true;
-            this.mainLight.shadow.mapSize.set(2048, 2048);
-            this.mainLight.shadow.map?.dispose();
-            this.mainLight.shadow.map = null;
-            this.scene.environment = this.envMap;
-        }
+    protected override onAspectChange(aspect: number): void {
+        this.reframe(this.camera, 7.5, 1.4, aspect);
+    }
+
+    /**
+     * Set the mouth shape (viseme) used for the waveform-bar render style.
+     * Driven by the PCM analyser in `lipSyncAnalyzer.ts` so the mouth style
+     * actually tracks what the model is saying. Falls back to intensity-
+     * bucket random picks if nothing has been set recently.
+     */
+    setMouthShape(shape: MouthShape): void {
+        if (shape === this.currentMouthShape) return;
+        this.previousMouthShape = this.currentMouthShape;
+        this.currentMouthShape = shape;
+        this.shapeTransitionProgress = 0;
     }
 
     // =========================================================================
@@ -238,10 +207,10 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         });
 
         // PBR room environment map gives MeshStandardMaterial metals a subtle
-        // built-in reflection without requiring an external HDR asset.
+        // built-in reflection without requiring an external HDR asset. Always
+        // on — the scene is locked to the highest quality tier.
         const pmrem = new THREE.PMREMGenerator(this.renderer);
-        this.envMap = pmrem.fromScene(RoomEnvironment(), 0.04).texture;
-        this.scene.environment = this.envMap;
+        this.scene.environment = pmrem.fromScene(RoomEnvironment(), 0.04).texture;
         pmrem.dispose();
     }
 
@@ -895,7 +864,6 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
         mainLight.shadow.camera.top = 10;
         mainLight.shadow.camera.bottom = -10;
         mainLight.shadow.bias = -0.0005;
-        this.mainLight = mainLight;
         this.scene.add(mainLight);
 
         const windowLight = new THREE.DirectionalLight(0xffffff, 0.2);
@@ -1200,36 +1168,25 @@ export class Avatar3DRobot extends Avatar3D implements AvatarVariant {
             return;
         }
 
-        // Compute intensity from jawOpenAmount
+        // Compute intensity from jawOpenAmount (now a real RMS envelope from
+        // the lip-sync analyser rather than a constant per chunk).
         let intensity = Math.pow(this.jawOpenAmount, 0.7) * 1.5;
-        intensity += (Math.random() - 0.5) * 0.1;
+        intensity += (Math.random() - 0.5) * 0.05;
         intensity = Math.max(0, Math.min(1, intensity));
 
-        // Viseme selection
-        const now = Date.now();
-        let range = "low";
-        if (intensity > 0.7) range = "high";
-        else if (intensity > 0.4) range = "medium";
-
-        if (now > this.nextVisemeChange || this.lastIntensityRange !== range) {
-            this.previousMouthShape = this.currentMouthShape;
-            if (range === "high") this.currentMouthShape = pickRandom(HIGH_SHAPES);
-            else if (range === "medium") this.currentMouthShape = pickRandom(MEDIUM_SHAPES);
-            else this.currentMouthShape = pickRandom(LOW_SHAPES);
-
-            this.nextVisemeChange = now + 150 + Math.random() * 150;
-            this.shapeTransitionProgress = 0;
-            this.lastIntensityRange = range;
-        }
+        // Viseme shape is driven externally via setMouthShape() from the
+        // analyser. We just smooth the transition between shapes here.
         this.shapeTransitionProgress = Math.min(this.shapeTransitionProgress + 0.15, 1.0);
 
         // Mouth group physical transforms
         const physics = this.getMouthShapePhysics(this.currentMouthShape);
         const baseScale = 1.0;
+        // Reduced from (2.5, 1.4) → (1.6, 1.2) so the peak mouth height tops
+        // out around ~2.2× rather than ~3.9×.
         this.mouthGroup.scale.y =
-            baseScale + intensity * (2.5 - baseScale) * physics.heightMultiplier;
+            baseScale + intensity * (1.6 - baseScale) * physics.heightMultiplier;
         this.mouthGroup.scale.x =
-            baseScale + intensity * (1.4 - baseScale) * 0.5 * physics.widthMultiplier;
+            baseScale + intensity * (1.2 - baseScale) * 0.5 * physics.widthMultiplier;
         this.mouthGroup.position.y =
             -0.25 + intensity * -0.15 * physics.dropMultiplier + physics.yOffset;
         this.mouthGroup.position.z =

@@ -29,6 +29,38 @@ KNOWLEDGE_BASE_ID = os.environ["KNOWLEDGE_BASE_ID"]
 DATA_SOURCE_ID = os.environ["DATA_SOURCE_ID"]
 
 
+# Allowed logical pipelines — must stay in sync with pdf_generator / kb_search / orchestrator.
+VALID_PIPELINES = {"bistro_research", "open_research", "menu"}
+
+# Legacy alias: the previous iteration tagged everything in reports/ as "research".
+# Migrate those to "bistro_research" since the original flow (the Bistro Deep Dive
+# pipeline) was the only research writer at the time.
+LEGACY_PIPELINE_ALIASES = {"research": "bistro_research"}
+
+
+def _resolve_pipeline(src_key: str, source_metadata: dict | None) -> str:
+    """Determine the pipeline tag for a newly uploaded PDF.
+
+    Resolution order:
+      1. Source object's `pipeline` S3 metadata (set by pdf_generator).
+         Legacy value `research` is mapped to `bistro_research`.
+      2. Prefix-based inference: `reports/` -> `bistro_research`, `menus/` -> `menu`.
+      3. Fallback: `unknown` (document still ingests; simply not scoped by filter).
+    """
+    meta = source_metadata or {}
+    raw = (meta.get("pipeline") or "").strip().lower()
+    raw = LEGACY_PIPELINE_ALIASES.get(raw, raw)
+    if raw in VALID_PIPELINES:
+        return raw
+
+    key_lower = src_key.lower()
+    if key_lower.startswith("reports/"):
+        return "bistro_research"
+    if key_lower.startswith("menus/"):
+        return "menu"
+    return "unknown"
+
+
 def handler(event, context):
     """Process S3 ObjectCreated events: copy to KB bucket + start ingestion."""
     logger.info("KB ingest triggered with %d record(s)", len(event.get("Records", [])))
@@ -42,25 +74,21 @@ def handler(event, context):
             logger.info("Skipping non-PDF: %s", src_key)
             continue
 
-        # Determine pipeline from prefix
-        if src_key.startswith("reports/"):
-            pipeline = "research"
-        elif src_key.startswith("menus/"):
-            pipeline = "menu"
-        else:
-            pipeline = "unknown"
-
-        dest_key = f"generated/{src_key}"
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        tagging = f"source=generated&generated_date={today}&pipeline={pipeline}"
-
-        # Read source object metadata to get user_id (set by pdf_generator)
+        # Read source object metadata up-front so we can use it for both
+        # pipeline detection and per-user scoping.
+        source_metadata: dict = {}
         user_id = ""
         try:
             head = s3.head_object(Bucket=src_bucket, Key=src_key)
-            user_id = head.get("Metadata", {}).get("user_id", "")
+            source_metadata = head.get("Metadata", {}) or {}
+            user_id = source_metadata.get("user_id", "")
         except Exception as e:
             logger.warning("Failed to read metadata from source object: %s", e)
+
+        pipeline = _resolve_pipeline(src_key, source_metadata)
+        dest_key = f"generated/{src_key}"
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        tagging = f"source=generated&generated_date={today}&pipeline={pipeline}"
 
         logger.info(
             "Copying s3://%s/%s → s3://%s/%s (tags: %s, user_id: %s)",
@@ -80,7 +108,9 @@ def handler(event, context):
             TaggingDirective="REPLACE",
         )
 
-        # Write .metadata.json sidecar so Bedrock KB indexes user_id as a filterable attribute
+        # Write .metadata.json sidecar so Bedrock KB indexes `user_id` and `pipeline`
+        # as filterable attributes (kb_search uses these for per-user + per-pipeline
+        # scoping).
         metadata_attrs = {"source": "generated", "pipeline": pipeline}
         if user_id:
             metadata_attrs["user_id"] = user_id
@@ -108,3 +138,24 @@ def handler(event, context):
     )
 
     return {"statusCode": 200, "ingestionJobId": job_id}
+
+
+# ── Smoke test ────────────────────────────────────────────────────────────
+# Run directly (`python handler.py`) to verify pipeline resolution without hitting AWS.
+if __name__ == "__main__":
+    cases = [
+        # (src_key, metadata, expected)
+        ("reports/foo.pdf", {"pipeline": "bistro_research"}, "bistro_research"),
+        ("reports/foo.pdf", {"pipeline": "open_research"}, "open_research"),
+        ("menus/foo.pdf", {"pipeline": "menu"}, "menu"),
+        ("reports/foo.pdf", {"pipeline": "research"}, "bistro_research"),  # legacy alias
+        ("reports/foo.pdf", {}, "bistro_research"),  # fallback to prefix
+        ("menus/foo.pdf", {}, "menu"),  # fallback to prefix
+        ("other/foo.pdf", {}, "unknown"),
+        ("reports/foo.pdf", {"pipeline": "bogus"}, "bistro_research"),  # bad value -> fallback
+        ("reports/foo.pdf", None, "bistro_research"),
+    ]
+    for src_key, meta, expected in cases:
+        actual = _resolve_pipeline(src_key, meta)
+        status = "OK " if actual == expected else "FAIL"
+        print(f"{status}  key={src_key!r:35s} meta={str(meta):40s} -> {actual!r} (expected {expected!r})")

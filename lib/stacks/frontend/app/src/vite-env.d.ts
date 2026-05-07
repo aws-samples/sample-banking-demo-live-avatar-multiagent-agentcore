@@ -23,6 +23,7 @@ interface ImportMetaEnv {
     readonly VITE_COGNITO_RESPONSE_TYPE?: string;
     readonly VITE_COGNITO_SCOPE?: string;
     readonly VITE_COGNITO_AUTOMATIC_SILENT_RENEW?: string;
+    readonly VITE_COGNITO_IDENTITY_PROVIDER?: string;
 }
 
 interface ImportMeta {

@@ -1,7 +1,35 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three-stdlib";
 import { Avatar3D } from "./Avatar3D";
-import type { AvatarVariant } from "./AvatarVariant";
+import type { AvatarVariant, MouthShape } from "./AvatarVariant";
+
+/**
+ * Per-viseme deformation profile. `freqBoost` stretches the surface
+ * frequency (more ripples for front vowels); `displaceMult` scales the radial
+ * pop; `axisStretch` skews the sphere on one axis so "ee" elongates
+ * horizontally and "oo" stays round; `speakPulse` adjusts the breathing beat.
+ */
+const BLOB_SHAPE_PROFILE: Record<
+    MouthShape,
+    {
+        freqBoost: number;
+        displaceMult: number;
+        axisStretch: [number, number, number];
+        speakPulse: number;
+    }
+> = {
+    open: { freqBoost: 3.4, displaceMult: 0.95, axisStretch: [1.0, 1.15, 1.0], speakPulse: 1.15 },
+    ah: { freqBoost: 3.0, displaceMult: 0.85, axisStretch: [1.05, 1.1, 1.0], speakPulse: 1.1 },
+    oh: { freqBoost: 2.6, displaceMult: 0.85, axisStretch: [1.0, 1.0, 1.0], speakPulse: 1.12 },
+    ee: { freqBoost: 3.6, displaceMult: 0.6, axisStretch: [1.2, 0.85, 1.0], speakPulse: 1.05 },
+    oo: { freqBoost: 2.2, displaceMult: 0.7, axisStretch: [0.95, 0.95, 0.95], speakPulse: 1.15 },
+    wide: { freqBoost: 3.2, displaceMult: 0.6, axisStretch: [1.15, 0.9, 1.0], speakPulse: 1.05 },
+    narrow: { freqBoost: 2.4, displaceMult: 0.45, axisStretch: [0.9, 1.0, 0.9], speakPulse: 1.02 },
+    mm: { freqBoost: 1.6, displaceMult: 0.25, axisStretch: [1.0, 1.0, 1.0], speakPulse: 1.0 },
+    ff: { freqBoost: 4.5, displaceMult: 0.35, axisStretch: [1.0, 0.98, 1.0], speakPulse: 1.02 },
+    th: { freqBoost: 3.8, displaceMult: 0.3, axisStretch: [1.0, 0.98, 1.0], speakPulse: 1.02 },
+    neutral: { freqBoost: 1.2, displaceMult: 0.3, axisStretch: [1.0, 1.0, 1.0], speakPulse: 1.0 },
+};
 
 /**
  * Amorphic music-visualizer blob avatar.
@@ -19,8 +47,13 @@ export class Avatar3DBlob extends Avatar3D implements AvatarVariant {
 
     private audioLevel = 0;
     private isSpeaking = false;
+    private mouthShape: MouthShape = "neutral";
     private baseColor = new THREE.Color(0x3ab0d8); // teal-aqua, reads "friendly"
     private hotColor = new THREE.Color(0xff7a4a); // warm coral for speech peaks
+    // Particle halo heat — lerps from cool blue to warm orange on peaks so
+    // the cloud around the blob shares the same speech reaction as the core.
+    private baseParticleColor = new THREE.Color(0x88bbff);
+    private hotParticleColor = new THREE.Color(0xffaa66);
 
     constructor(container: HTMLElement) {
         super(container);
@@ -131,12 +164,14 @@ export class Avatar3DBlob extends Avatar3D implements AvatarVariant {
     private onAnimate(time: number): void {
         const t = time * 0.001;
         const intensity = this.isSpeaking ? this.audioLevel : 0.05;
+        const profile = BLOB_SHAPE_PROFILE[this.mouthShape];
 
-        // Vertex displacement — dramatic when speaking
+        // Vertex displacement — shape-dependent frequency + amplitude so
+        // "ee" ripples differently from "oo" etc.
         const posAttr = this.blobGeo.getAttribute("position");
         const arr = posAttr.array as Float32Array;
-        const displaceMult = this.isSpeaking ? 0.8 : 0.3;
-        const freqBoost = this.isSpeaking ? 3.0 : 1.2;
+        const displaceMult = this.isSpeaking ? profile.displaceMult : 0.3;
+        const freqBoost = this.isSpeaking ? profile.freqBoost : 1.2;
         for (let i = 0; i < arr.length; i += 3) {
             const ox = this.originalPositions[i];
             const oy = this.originalPositions[i + 1];
@@ -164,12 +199,16 @@ export class Avatar3DBlob extends Avatar3D implements AvatarVariant {
         this.blobMat.color.copy(color);
         this.blobMat.emissive.copy(color).multiplyScalar(0.15 + intensity * 0.45);
 
-        // Breathing scale — exaggerated pulsing when speaking
+        // Breathing scale — exaggerated pulsing when speaking. Axis stretch
+        // comes from the viseme profile so front/back vowels deform the
+        // silhouette differently ("ee" elongates horizontally, "oo" stays round).
         const breathe = 1 + Math.sin(t * 0.8) * 0.02;
-        const speakPulse = this.isSpeaking
-            ? 1 + intensity * 0.25 + Math.sin(t * 6) * intensity * 0.08
+        const pulseAmp = this.isSpeaking
+            ? 1 + intensity * (profile.speakPulse - 1) + Math.sin(t * 6) * intensity * 0.08
             : 1;
-        this.blobMesh.scale.setScalar(breathe * speakPulse);
+        const combined = breathe * pulseAmp;
+        const [sx, sy, sz] = profile.axisStretch;
+        this.blobMesh.scale.set(combined * sx, combined * sy, combined * sz);
 
         // Particle drift outward when speaking
         const pArr = this.particlePositions;
@@ -184,16 +223,30 @@ export class Avatar3DBlob extends Avatar3D implements AvatarVariant {
             pArr[i + 2] = oz * drift + Math.sin(t + i * 1.3) * jitter;
         }
         this.particleSystem.geometry.getAttribute("position").needsUpdate = true;
-        (this.particleSystem.material as THREE.PointsMaterial).opacity = 0.3 + intensity * 0.7;
-        (this.particleSystem.material as THREE.PointsMaterial).size = 0.03 + intensity * 0.03;
+        const pMat = this.particleSystem.material as THREE.PointsMaterial;
+        pMat.opacity = 0.3 + intensity * 0.7;
+        pMat.size = 0.03 + intensity * 0.03;
+        // Particle heat lerp — halo warms on peaks so it reads as part of
+        // the speech reaction rather than a static backdrop.
+        pMat.color.lerpColors(
+            this.baseParticleColor,
+            this.hotParticleColor,
+            Math.min(intensity * 1.5, 1)
+        );
 
-        // Ring animation — spin faster and expand more when speaking
+        // Ring animation — spin faster and expand more when speaking.
+        // All three axes now breathe with amplitude so the ring halo doesn't
+        // read as static while the core wobbles.
         this.rings.forEach((ring, i) => {
             const spinSpeed = this.isSpeaking ? 0.6 + i * 0.3 : 0.2 + i * 0.1;
             ring.rotation.z = t * spinSpeed;
+            ring.rotation.x = Math.PI / 3 + i * 0.4 + Math.sin(t * 1.5 + i) * intensity * 0.3;
+            ring.rotation.y = i * 0.5 + Math.cos(t * 1.2 + i) * intensity * 0.3;
             const ringScale = 1 + intensity * 0.5;
             ring.scale.setScalar(ringScale);
-            (ring.material as THREE.MeshStandardMaterial).opacity = 0.3 + intensity * 0.5;
+            const rMat = ring.material as THREE.MeshStandardMaterial;
+            rMat.opacity = 0.3 + intensity * 0.5;
+            rMat.emissiveIntensity = 0.4 + intensity * 0.8;
         });
 
         // Rotation — wobble when speaking
@@ -210,10 +263,19 @@ export class Avatar3DBlob extends Avatar3D implements AvatarVariant {
         this.isSpeaking = isSpeaking;
         if (!isSpeaking) {
             this.audioLevel = 0;
+            this.mouthShape = "neutral";
         }
     }
 
     setEyeColor(hexColor: number): void {
         this.baseColor.set(hexColor);
+    }
+
+    setMouthShape(shape: MouthShape): void {
+        this.mouthShape = shape;
+    }
+
+    protected override onAspectChange(aspect: number): void {
+        this.reframe(this.camera, 3.2, 1.0, aspect);
     }
 }

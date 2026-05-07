@@ -160,7 +160,7 @@ export default function HomePage(): JSX.Element {
                 {/* Architecture callout */}
                 <div className="mt-12 text-center" style={{ color: "var(--app-text-secondary)" }}>
                     <p className="text-sm font-medium mb-1">
-                        2 AgentCore Runtimes &middot; 17 Gateway Tools &middot; 3 CDK Stacks
+                        2 AgentCore Runtimes &middot; 18 Gateway Tools &middot; 3 CDK Stacks
                         &middot; $0 when idle
                     </p>
                     <p

@@ -31,9 +31,9 @@ const ACTIVITY_STYLES: Record<
 
 const CATEGORY_SIZE: Record<ConciergeNodeData["category"], string> = {
     user: "w-[140px]",
-    core: "w-[160px]",
-    tool: "w-[130px]",
-    resource: "w-[150px]",
+    core: "w-[220px]",
+    tool: "w-[200px]",
+    resource: "w-[190px]",
 };
 
 export function ConciergeNode({ data }: NodeProps<ConciergeNodeType>) {

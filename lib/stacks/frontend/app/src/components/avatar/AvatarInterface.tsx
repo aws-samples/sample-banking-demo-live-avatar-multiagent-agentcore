@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Mic,
     MicOff,
@@ -14,7 +14,8 @@ import {
     Circle,
     Diamond,
 } from "lucide-react";
-import type { AvatarVariantName } from "./AvatarVariant";
+import type { AvatarVariantName, MouthShape } from "./AvatarVariant";
+import { analyzeChunk, resetAnalyzer } from "./lipSyncAnalyzer";
 import Button from "@cloudscape-design/components/button";
 import Alert from "@cloudscape-design/components/alert";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
@@ -25,6 +26,11 @@ import Textarea from "@cloudscape-design/components/textarea";
 import { PersonaSelector } from "./PersonaSelector";
 import { LanguageSelector } from "./LanguageSelector";
 import { VoiceSelector } from "./VoiceSelector";
+import KbPipelineChips from "./KbPipelineChips";
+import { useAvatarKbPipelinesStore } from "@/stores/avatarKbPipelinesStore";
+import ResizablePanelLayout, {
+    type ResizablePanelConfig,
+} from "@/components/common/resizable/ResizablePanelLayout";
 import Avatar3DReactWrapper from "./Avatar3DReactWrapper";
 import WebsiteMonitor from "./WebsiteMonitor";
 import { useAudioPlayer, AudioPlayerControls } from "./AudioPlayer";
@@ -35,6 +41,7 @@ import {
     AvatarWebSocketClient,
     type AvatarWSMessage,
     type ConnectionState,
+    type KbPipeline,
     type PersonaId,
 } from "@/lib/websocket-client/client";
 import {
@@ -47,6 +54,7 @@ import { presignAgentCoreWebSocket } from "@/lib/websocket-client/sigv4";
 import { getAWSCredentials } from "@/lib/auth/credentials";
 import { createPCMProcessorUrl, arrayBufferToBase64 } from "@/lib/websocket-client/audio-utils";
 import AvatarTextInput from "./AvatarTextInput";
+import AvatarSuggestedPrompts from "./AvatarSuggestedPrompts";
 import { useAuth } from "react-oidc-context";
 import "./AvatarPage.css";
 
@@ -103,11 +111,16 @@ export default function AvatarInterface(): JSX.Element {
     const [persona, setPersona] = useState<PersonaId>("friendly");
     const [language, setLanguage] = useState<LanguageCode>("en-US");
     const [voiceId, setVoiceId] = useState(() => getDefaultVoice("en-US").id);
+
+    // Avatar KB pipeline multi-select state (persisted via Zustand/localStorage).
+    const kbPipelines = useAvatarKbPipelinesStore((s) => s.pipelines);
+
     const [isRecording, setIsRecording] = useState(false);
     const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
     const [mediaResults, setMediaResults] = useState<ToolResultMedia[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [audioLevel, setAudioLevel] = useState(0);
+    const [visemeShape, setVisemeShape] = useState<MouthShape>("neutral");
     const [config, setConfig] = useState<{
         avatarRuntimeArn: string;
         awsRegion: string;
@@ -192,11 +205,20 @@ export default function AvatarInterface(): JSX.Element {
         };
     }, [connectionState]);
 
-    // --- Reset audioLevel when playback stops ---
+    // --- Reset audioLevel when playback stops (debounced) ---
+    // Previously: instantly zeroed audioLevel + reset analyzer whenever `isPlaying`
+    // bobbled false, which happens between every pair of utterances (AudioContext
+    // suspend/resume race). Now: wait 800 ms of continuous !isPlaying before
+    // committing, so brief inter-utterance silences don't kill the mouth. Also
+    // dropped the resetAnalyzer() call — wiping smoothing state mid-session made
+    // each new sentence start under-amplitude.
     useEffect(() => {
-        if (!isPlaying) {
+        if (isPlaying) return;
+        const timer = setTimeout(() => {
             setAudioLevel(0);
-        }
+            setVisemeShape("neutral");
+        }, 800);
+        return () => clearTimeout(timer);
     }, [isPlaying]);
 
     // --- Smart auto-scroll ---
@@ -296,7 +318,9 @@ export default function AvatarInterface(): JSX.Element {
                 case "audio":
                     if (message.audioData) {
                         enqueueAudio(message.audioData);
-                        setAudioLevel(Math.min(1, message.audioData.length / 5000));
+                        const { rms, shape } = analyzeChunk(message.audioData);
+                        setAudioLevel(rms);
+                        setVisemeShape(shape);
                     }
                     break;
 
@@ -394,7 +418,9 @@ export default function AvatarInterface(): JSX.Element {
                             }
 
                             // Strip URLs from assistant speech — the UI renders clickable cards instead
-                            const cleaned = textToAppend.replace(/https?:\/\/\S+/g, "").replace(/\s{2,}/g, " ");
+                            const cleaned = textToAppend
+                                .replace(/https?:\/\/\S+/g, "")
+                                .replace(/\s{2,}/g, " ");
                             currentAssistantTextRef.current += cleaned;
                             setTranscript((prev) => {
                                 const updated = [...prev];
@@ -679,7 +705,11 @@ export default function AvatarInterface(): JSX.Element {
                                     ? JSON.parse(message.toolResult)
                                     : message.toolResult;
                             if (wr?.content?.[0]?.text) {
-                                try { wr = JSON.parse(wr.content[0].text); } catch { /* not nested */ }
+                                try {
+                                    wr = JSON.parse(wr.content[0].text);
+                                } catch {
+                                    /* not nested */
+                                }
                             }
                             if (wr?.success && wr?.url) {
                                 setWebsitePreview(wr.url);
@@ -699,7 +729,9 @@ export default function AvatarInterface(): JSX.Element {
                                     },
                                 ]);
                             }
-                        } catch { /* not JSON */ }
+                        } catch {
+                            /* not JSON */
+                        }
                     }
 
                     currentAssistantTextRef.current = "";
@@ -712,6 +744,8 @@ export default function AvatarInterface(): JSX.Element {
                 case "sessionEnd":
                     setConnectionState("disconnected");
                     setAudioLevel(0);
+                    setVisemeShape("neutral");
+                    resetAnalyzer();
                     break;
 
                 case "error":
@@ -772,6 +806,7 @@ export default function AvatarInterface(): JSX.Element {
                 persona,
                 language,
                 voiceId,
+                kbPipelines,
             },
             handleWSMessage,
             setConnectionState
@@ -834,6 +869,8 @@ export default function AvatarInterface(): JSX.Element {
         wsClientRef.current = null;
         clearQueue();
         setAudioLevel(0);
+        setVisemeShape("neutral");
+        resetAnalyzer();
     }, [clearQueue, stopRecording]);
 
     const startRecording = useCallback(async (): Promise<void> => {
@@ -895,6 +932,13 @@ export default function AvatarInterface(): JSX.Element {
         wsClientRef.current?.updatePersona(newPersona);
     }, []);
 
+    // --- KB pipelines change (mid-session multi-select from chip bar) ---
+    const handleKbPipelinesChange = useCallback((next: KbPipeline[]): void => {
+        // Store is already updated by the chip component; forward to backend
+        // so the PipelineScopeHook picks up the new scope on the next kb_search.
+        wsClientRef.current?.updateKbPipelines(next);
+    }, []);
+
     // --- Barge-in interrupt ---
     const handleInterrupt = useCallback((): void => {
         if (!wsClientRef.current || connectionState !== "connected") return;
@@ -904,6 +948,8 @@ export default function AvatarInterface(): JSX.Element {
         // Clear the audio queue to immediately stop playback
         clearQueue();
         setAudioLevel(0);
+        setVisemeShape("neutral");
+        resetAnalyzer();
     }, [connectionState, clearQueue]);
 
     // --- System prompt save ---
@@ -920,6 +966,28 @@ export default function AvatarInterface(): JSX.Element {
     // --- Derived ---
     const isConnected = connectionState === "connected";
     const statusInfo = connectionStatusMap[connectionState];
+
+    // Panel configs for the avatar-page main area. The PDF column is only
+    // included when pdfPreview is present; react-resizable-panels handles the
+    // re-layout via the useDefaultLayout hook (widths persist to localStorage).
+    const avatarPanels = useMemo(() => {
+        // Default split: avatar canvas claims the left half of the screen.
+        // minSize is set to 40 so a stray drag can't squeeze the canvas into
+        // a thin strip on 4K displays where the transcript column has lots
+        // of room to expand into.
+        const configs: ResizablePanelConfig[] = [
+            { id: "avatar-canvas", defaultSize: 50, minSize: 40 },
+            { id: "avatar-transcript", defaultSize: 50, minSize: 25 },
+        ];
+        if (pdfPreview) {
+            configs[0].defaultSize = 40;
+            configs[0].minSize = 30;
+            configs[1].defaultSize = 30;
+            configs.push({ id: "avatar-pdf", defaultSize: 30, minSize: 20 });
+        }
+        const total = configs.reduce((s, c) => s + c.defaultSize, 0);
+        return configs.map((c) => ({ ...c, defaultSize: (c.defaultSize / total) * 100 }));
+    }, [pdfPreview]);
 
     return (
         <div className="avatar-page">
@@ -988,6 +1056,14 @@ export default function AvatarInterface(): JSX.Element {
                 </SpaceBetween>
             </div>
 
+            {/* KB pipeline multi-select (applies to voice avatar kb_search calls) */}
+            <div
+                className="px-4 py-2 flex items-center"
+                style={{ borderBottom: "1px solid var(--glass-border)" }}
+            >
+                <KbPipelineChips onChange={handleKbPipelinesChange} />
+            </div>
+
             {/* Error banner */}
             {error && (
                 <div className="avatar-page__error">
@@ -997,8 +1073,17 @@ export default function AvatarInterface(): JSX.Element {
                 </div>
             )}
 
-            {/* Main content grid */}
-            <div className={`avatar-page__main${pdfPreview ? " avatar-page__main--with-pdf" : ""}`}>
+            {/* Main content grid — panels are user-resizable (widths persist to localStorage).
+                The PDF column is conditionally rendered; its panel config is only included when present. */}
+            <ResizablePanelLayout
+                // Bump the save id to invalidate old (narrow) layouts saved
+                // before the 50/50 default — on 4K screens the prior saved
+                // widths left the avatar canvas cramped.
+                autoSaveId="avatar-v2"
+                direction="horizontal"
+                panels={avatarPanels}
+                className="avatar-page__main"
+            >
                 {/* Avatar column */}
                 <div className="avatar-page__avatar-col">
                     <div className="avatar-page__avatar-header">
@@ -1013,6 +1098,7 @@ export default function AvatarInterface(): JSX.Element {
                             isListening={isRecording}
                             className="w-full h-full"
                             variant={avatarVariant}
+                            mouthShape={visemeShape}
                         />
 
                         {/* Draggable website monitor overlay */}
@@ -1103,7 +1189,10 @@ export default function AvatarInterface(): JSX.Element {
                     <div className="avatar-page__transcript" ref={transcriptRef}>
                         {transcript.length === 0 ? (
                             <div className="avatar-page__empty">
-                                Your conversation will appear here
+                                <AvatarSuggestedPrompts
+                                    onSelect={handleSendText}
+                                    disabled={!isConnected}
+                                />
                             </div>
                         ) : (
                             <div className="avatar-page__messages">
@@ -1172,10 +1261,16 @@ export default function AvatarInterface(): JSX.Element {
                                                 }
                                                 if (seg.kind === "website") {
                                                     return (
-                                                        <div key={j} className="rounded-xl border border-cyan-500/30 bg-gradient-to-br from-gray-900 to-gray-800 p-4 shadow-lg my-2">
+                                                        <div
+                                                            key={j}
+                                                            className="rounded-xl border border-cyan-500/30 bg-gradient-to-br from-gray-900 to-gray-800 p-4 shadow-lg my-2"
+                                                        >
                                                             <div className="flex items-center gap-2 mb-2">
                                                                 <span className="text-xl">🌐</span>
-                                                                <span className="text-sm font-semibold text-white">{seg.title || "Restaurant Website"}</span>
+                                                                <span className="text-sm font-semibold text-white">
+                                                                    {seg.title ||
+                                                                        "Restaurant Website"}
+                                                                </span>
                                                             </div>
                                                             <a
                                                                 href={seg.url}
@@ -1269,7 +1364,7 @@ export default function AvatarInterface(): JSX.Element {
                         </div>
                     </div>
                 )}
-            </div>
+            </ResizablePanelLayout>
 
             {/* System Prompt Editor Modal */}
             <Modal

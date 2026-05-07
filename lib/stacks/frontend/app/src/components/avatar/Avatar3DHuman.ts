@@ -16,20 +16,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three-stdlib";
 import { Avatar3D } from "./Avatar3D";
-import type { AvatarVariant } from "./AvatarVariant";
-
-type MouthShape =
-    | "open"
-    | "ah"
-    | "oh"
-    | "ee"
-    | "oo"
-    | "wide"
-    | "narrow"
-    | "mm"
-    | "ff"
-    | "th"
-    | "neutral";
+import type { AvatarVariant, MouthShape } from "./AvatarVariant";
 
 /**
  * Maps our 11 internal viseme shapes to ARKit blend-shape target names as used
@@ -117,7 +104,9 @@ export class Avatar3DHuman extends Avatar3D implements AvatarVariant {
         const idx = this.influenceIndex[targetName];
         if (idx === undefined) return;
 
-        this.morphMesh.morphTargetInfluences[idx] = Math.min(audioLevel * 4, 1.0);
+        // ×2.5 (was ×4) — morph peaks at audioLevel≈0.4 for natural feel
+        // instead of pegging at audioLevel≈0.25.
+        this.morphMesh.morphTargetInfluences[idx] = Math.min(audioLevel * 2.5, 1.0);
     }
 
     setSpeaking(isSpeaking: boolean): void {
@@ -126,6 +115,10 @@ export class Avatar3DHuman extends Avatar3D implements AvatarVariant {
             this.currentShape = "neutral";
             this.updateLipSync(0);
         }
+    }
+
+    setMouthShape(shape: MouthShape): void {
+        this.currentShape = shape;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -139,6 +132,10 @@ export class Avatar3DHuman extends Avatar3D implements AvatarVariant {
         if (this.isSpeaking) {
             this.updateLipSync(this.audioLevel);
         }
+    }
+
+    protected override onAspectChange(aspect: number): void {
+        this.reframe(this.camera, 2.5, 1.0, aspect);
     }
 
     override dispose(): void {

@@ -1,7 +1,7 @@
 [
     {
         "name": "website_generator",
-        "description": "Generate or update a static restaurant website on S3. Returns a presigned URL to view the site. Three modes: 'create' builds from menu JSON. 'update' with 'html' uploads agent-generated HTML. 'update' with 'edit_instructions' fetches the current site and applies changes via AI.",
+        "description": "Generate or update a static website on S3 for ANY topic. Returns a presigned URL to view the site. Layouts: 'article' (research reports, long-form content), 'landing' (product/topic pages with hero + sections), 'menu' (restaurant menus only — do NOT use for non-restaurant content). Three modes: 'create' builds from structured content. 'update' with 'html' uploads agent-generated HTML. 'update' with 'edit_instructions' fetches the current site and applies changes via AI.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -9,15 +9,59 @@
                     "type": "string",
                     "enum": ["create", "update", "add_images"],
                     "default": "create",
-                    "description": "'create' to build from menu data, 'update' to modify an existing site, 'add_images' to attach generated images to dishes on an existing site"
+                    "description": "'create' to build from content, 'update' to modify an existing site, 'add_images' to attach images to items on an existing site"
+                },
+                "layout": {
+                    "type": "string",
+                    "enum": ["article", "landing", "menu"],
+                    "default": "article",
+                    "description": "Output layout. 'article' = research report / long-form (default for research topics). 'landing' = hero + feature sections. 'menu' = restaurant menu (ONLY for food/restaurant content). Pick 'article' or 'landing' for any non-restaurant topic."
                 },
                 "title": {
                     "type": "string",
-                    "description": "Restaurant or website title (required for create)"
+                    "description": "Website title (required for create)"
+                },
+                "content": {
+                    "type": "object",
+                    "description": "Generic content for 'article' or 'landing' layouts. Use this for any non-restaurant topic.",
+                    "properties": {
+                        "subtitle": {
+                            "type": "string",
+                            "description": "Optional hero subtitle / tagline"
+                        },
+                        "sections": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "heading": { "type": "string" },
+                                    "body": {
+                                        "type": "string",
+                                        "description": "Paragraph text (plain text or simple HTML). Supports \\n for paragraph breaks."
+                                    },
+                                    "items": {
+                                        "type": "array",
+                                        "description": "Optional list of items/features under this section (for landing layouts).",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": { "type": "string" },
+                                                "description": { "type": "string" },
+                                                "s3_key": { "type": "string" },
+                                                "image_url": { "type": "string" }
+                                            },
+                                            "required": ["name"]
+                                        }
+                                    }
+                                },
+                                "required": ["heading"]
+                            }
+                        }
+                    }
                 },
                 "menu": {
                     "type": "object",
-                    "description": "Menu content with sections and items (required for create)",
+                    "description": "RESTAURANT-ONLY menu content with sections and items. Use only when layout='menu'.",
                     "properties": {
                         "title": { "type": "string" },
                         "sections": {
@@ -34,7 +78,10 @@
                                                 "name": { "type": "string" },
                                                 "description": { "type": "string" },
                                                 "price": { "type": "string" },
-                                                "dietary": { "type": "array", "items": { "type": "string" } },
+                                                "dietary": {
+                                                    "type": "array",
+                                                    "items": { "type": "string" }
+                                                },
                                                 "s3_key": { "type": "string" },
                                                 "image_url": { "type": "string" }
                                             },
@@ -65,9 +112,15 @@
                     "items": {
                         "type": "object",
                         "properties": {
-                            "name": { "type": "string", "description": "Dish name to match in the website" },
+                            "name": {
+                                "type": "string",
+                                "description": "Dish name to match in the website"
+                            },
                             "s3_key": { "type": "string", "description": "S3 key of the image" },
-                            "image_url": { "type": "string", "description": "Presigned URL of the image (fallback)" }
+                            "image_url": {
+                                "type": "string",
+                                "description": "Presigned URL of the image (fallback)"
+                            }
                         },
                         "required": ["name"]
                     }

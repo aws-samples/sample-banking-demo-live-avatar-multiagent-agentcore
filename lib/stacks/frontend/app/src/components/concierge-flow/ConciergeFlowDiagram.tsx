@@ -49,7 +49,7 @@ const TOOL_NAMES: string[] = [
 ];
 
 function toolColumnX(i: number, total: number): number {
-    const spacing = 150;
+    const spacing = 215;
     const totalW = (total - 1) * spacing;
     return CENTER_X + i * spacing - totalW / 2;
 }
@@ -92,7 +92,7 @@ function ConciergeFlowInner() {
         ns.push({
             id: "runtime",
             type: "conciergeNode",
-            position: { x: CENTER_X - 80, y: ROW_Y.runtime },
+            position: { x: CENTER_X - 110, y: ROW_Y.runtime },
             data: {
                 id: "runtime",
                 label: "AgentCore Runtime",
@@ -119,7 +119,7 @@ function ConciergeFlowInner() {
         ns.push({
             id: "guardrails",
             type: "conciergeNode",
-            position: { x: CENTER_X - 310, y: ROW_Y.sidecar },
+            position: { x: CENTER_X - 340, y: ROW_Y.sidecar },
             data: {
                 id: "guardrails",
                 label: "Guardrails",
@@ -133,7 +133,7 @@ function ConciergeFlowInner() {
         ns.push({
             id: "memory",
             type: "conciergeNode",
-            position: { x: CENTER_X + 160, y: ROW_Y.sidecar },
+            position: { x: CENTER_X + 150, y: ROW_Y.sidecar },
             data: {
                 id: "memory",
                 label: "AgentCore Memory",
@@ -167,7 +167,7 @@ function ConciergeFlowInner() {
         ns.push({
             id: "gateway",
             type: "conciergeNode",
-            position: { x: CENTER_X - 80, y: ROW_Y.gateway },
+            position: { x: CENTER_X - 110, y: ROW_Y.gateway },
             data: {
                 id: "gateway",
                 label: "AgentCore Gateway",
@@ -201,7 +201,7 @@ function ConciergeFlowInner() {
             ns.push({
                 id: toolName,
                 type: "conciergeNode",
-                position: { x: x - 65, y: ROW_Y.tool },
+                position: { x: x - 100, y: ROW_Y.tool },
                 data: {
                     id: toolName,
                     label: meta.label,
@@ -235,7 +235,7 @@ function ConciergeFlowInner() {
             ns.push({
                 id: resourceId,
                 type: "conciergeNode",
-                position: { x: toolNode.position.x - 10, y: ROW_Y.resource },
+                position: { x: toolNode.position.x + 5, y: ROW_Y.resource },
                 data: {
                     id: resourceId,
                     label,

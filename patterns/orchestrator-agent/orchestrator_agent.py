@@ -32,6 +32,7 @@ from strands import Agent
 from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 from utils.auth import extract_user_id_from_context, get_gateway_access_token
+from utils.pipeline_scope import PipelineScopeHook, mode_config
 from utils.ssm import get_ssm_parameter
 from utils.tool_guard import UserScopeHook
 
@@ -80,6 +81,9 @@ queries and break them into focused, executable sub-questions with clear priorit
 Your responsibilities:
 1. Analyze the user's research query to identify core themes and dimensions
 2. Use the gateway_kb_search tool to check existing research plans in the knowledge base
+   (the runtime scopes this search to the current flow's pipeline — Bistro Deep Dive only
+   sees `bistro_research`, Open Research only sees `open_research` — so you won't surface
+   stale plans from the other flow)
 3. Decompose the query into 5-8 focused sub-questions
 4. Assign priority (high/medium/low) and research type (web/kb/analysis) to each
 5. Create a structured research plan that other agents can execute
@@ -221,6 +225,10 @@ Include topic, and a report object with ALL of these fields:
   supporting_evidence, conflicts_and_uncertainties, conclusions,
   recommendations, limitations_and_future_research, appendices, citations
 
+Note: The runtime automatically tags the generated PDF with the correct pipeline
+(`bistro_research` for this Bistro Deep Dive flow) so it is routed to the right
+KB view for future searches. You do not need to set the `pipeline` argument yourself.
+
 DO NOT summarize any field when calling the tool. Pass everything through verbatim.
 
 The report JSON structure for the tool call:
@@ -331,10 +339,12 @@ restaurant menu by researching dishes and generating photos for each item.
 
 Your responsibilities:
 1. FIRST, call gateway_kb_search with a query related to the user's menu request (e.g., "cuisine trends",
-   "dietary preferences", or the specific cuisine type). If the KB returns relevant prior research
-   (e.g., trend reports, customer preferences, dietary studies), incorporate those insights into your
-   menu design — for example, featuring trending ingredients, honoring popular dietary needs, or
-   reflecting regional cuisine patterns. If the KB returns nothing relevant, proceed normally.
+   "dietary preferences", or the specific cuisine type). The runtime scopes this search to the
+   research-report views (`bistro_research` + `open_research`) so you see market/cuisine intel without
+   being distracted by prior menus. If the KB returns relevant prior research (e.g., trend reports,
+   customer preferences, dietary studies), incorporate those insights into your menu design — for
+   example, featuring trending ingredients, honoring popular dietary needs, or reflecting regional
+   cuisine patterns. If the KB returns nothing relevant, proceed normally.
 2. Organize dishes into logical menu sections (e.g., Appetizers, Entrees, Desserts)
 4. For EACH dish, call gateway_nova_canvas_generate to create an appetizing photo
 5. Collect the s3_key and image_url from each Canvas generation result
@@ -470,8 +480,100 @@ MENU_PHASES = [
     },
 ]
 
-CHATBOT_PROMPT = """You are a helpful AI assistant. You can discuss any topic and help with
-a wide range of questions including research, analysis, creative tasks, and general knowledge.
+# ---------------------------------------------------------------------------
+# Ocean View Bistro — baked-in facts for the AI Concierge
+# ---------------------------------------------------------------------------
+# The concierge prefers tool data (KB search, web search, place_order, browser
+# automation) whenever it's available. But on a fresh demo session the menu KB
+# is empty, no customer profile exists, and there's no reservation website to
+# browse yet. Without grounded facts the LLM either fabricates or refuses —
+# both are terrible demo experiences. These facts are the source of truth the
+# concierge falls back to so every example question on the welcome screen
+# lands convincingly. When the menu KB does contain a generated menu PDF, the
+# concierge still prefers tool results (kb_search > these facts).
+
+RESTAURANT_FACTS = """OCEAN VIEW BISTRO — SOURCE OF TRUTH
+You represent Ocean View Bistro. These facts are ground truth. Use them to
+answer any direct question that a concierge should know by heart. Never say
+"I don't have that information" about anything listed below.
+
+Concept & chef
+- Coastal Pacific-Mediterranean bistro founded in 2019.
+- Executive Chef: Maya Alcantara (James Beard semifinalist, 2024).
+- Ethos: hyperseasonal, dayboat-sourced seafood paired with Mediterranean
+  plant-forward technique. Zero-waste kitchen; house-fermented everything.
+
+Location & contact
+- Address: 221 Embarcadero Promenade, Suite 4, San Francisco, CA 94111.
+- Phone: (415) 555-0142.
+- Email: reservations@oceanviewbistro.example.
+
+Hours
+- Tuesday–Thursday: 5:00 PM – 10:00 PM (dinner only).
+- Friday–Saturday: 11:30 AM – 2:30 PM (lunch), 5:00 PM – 11:00 PM (dinner).
+- Sunday: 10:30 AM – 2:30 PM (coastal brunch), 5:00 PM – 9:00 PM (dinner).
+- Closed Mondays.
+
+Signature menu highlights
+- Appetizers: Dungeness Crab Toast with preserved-meyer-lemon aioli;
+  Heirloom Tomato Carpaccio with basil-oil pearls; Charred Octopus with
+  smoked-paprika romesco.
+- Mains: Pan-Seared Halibut with saffron fregola; Cedar-Plank King Salmon
+  with charred stone-fruit salsa; Dry-Aged Duck Breast with cherry gastrique;
+  Black-Garlic Risotto (VG).
+- Vegetarian/vegan: roughly a third of the menu. Always available: Roasted
+  Cauliflower Steak (V/GF), Wild-Mushroom Bolognese (V, vegan on request),
+  Golden Beet & Burrata salad (V/GF).
+- Desserts: Olive-Oil Citrus Cake; Espresso Pot de Crème; Roasted-Pineapple
+  Pavlova.
+- Dietary tags used in responses: V (vegetarian), VG (vegan), GF
+  (gluten-free), DF (dairy-free). At least two mains in each category.
+
+Wine program
+- 180 labels, 60 by the glass. Focus: California coastal whites, Rhône
+  varietals, low-intervention natural bottles. Corkage $25, waived on any
+  bottle purchased alongside.
+- Pairing philosophy: let the dish drive. Sommelier on duty Tues–Sat.
+- Default pairings:
+  * Seafood mains → Assyrtiko, Albariño, coastal Chardonnay, dry rosé.
+  * Duck / red meats → Pinot Noir (Sonoma Coast), Grenache, Nebbiolo.
+  * Vegetarian mains → Grüner Veltliner, Chenin Blanc, skin-contact whites.
+
+Reservations & policies
+- Party sizes 1–8 online; 9+ via phone or email only.
+- Max 120 minutes per table; 48-hour cancellation window, else $25 per guest.
+- Walk-ins always welcome at the 14-seat marble bar.
+- No dress code; smart casual is the norm.
+- Dogs welcome on the patio. Highchairs and kids' menu available.
+
+Concierge behavior
+- When the user asks about hours, location, the chef, the wine program, or
+  dietary options, answer directly from the facts above — do NOT search.
+- When the user asks about dish specifics, call gateway_kb_search first
+  (pipeline=menu). If the KB returns a match, prefer it; if the KB is empty
+  or irrelevant, fall back to the signature items above — label them as
+  "tonight's standing menu" so the answer is honest.
+- When the user asks to place an order, use gateway_place_order with the
+  items they named. Accept the items above as valid menu references.
+- When the user asks for a reservation:
+  1. Ask for any missing detail (party size, date/time) in a single sentence.
+  2. If they provide a website URL or the session already has a generated
+     restaurant website, call browser_start and drive the booking form.
+  3. Otherwise, "confirm" the reservation directly: state the party size,
+     date, time, a plausible confirmation code (format OVB-XXXXX, 5 hex
+     chars uppercase), and that a confirmation email was sent to the email
+     on file. This is a simulated booking — never claim it's real or quote
+     a price for the reservation itself.
+- When the user asks to modify the restaurant's website, see the
+  gateway_website_generator instructions below.
+"""
+
+CHATBOT_PROMPT = (
+    RESTAURANT_FACTS
+    + """
+
+You are the Ocean View Bistro AI Concierge. You can also help with research,
+analysis, creative tasks, and general knowledge when asked.
 
 RESPONSE STYLE — MANDATORY:
 - Answer in 1-2 sentences. No filler, no preamble, no follow-up questions unless truly ambiguous.
@@ -487,12 +589,21 @@ AUTO TOOL USE — MANDATORY:
 - Do not produce structured JSON output — respond in natural language.
 
 Tool reference:
-- gateway_kb_search: search knowledge base (reports, menus, documents). Include "url" fields from
-  results so users can view source PDFs.
+- gateway_kb_search: search knowledge base for menu content (the runtime scopes this
+  to the `menu` pipeline for the concierge flow — you are answering menu/dining questions
+  from menu PDFs). Include "url" fields from results so users can view source PDFs.
 - gateway_web_search: current/real-time information from the web. Use automatically — never ask first.
 - gateway_place_order: place orders for users.
-- gateway_website_generator: generate or update restaurant websites.
-  - To create: call with mode="create", title, and menu data.
+- gateway_website_generator: generate or update static websites for ANY topic.
+  - Pick layout based on content:
+    - layout="menu" ONLY for restaurant menus (sections of dishes with prices / dietary tags).
+      Call with mode="create", title, menu={sections:[{name, items:[...]}]}.
+    - layout="article" for research summaries, long-form explainers, blog-style posts.
+      Call with mode="create", title, content={subtitle?, sections:[{heading, body, items?}]}.
+    - layout="landing" for product / topic landing pages (hero + feature sections).
+      Same content shape as article; items under a section render as a card grid.
+  - Never use layout="menu" for non-restaurant topics — that produces a dish-card grid, which
+    is wrong for anything that isn't food.
   - To update/redesign: you MUST generate the complete new HTML yourself, then call with
     mode="update", s3_key (from the original generation result), and html (the full HTML string
     you wrote). Do NOT ask the tool to generate the HTML — you write it.
@@ -503,6 +614,28 @@ Tool reference:
     Images are matched by alt text, so the alt MUST exactly match the dish name.
   - To add images: call with mode="add_images", s3_key, and images array [{name, s3_key}].
   - Remember the s3_key from website generation results so you can apply edits later.
+
+  WEBSITE IMAGE WORKFLOW — READ CAREFULLY:
+  When the user asks to "add images", "generate images for the site", or "illustrate the
+  site", you MUST follow this two-step pattern, regardless of the site's layout (menu,
+  article, or landing):
+
+  STEP 1: Call gateway_nova_canvas_generate once per image needed. Each call returns
+          {s3_key, image_url}. Collect all results into a list of {name, s3_key} objects
+          where `name` exactly matches the subtitle/section/dish name the image illustrates.
+
+  STEP 2: Call gateway_website_generator with:
+            mode="add_images"
+            s3_key=<the site's existing s3_key>
+            images=[{name: "<section or dish name>", s3_key: "<from step 1>"}, ...]
+
+  DO NOT call mode="update" with html=... to add images — that path cannot discover the
+  newly generated S3 keys, and the images will be orphaned. mode="add_images" is the ONLY
+  correct path for injecting freshly generated Nova Canvas images into an existing site.
+
+  If the user ALSO wants copy/layout changes alongside new images, do add_images first,
+  then call mode="update" with html=... afterwards — the update path preserves existing
+  <img data-s3-key> attributes via _inject_images().
 - gateway_extract_pdf_images: extract dish images from a menu PDF using Code Interpreter.
   - Call with pdf_s3_key and menu JSON. Returns [{name, s3_key}] for each image.
   - Use when the user wants to add PDF images to a website — extract first, then call
@@ -535,6 +668,7 @@ Tool limits:
 - If a tool returns no results, try ONE more time with a broader query.
 - Never call the same tool more than 3 times total in a single response.
 """
+)
 
 # ---------------------------------------------------------------------------
 # Generic Research Studio prompts (topic-agnostic, with images + data sources)
@@ -655,6 +789,10 @@ Include topic, and a report object with ALL of these fields:
   supporting_evidence, conflicts_and_uncertainties, conclusions,
   recommendations, limitations_and_future_research, appendices, citations,
   images (the COMPLETE images array with s3_key, image_url, caption, placement_hint)
+
+Note: The runtime automatically tags the generated PDF with the correct pipeline
+(`open_research` for this Open Research / Research Studio flow) so it is routed to
+the right KB view for future searches. You do not need to set the `pipeline` argument.
 
 DO NOT summarize any field when calling the tool. Pass everything through verbatim.
 
@@ -1069,6 +1207,7 @@ def _create_agent(
     gateway_client: MCPClient,
     bedrock_model: BedrockModel,
     extra_tools: list | None = None,
+    pipeline_scope: PipelineScopeHook | None = None,
 ) -> Agent:
     """Create a Strands Agent with Gateway MCP + Memory (identical to standalone pattern)."""
     memory_id = os.environ.get("MEMORY_ID")
@@ -1087,8 +1226,13 @@ def _create_agent(
     if user_id:
         augmented_prompt += f'\n\nContext: You are assisting user "{user_id}".'
 
-    # Hook force-injects the verified user_id into all user-scoped tool calls
-    hooks = [UserScopeHook(user_id)] if user_id else []
+    # Hooks force-inject the verified user_id and mode-specific KB read filter /
+    # pdf_generator pipeline write into all relevant Gateway tool calls.
+    hooks: list = []
+    if user_id:
+        hooks.append(UserScopeHook(user_id))
+    if pipeline_scope is not None:
+        hooks.append(pipeline_scope)
 
     agent = Agent(
         name=f"{name.title().replace('_', '')}Agent",
@@ -1111,7 +1255,9 @@ def _create_agent(
 # ---------------------------------------------------------------------------
 
 
-async def _handle_chatbot(query, user_id, session_id, requested_model="", system_prompt_override=None):
+async def _handle_chatbot(
+    query, user_id, session_id, requested_model="", system_prompt_override=None, mode: str = "chatbot"
+):
     """Handle chatbot mode — streams text, tool calls, and thinking in real time.
 
     Uses Strands callback_handler to push events from the agent thread into a
@@ -1120,6 +1266,9 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
 
     Args:
         system_prompt_override: If provided, replaces the default CHATBOT_PROMPT.
+        mode: Chatbot sub-mode ("chatbot" or "archive_chat"). Drives the
+            PipelineScopeHook that scopes KB searches to `menu` (chatbot) or
+            everything (archive_chat).
     """
     import json as _json
     import queue as thread_queue
@@ -1226,6 +1375,16 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
 
     chatbot_prompt = system_prompt_override or CHATBOT_PROMPT
 
+    _pipeline_cfg = mode_config(mode)
+    _pipeline_scope = PipelineScopeHook(
+        write_pipeline=_pipeline_cfg.get("write"),
+        read_filter=_pipeline_cfg.get("read_filter"),
+    )
+    print(
+        f"[CHATBOT] Pipeline scope (mode={mode}): write={_pipeline_cfg.get('write')!r}, "
+        f"read_filter={_pipeline_cfg.get('read_filter')!r}"
+    )
+
     try:
         agent = _create_agent(
             "chatbot",
@@ -1235,6 +1394,7 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
             gateway_client,
             bedrock_model,
             extra_tools=BROWSER_TOOLS,
+            pipeline_scope=_pipeline_scope,
         )
         # Attach our streaming callback handler
         agent.callback_handler = _callback_handler
@@ -1306,7 +1466,7 @@ async def _handle_chatbot(query, user_id, session_id, requested_model="", system
     yield {"result": {"stop_reason": "end_turn"}}
 
 
-async def _run_plan_only(query, user_id, session_id, requested_model="", research_depth="standard"):
+async def _run_plan_only(query, user_id, session_id, requested_model="", research_depth="standard", mode: str = ""):
     """Run ONLY the planner phase and emit a ResearchPlan UI component.
 
     The stream ends after emitting the plan — the frontend displays it for
@@ -1348,6 +1508,15 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
     }
 
     try:
+        _pipeline_cfg = mode_config(mode)
+        _pipeline_scope = PipelineScopeHook(
+            write_pipeline=_pipeline_cfg.get("write"),
+            read_filter=_pipeline_cfg.get("read_filter"),
+        )
+        print(
+            f"[ORCHESTRATOR] Plan-only pipeline scope: write={_pipeline_cfg.get('write')!r}, "
+            f"read_filter={_pipeline_cfg.get('read_filter')!r}"
+        )
         agent = _create_agent(
             "planner",
             planner_phase["prompt"],
@@ -1355,6 +1524,7 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
             session_id,
             gateway_client,
             bedrock_model,
+            pipeline_scope=_pipeline_scope,
         )
     except Exception as e:
         print(f"[ORCHESTRATOR] Failed to create planner agent: {e}")
@@ -1492,19 +1662,22 @@ async def orchestrate(payload: dict, context: RequestContext):
             session_id,
             requested_model,
             system_prompt_override=ARCHIVE_CHAT_PROMPT,
+            mode="archive_chat",
         ):
             yield event
         return
 
     # ── Chatbot mode: single conversational agent ──
     if mode == "chatbot":
-        async for event in _handle_chatbot(query, user_id, session_id, requested_model):
+        async for event in _handle_chatbot(query, user_id, session_id, requested_model, mode="chatbot"):
             yield event
         return
 
     # ── Generic research plan-only: reuses planner (already topic-agnostic) ──
     if mode == "generic_research":
-        async for event in _run_plan_only(query, user_id, session_id, requested_model, research_depth):
+        async for event in _run_plan_only(
+            query, user_id, session_id, requested_model, research_depth, mode="generic_research"
+        ):
             yield event
         return
 
@@ -1562,11 +1735,19 @@ async def orchestrate(payload: dict, context: RequestContext):
 
     # ── Menu mode ──
     phases = MENU_PHASES if mode == "menu" else AGENT_PHASES
-    async for event in _run_pipeline(phases, query, user_id, session_id, requested_model):
+    async for event in _run_pipeline(phases, query, user_id, session_id, requested_model, mode=mode):
         yield event
 
 
-async def _run_pipeline(phases, query, user_id, session_id, requested_model="", initial_accumulated=""):
+async def _run_pipeline(
+    phases,
+    query,
+    user_id,
+    session_id,
+    requested_model="",
+    initial_accumulated="",
+    mode: str = "",
+):
     """Run a multi-phase agent pipeline (research or menu).
 
     Each phase creates a Strands Agent with the phase's system prompt, runs it
@@ -1576,8 +1757,13 @@ async def _run_pipeline(phases, query, user_id, session_id, requested_model="", 
     Args:
         initial_accumulated: If provided, used as the starting input instead of
             the raw query. Used by research_execute mode to inject the approved plan.
+        mode: Orchestrator mode (e.g., "research_execute", "menu"). Drives the
+            PipelineScopeHook that injects the correct KB read filter and the
+            correct pdf_generator `pipeline` value for this pipeline run.
     """
-    print(f"[ORCHESTRATOR] Starting pipeline ({len(phases)} phases) for user: {user_id}, session: {session_id}")
+    print(
+        f"[ORCHESTRATOR] Starting pipeline ({len(phases)} phases) for user: {user_id}, session: {session_id}, mode: {mode or 'unspecified'}"
+    )
     print(f"[ORCHESTRATOR] Query: {query}")
 
     # Setup: one Gateway MCP client shared by all agents; model built per-phase
@@ -1596,6 +1782,17 @@ async def _run_pipeline(phases, query, user_id, session_id, requested_model="", 
 
     accumulated = initial_accumulated or query
     menu_designer_output = ""
+
+    # Build one PipelineScopeHook for the whole pipeline — per-mode KB filter + pdf_generator write.
+    _pipeline_cfg = mode_config(mode)
+    _pipeline_scope = PipelineScopeHook(
+        write_pipeline=_pipeline_cfg.get("write"),
+        read_filter=_pipeline_cfg.get("read_filter"),
+    )
+    print(
+        f"[ORCHESTRATOR] Pipeline scope: write={_pipeline_cfg.get('write')!r}, "
+        f"read_filter={_pipeline_cfg.get('read_filter')!r}"
+    )
 
     for phase in phases:
         agent_name = phase["name"]
@@ -1639,6 +1836,7 @@ async def _run_pipeline(phases, query, user_id, session_id, requested_model="", 
                 session_id,
                 gateway_client,
                 bedrock_model,
+                pipeline_scope=_pipeline_scope,
             )
         except Exception as e:
             print(f"[ORCHESTRATOR] Failed to create {agent_name} agent: {e}")

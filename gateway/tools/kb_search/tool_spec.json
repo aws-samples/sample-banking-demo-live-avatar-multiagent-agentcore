@@ -1,7 +1,7 @@
 [
     {
         "name": "kb_search",
-        "description": "Search an Amazon Bedrock Knowledge Base for relevant documents using hybrid vector and keyword search. Returns formatted results with citations from ingested PDFs and documents.",
+        "description": "Search an Amazon Bedrock Knowledge Base for relevant documents using hybrid vector and keyword search. Returns formatted results with citations from ingested PDFs and documents. Optionally scope the search to one or more logical pipelines (bistro_research, open_research, menu) so callers only see documents from the views they care about.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -16,6 +16,15 @@
                 "user_id": {
                     "type": "string",
                     "description": "Authenticated user identifier (injected by runtime)"
+                },
+                "pipelines": {
+                    "type": "array",
+                    "description": "Optional list of pipeline tags to scope the search to. Valid values: 'bistro_research' (Bistro Deep Dive reports), 'open_research' (Open Research / Research Studio reports), 'menu' (Menu Builder menus). When omitted or empty, all documents in the KB are searched.",
+                    "items": {
+                        "type": "string",
+                        "enum": ["bistro_research", "open_research", "menu"]
+                    },
+                    "maxItems": 10
                 }
             },
             "required": ["query"]

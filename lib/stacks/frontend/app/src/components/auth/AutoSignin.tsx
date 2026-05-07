@@ -441,7 +441,14 @@ function AutoSigninContent({ children }: PropsWithChildren): JSX.Element {
     }
 
     if (!auth.isAuthenticated) {
-        return <SignInCard onFederateSignIn={() => auth.signinRedirect()} />;
+        const federateProvider = import.meta.env.VITE_COGNITO_IDENTITY_PROVIDER;
+        const handleFederateSignIn = () =>
+            auth.signinRedirect(
+                federateProvider
+                    ? { extraQueryParams: { identity_provider: federateProvider } }
+                    : undefined
+            );
+        return <SignInCard onFederateSignIn={handleFederateSignIn} />;
     }
 
     return <>{children}</>;

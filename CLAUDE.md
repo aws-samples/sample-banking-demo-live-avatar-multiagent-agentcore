@@ -34,7 +34,7 @@ bin/app.ts → lib/stage.ts (ApplicationStage)
   ├── Frontend         — S3 + CloudFront (OAC) + WAF (CloudFront scope)
   ├── Auth             — Cognito User Pool/Client/Identity Pool + M2M OAuth2 + WAF (Regional)
   ├── Shared           — DynamoDB (3 tables) + S3 (4 buckets) + Knowledge Base (S3 Vectors) + Neptune (optional)
-  ├── Backend          — AgentCore Gateway (MCP, 16 tools) + 2 Runtimes + Memory + Guardrails + Feedback API
+  ├── Backend          — AgentCore Gateway (MCP, 18 tools) + 2 Runtimes + Memory + Guardrails + Feedback API
   └── FrontendDeployment — CodeBuild builds React app in-cloud, deploys to S3
 ```
 
@@ -100,7 +100,79 @@ Event expiry: 30 days. Integrated via `AgentCoreMemorySessionManager` from `bedr
 
 ### Knowledge Base
 
-S3 Vectors backend with Nova Multimodal Embeddings (1024-dim, FLOAT32, cosine). Auto-ingestion: S3 event notifications on reports bucket (`reports/*.pdf`, `menus/*.pdf`) trigger `kb_ingest` Lambda → copies to kb-docs bucket → starts ingestion job. KB Reset available via REST API (`POST /kb-reset`).
+Single physical Bedrock KB (S3 Vectors backend with Nova Multimodal Embeddings, 1024-dim, FLOAT32, cosine) with three logical views tagged by `pipeline` metadata:
+
+| Pipeline tag      | Writer                                        | Readers                                                               |
+| ----------------- | --------------------------------------------- | --------------------------------------------------------------------- |
+| `bistro_research` | Bistro Deep Dive (mode=research_execute)      | Bistro Deep Dive planner, Menu Designer, Report Archive, Voice Avatar |
+| `open_research`   | Open Research (mode=generic_research_execute) | Open Research planner, Menu Designer, Report Archive, Voice Avatar    |
+| `menu`            | Menu Builder (mode=menu)                      | AI Concierge (chatbot), Report Archive, Voice Avatar                  |
+
+Mode → pipeline mapping is centralized in `patterns/utils/pipeline_scope.py::MODE_PIPELINE_CONFIG`:
+
+```python
+{
+    "research":                  {"write": "bistro_research", "read_filter": ["bistro_research"]},
+    "research_execute":          {"write": "bistro_research", "read_filter": ["bistro_research"]},
+    "generic_research":          {"write": "open_research",   "read_filter": ["open_research"]},
+    "generic_research_execute":  {"write": "open_research",   "read_filter": ["open_research"]},
+    "menu":                      {"write": "menu",            "read_filter": ["bistro_research", "open_research"]},
+    "chatbot":                   {"write": None,              "read_filter": ["menu"]},
+    "archive_chat":              {"write": None,              "read_filter": None},  # no filter
+}
+```
+
+The runtime injects read filter + write pipeline via a `PipelineScopeHook` (Strands `BeforeToolCallEvent`). The LLM cannot cross boundaries even if it tries.
+
+**Voice Avatar** is the only experience whose scope is user-controlled. The frontend sends `kb_pipelines` in the presigned WebSocket URL query string (comma-separated) for the initial scope, and a `{type: "kbPipelinesChange", kbPipelines: [...]}` JSON message for mid-session changes. The avatar backend holds the selection in a single-element mutable list that the PipelineScopeHook reads on every tool call, so mid-session toggles apply to the very next `kb_search`.
+
+**Ingestion**: S3 event notifications on reports bucket (`reports/*.pdf`, `menus/*.pdf`) trigger `kb_ingest` Lambda → reads `pipeline` from source object metadata (falling back to prefix-based inference; legacy `research` → `bistro_research`) → copies to kb-docs bucket with `pipeline=<value>` tag + `.metadata.json` sidecar → starts ingestion job.
+
+**KB Reset**: available via REST API (`POST /kb-reset`).
+
+### Verifying KB Filters
+
+Quick smoke-test to confirm the filter shapes in CloudWatch logs:
+
+```bash
+# Filter by pipeline only (multi-value -> uses `in` operator)
+aws lambda invoke --function-name <stack>-tool-kb_search \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"query":"wine pairings","pipelines":["menu"]}' \
+  --client-context "ewogICJjdXN0b20iOiB7ImJlZHJvY2tBZ2VudENvcmVUb29sTmFtZSI6ICJ0ZXN0X19fa2Jfc2VhcmNoIn0KfQ==" out.json
+# Expected log line:
+#   Retrieving from KB <id> with filter: {'equals': {'key': 'pipeline', 'value': 'menu'}} ...
+
+# Filter by user_id + multiple pipelines -> andAll + in
+# Payload: {"query":"cuisine trends","user_id":"alice","pipelines":["bistro_research","open_research"]}
+# Expected filter:
+#   {'andAll': [{'equals': {'key': 'user_id', 'value': 'alice'}},
+#               {'in': {'key': 'pipeline', 'value': ['bistro_research','open_research']}}]}
+
+# No filter at all (only when user_id missing AND pipelines empty)
+# Expected log: "no user_id or pipelines provided, returning all docs (unfiltered)"
+```
+
+Run `python3 gateway/tools/kb_search/handler.py` locally for offline filter-shape verification (9 test cases, no AWS calls needed). Same offline smoke test exists for `gateway/tools/kb_ingest/handler.py` — it requires `KB_DOCS_BUCKET`, `KNOWLEDGE_BASE_ID`, `DATA_SOURCE_ID` env vars set to any stub value.
+
+#### End-to-end runbook (after a stage deploy)
+
+Confirms the logical views are actually siloed. Do each step in order; the following step depends on the previous producing the right tag.
+
+1. **Bistro Deep Dive** → `/research`, approve the plan. Expected logs:
+    - `pdf_generator: fmt=research pipeline=bistro_research user_id=yes`
+    - `kb_ingest` copies the PDF with tag `pipeline=bistro_research` (check `aws s3api get-object-tagging --bucket <stack>-kb-docs-<account> --key generated/reports/...`)
+2. **AI Concierge** → `/chat`, ask "what research do we have on the bistro?" Expected:
+    - `kb_search` filter = `{"in": {"key": "pipeline", "value": ["menu"]}}` (plus `user_id` → `andAll`)
+    - Result: no hits (the step-1 PDF is tagged `bistro_research`, outside the concierge's menu-only scope) — confirms isolation.
+3. **Open Research** → `/research-studio`, approve the plan. Expected tag `pipeline=open_research` in the KB doc.
+4. **Voice Avatar** → `/avatar`:
+    - Default chips = All → `kb_search` filter = `{"in": {"key": "pipeline", "value": ["bistro_research", "open_research", "menu"]}}` (all three are surfaced).
+    - Click chip "Menu only" → `kb_search` filter switches on the next call to `{"equals": {"key": "pipeline", "value": "menu"}}`.
+    - Toggle All again → filter becomes the three-element `in` form.
+5. **Report Archive** → `/archive`, ask "list every report". Expected:
+    - No `pipelines` clause in the kb_search filter (only `user_id` equals, or no filter at all).
+    - Result: all three pipelines' documents surface.
 
 ### Authentication
 
@@ -146,7 +218,7 @@ patterns/researcher-agent/          # KB search + web search + citations
 patterns/synthesizer-agent/         # Cross-reference → executive summary
 patterns/pdf-writer-agent/          # 12-section PDF generation
 patterns/avatar-agent/              # BidiAgent + Nova Sonic WebSocket
-patterns/utils/                     # auth.py, ssm.py, heartbeat.py, responses_api.py
+patterns/utils/                     # auth.py, ssm.py, heartbeat.py, responses_api.py, tool_guard.py (UserScopeHook), pipeline_scope.py (PipelineScopeHook + MODE_PIPELINE_CONFIG)
 
 gateway/tools/{name}/               # Lambda tool handlers (handler.py + tool_spec.json)
 tools/kit.ts                        # Interactive CLI (deploy, synth, destroy, credentials)

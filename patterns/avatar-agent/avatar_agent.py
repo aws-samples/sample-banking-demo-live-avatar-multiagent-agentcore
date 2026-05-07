@@ -23,6 +23,7 @@ from strands.experimental.bidi.models import BidiNovaSonicModel
 from strands.tools.mcp import MCPClient
 from system_prompt_augmenter import augment_system_prompt
 from utils.auth import get_gateway_access_token
+from utils.pipeline_scope import VALID_PIPELINES, PipelineScopeHook
 from utils.ssm import get_ssm_parameter
 
 # --- Configuration (defaults, overridden per-connection by query params) ---
@@ -59,6 +60,27 @@ logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO").upper(),
     format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
 )
+
+
+def _parse_kb_pipelines(raw) -> list[str] | None:
+    """Parse a kb_pipelines value (str or list) into a validated list, or None.
+
+    Accepts either a list of strings (from JSON payload) or a comma-separated
+    string (from query-string param). Returns None when the value is missing
+    or resolves to zero valid entries, which means "search every pipeline".
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = [p.strip() for p in raw.split(",") if p.strip()]
+    if not isinstance(raw, list):
+        logger.warning("[AVATAR] kb_pipelines must be list or comma-string, got %r", type(raw).__name__)
+        return None
+    cleaned = [p for p in raw if isinstance(p, str) and p in VALID_PIPELINES]
+    if len(cleaned) != len(raw):
+        logger.warning("[AVATAR] kb_pipelines ignored unknown values: raw=%r cleaned=%r", raw, cleaned)
+    return cleaned if cleaned else None
+
 
 # FastAPI app (matching reference pattern from aws-samples/sample-nova-sonic-websocket-agentcore)
 app = FastAPI()
@@ -109,8 +131,18 @@ def create_avatar_agent(
     persona: str = DEFAULT_PERSONA,
     voice_id: str = DEFAULT_VOICE_ID,
     sensitivity: str = "MEDIUM",
+    kb_pipelines_holder: list[list[str] | None] | None = None,
 ) -> tuple[BidiAgent, str]:
-    """Create a BidiAgent configured for voice conversation."""
+    """Create a BidiAgent configured for voice conversation.
+
+    Args:
+        kb_pipelines_holder: Optional single-element mutable list whose value is
+            the current kb pipelines multi-select (e.g. ["bistro_research", "menu"]).
+            When None or empty, the avatar searches every pipeline view.
+            The holder is referenced by the PipelineScopeHook on every tool call,
+            so mid-session changes (via kbPipelinesChange WebSocket messages)
+            take effect on the very next kb_search call.
+    """
     logger.info(
         "[AVATAR] Creating BidiNovaSonicModel: model=%s, region=%s, voice=%s, sensitivity=%s",
         MODEL_ID,
@@ -128,10 +160,12 @@ def create_avatar_agent(
                 "output_rate": OUTPUT_SAMPLE_RATE,
                 "channels": 1,
                 "format": "pcm",
+                "audio_type": "SPEECH",
             },
             "inference": {
                 "max_tokens": 1024,
                 "temperature": 0.7,
+                "top_p": 0.9,
             },
             "turn_detection": {
                 "endpointingSensitivity": sensitivity,
@@ -146,12 +180,25 @@ def create_avatar_agent(
     base_prompt = get_persona_prompt(persona)
     system_prompt = augment_system_prompt(base_prompt, GATEWAY_TOOL_NAMES)
 
-    logger.info("[AVATAR] Persona: %s, tools: %d", persona, len(tools))
+    # Build a PipelineScopeHook backed by the mutable holder so the user's
+    # chip multi-select is honored mid-session without re-creating the agent.
+    hooks: list = []
+    if kb_pipelines_holder is not None:
+
+        def _read_filter_provider() -> list[str] | None:
+            # Always read the latest value — the holder is a single-element list
+            # whose only element is mutated when the frontend sends kbPipelinesChange.
+            return kb_pipelines_holder[0] if kb_pipelines_holder else None
+
+        hooks.append(PipelineScopeHook(read_filter=_read_filter_provider))
+
+    logger.info("[AVATAR] Persona: %s, tools: %d, hooks: %d", persona, len(tools), len(hooks))
 
     agent = BidiAgent(
         model=model,
         tools=tools,
         system_prompt=system_prompt,
+        hooks=hooks,
     )
 
     logger.info("[AVATAR] BidiAgent created successfully")
@@ -181,12 +228,19 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
     if sensitivity not in ("HIGH", "MEDIUM", "LOW"):
         sensitivity = "MEDIUM"
 
+    # Voice Avatar KB pipeline multi-select. Default (None) = search every view.
+    initial_kb_pipelines = _parse_kb_pipelines(websocket.query_params.get("kb_pipelines"))
+    # Single-element holder so the hook always reads the latest value. The
+    # holder is mutated in-place on kbPipelinesChange WebSocket messages.
+    kb_pipelines_holder: list[list[str] | None] = [initial_kb_pipelines]
+
     logger.info(
-        "[AVATAR] Connection params: persona=%s, voice=%s, language=%s, sensitivity=%s",
+        "[AVATAR] Connection params: persona=%s, voice=%s, language=%s, sensitivity=%s, kb_pipelines=%r",
         persona,
         voice_id,
         language,
         sensitivity,
+        initial_kb_pipelines,
     )
 
     try:
@@ -202,7 +256,11 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
         # Step 3: Create BidiAgent with per-connection persona and voice
         logger.info("[AVATAR] Step 3: Creating BidiAgent...")
         agent, system_prompt = create_avatar_agent(
-            tools=[gateway_client], persona=persona, voice_id=voice_id, sensitivity=sensitivity
+            tools=[gateway_client],
+            persona=persona,
+            voice_id=voice_id,
+            sensitivity=sensitivity,
+            kb_pipelines_holder=kb_pipelines_holder,
         )
 
         # Step 4: Accept WebSocket and run bidirectional streaming

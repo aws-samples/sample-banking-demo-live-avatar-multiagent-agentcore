@@ -16,6 +16,15 @@ import type { LanguageCode } from "./voice-config";
 
 export type PersonaId = "friendly" | "professional" | "educational" | "creative" | "technical";
 
+/** Logical KB pipeline views — must match the backend taxonomy. */
+export type KbPipeline = "bistro_research" | "open_research" | "menu";
+
+export const ALL_KB_PIPELINES: readonly KbPipeline[] = [
+    "bistro_research",
+    "open_research",
+    "menu",
+] as const;
+
 export interface AvatarWSConfig {
     /** AgentCore Runtime ARN for the avatar runtime */
     runtimeArn: string;
@@ -31,6 +40,8 @@ export interface AvatarWSConfig {
     language?: LanguageCode;
     /** Voice ID for TTS */
     voiceId?: string;
+    /** Initial KB pipeline multi-select. Empty / undefined = search all views. */
+    kbPipelines?: KbPipeline[];
 }
 
 export type AvatarWSMessageType =
@@ -122,6 +133,9 @@ export class AvatarWebSocketClient {
         if (this.config.voiceId) {
             params.set("voice_id", this.config.voiceId);
         }
+        if (this.config.kbPipelines && this.config.kbPipelines.length > 0) {
+            params.set("kb_pipelines", this.config.kbPipelines.join(","));
+        }
         return `${base}/runtimes/${escapedArn}/ws?${params.toString()}`;
     }
 
@@ -167,6 +181,7 @@ export class AvatarWebSocketClient {
                 persona: this.config.persona ?? "friendly",
                 language: this.config.language ?? "en-US",
                 voiceId: this.config.voiceId ?? "tiffany",
+                kbPipelines: this.config.kbPipelines ?? [],
             });
         };
 
@@ -324,6 +339,18 @@ export class AvatarWebSocketClient {
         this.sendJSON({
             type: "voiceChange",
             voiceId,
+        });
+    }
+
+    /**
+     * Updates the KB pipeline multi-select for the current session.
+     * Empty array means "search every view".
+     */
+    updateKbPipelines(pipelines: KbPipeline[]): void {
+        this.config.kbPipelines = [...pipelines];
+        this.sendJSON({
+            type: "kbPipelinesChange",
+            kbPipelines: pipelines,
         });
     }
 

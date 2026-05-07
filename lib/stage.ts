@@ -47,6 +47,14 @@ export class ApplicationStage extends Stage {
             VITE_COGNITO_REDIRECT_URI: frontend.urls[0],
             VITE_COGNITO_POST_LOGOUT_REDIRECT_URI: frontend.urls[0],
             VITE_COGNITO_SCOPE: "email openid profile",
+            // Federated IdP — when midway is enabled, the AmazonFederate OIDC provider is
+            // registered on the user pool client (see FederateUserPoolClient). Surfacing the
+            // provider name to the frontend lets us pass identity_provider=AmazonFederate on
+            // signinRedirect so Cognito's Hosted UI skips the IdP chooser and jumps straight
+            // to Midway.
+            ...(this.node.getContext("accounts")?.[this.stageName ?? ""]?.midway
+                ? { VITE_COGNITO_IDENTITY_PROVIDER: "AmazonFederate" }
+                : {}),
             // Backend runtime ARNs
             VITE_RUNTIME_ARN_ORCHESTRATOR: backend.orchestratorRuntimeArn,
             ...(features.avatar && backend.avatarRuntimeArn

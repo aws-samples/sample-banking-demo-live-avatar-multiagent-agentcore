@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Avatar3DRobot } from "./Avatar3DRobot";
 import { Avatar3DBlob } from "./Avatar3DBlob";
 import { Avatar3DCrystal } from "./Avatar3DCrystal";
-import type { AvatarVariant, AvatarVariantName, QualityTier } from "./AvatarVariant";
+import type { AvatarVariant, AvatarVariantName, MouthShape } from "./AvatarVariant";
 
 interface Avatar3DReactWrapperProps {
     audioLevel?: number;
@@ -10,7 +10,7 @@ interface Avatar3DReactWrapperProps {
     isListening?: boolean;
     className?: string;
     variant?: AvatarVariantName;
-    quality?: QualityTier;
+    mouthShape?: MouthShape;
 }
 
 // Single friendly cyan — the previous idle/speaking split (blue → lime-green)
@@ -37,7 +37,7 @@ export default function Avatar3DReactWrapper({
     isListening = false,
     className,
     variant = "robot",
-    quality = "medium",
+    mouthShape = "neutral",
 }: Avatar3DReactWrapperProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const avatarRef = useRef<AvatarVariant | null>(null);
@@ -54,7 +54,7 @@ export default function Avatar3DReactWrapper({
         avatar.setSpeaking(isSpeaking);
         avatar.setEyeColor(EYE_COLOR);
         avatar.updateLipSync(isSpeaking ? audioLevel : 0);
-        avatar.setQuality?.(quality);
+        avatar.setMouthShape?.(mouthShape);
 
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
@@ -73,10 +73,16 @@ export default function Avatar3DReactWrapper({
         };
     }, [variant]);
 
+    // Lip-sync driver — mirrors the 2026 reference implementation. No decay
+    // timer: the only signals that can zero the mouth are (a) an actual chunk
+    // with audioLevel <= 0, and (b) setSpeaking(false) from the isPlaying mirror
+    // below, which calls resetMouth() and zeros jawOpenAmount in Avatar3DRobot.
+    // Previously a 400ms decay timer committed updateLipSync(0) whenever PCM
+    // chunks paused mid-response (at punctuation / breath gaps), freezing the
+    // mouth until the next chunk arrived.
     useEffect(() => {
         const avatar = avatarRef.current;
         if (!avatar) return;
-
         if (isSpeaking) {
             avatar.updateLipSync(audioLevel);
         } else {
@@ -84,15 +90,16 @@ export default function Avatar3DReactWrapper({
         }
     }, [audioLevel, isSpeaking]);
 
+    // Speaking state mirror — drives setSpeaking on transitions, which in turn
+    // zeros jawOpenAmount and calls resetMouth() on false. This is the
+    // authoritative "mouth off" signal.
     useEffect(() => {
-        const avatar = avatarRef.current;
-        if (!avatar) return;
-        avatar.setSpeaking(isSpeaking);
-    }, [isSpeaking, isListening]);
+        avatarRef.current?.setSpeaking?.(isSpeaking);
+    }, [isSpeaking]);
 
     useEffect(() => {
-        avatarRef.current?.setQuality?.(quality);
-    }, [quality]);
+        avatarRef.current?.setMouthShape?.(mouthShape);
+    }, [mouthShape]);
 
     return (
         <div

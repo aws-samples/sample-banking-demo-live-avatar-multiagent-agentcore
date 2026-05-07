@@ -21,7 +21,9 @@ export class Avatar3D {
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         this.renderer.setSize(width, height);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
+        // Clamp DPR to 2 — full devicePixelRatio on 4K wastes GPU cycles
+        // without visible gain.
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         container.appendChild(this.renderer.domElement);
@@ -59,9 +61,37 @@ export class Avatar3D {
     };
 
     resize(width: number, height: number): void {
-        this.camera.aspect = width / height;
+        const aspect = width / height;
+        this.camera.aspect = aspect;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height);
+        // Honour DPR changes (e.g. moving between monitors of different DPR).
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        // Give subclasses a chance to reframe their camera for the new aspect.
+        this.onAspectChange?.(aspect);
+    }
+
+    /**
+     * Subclass hook: reframe the camera when the container's aspect ratio
+     * changes so the avatar fills its div consistently at any viewport.
+     */
+    protected onAspectChange?(aspect: number): void;
+
+    /**
+     * Shared camera-reframe helper. `baseZ` is the subclass' design-target
+     * camera Z; `baseAspect` is the aspect at which that Z was authored.
+     * Wider panels pull the camera in; very tall panels widen the FOV.
+     */
+    protected reframe(
+        camera: THREE.PerspectiveCamera,
+        baseZ: number,
+        baseAspect: number,
+        aspect: number
+    ): void {
+        const f = Math.min(Math.max(aspect / baseAspect, 0.6), 1.6);
+        camera.position.z = baseZ / f;
+        camera.fov = aspect < 0.9 ? Math.min(50 * (0.9 / aspect), 70) : 50;
+        camera.updateProjectionMatrix();
     }
 
     /** Update the orbit controls target (call after changing camera.lookAt). */

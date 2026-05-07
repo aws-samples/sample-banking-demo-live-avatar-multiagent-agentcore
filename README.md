@@ -1,6 +1,6 @@
 # Gartner AppDev Research Agent
 
-A multi-agent research platform built on **Amazon Bedrock AgentCore** that produces comprehensive PDF research reports through a human-in-the-loop pipeline. Two AgentCore Runtimes, 17 Gateway tools, four CDK stacks, zero cost when idle.
+A multi-agent research platform built on **Amazon Bedrock AgentCore** that produces comprehensive PDF research reports through a human-in-the-loop pipeline. Two AgentCore Runtimes, 18 Gateway tools, four CDK stacks, zero cost when idle.
 
 **Demo flow**: Home &rarr; Research &rarr; Menu &rarr; Chat &rarr; Avatar
 
@@ -23,7 +23,7 @@ graph LR
             OR[Orchestrator Runtime<br/>HTTP/SSE — Claude Sonnet 4.6]
             AV[Avatar Runtime<br/>WebSocket — Nova 2 Sonic]
         end
-        GW[Gateway<br/>MCP Protocol — 17 Tools]
+        GW[Gateway<br/>MCP Protocol — 18 Tools]
         MEM[Memory<br/>Episodic + Semantic + Preferences]
         GR[Guardrails<br/>Content + Topic + Word]
         BR[Browser<br/>Chromium microVM + DCV Live View]
@@ -32,7 +32,7 @@ graph LR
 
     subgraph "AWS Services"
         COG[Cognito<br/>User Pool + M2M]
-        KB[Bedrock Knowledge Base<br/>S3 Vectors]
+        KB["Bedrock Knowledge Base<br/>S3 Vectors — single KB,<br/>3 logical views: bistro_research,<br/>open_research, menu"]
         S3[S3 Buckets<br/>Reports + Images + KB Docs + Avatar]
         DDB[DynamoDB<br/>Sessions + Customers + Metadata]
         LAM[Lambda Functions<br/>ARM64 + Python 3.13]
@@ -70,7 +70,7 @@ graph LR
 | **Voice Avatar**           | Real-time speech-to-speech via Nova 2 Sonic with 5 selectable personas                                                                                    |
 | **Knowledge Base**         | S3 Vectors + Nova Multimodal Embeddings. Auto-ingests generated PDFs via an S3-triggered Lambda for cross-experience queries                              |
 | **AgentCore Memory**       | Episodic (session-scoped with reflection), semantic (cross-session facts), and user preference strategies                                                 |
-| **17 MCP Gateway Tools**   | KB search, web search, PDF generation, Nova Canvas/Reel, memory, user profiles, orders, website generator, PDF image extraction                           |
+| **18 MCP Gateway Tools**   | KB search, web search, PDF generation, Nova Canvas/Reel, memory, user profiles, orders, website generator, PDF image extraction                           |
 | **M2M OAuth2**             | Agent-to-Gateway auth via Cognito client credentials. Token cached with 60s safety margin                                                                 |
 | **Generative UI**          | SSE-streamed agent phases, research plan approval cards, tool activity indicators, browser live view                                                      |
 
@@ -119,6 +119,163 @@ All four agents run **in-process** within the orchestrator runtime — no HTTP b
 
 ---
 
+## User Journey & Mode Routing
+
+The React frontend maps each page to an orchestrator mode. All modes are served by the single orchestrator runtime, which branches on `payload.mode` to dispatch the right in-process pipeline or agent.
+
+```mermaid
+graph LR
+    Home[/"/ (Home)"/] --> Research[/"/research"/]
+    Home --> Menu[/"/menu"/]
+    Home --> Chat[/"/chat"/]
+    Home --> Avatar[/"/avatar"/]
+    Home --> Archive[/"/archive"/]
+    Home --> Studio[/"/research-studio"/]
+
+    Research -->|mode=research| Planner[Planner agent → plan JSON]
+    Planner -.->|user approves| ExecResearch[mode=research_execute<br/>Researcher → Synthesizer → PDF Writer]
+
+    Studio -->|mode=generic_research| GenPlanner[Planner → plan JSON]
+    GenPlanner -.->|user approves| GenExec[mode=generic_research_execute<br/>enhanced pipeline with images + data sources]
+
+    Menu -->|mode=menu| MenuPipe[Menu Designer → Menu PDF Writer<br/>Nova Canvas dish photos + CI image extraction]
+
+    Chat -->|mode=chatbot| Chatbot[Chatbot agent<br/>Guardrails + Browser sub-agent + Memory]
+
+    Archive -->|mode=archive_chat| ArchiveChat[Chatbot agent with<br/>ARCHIVE_CHAT_PROMPT → kb_search scope]
+
+    Avatar --> AvatarRT[Avatar Runtime<br/>WebSocket + Nova Sonic]
+```
+
+---
+
+## Concierge Chat Turn — Browser Sub-agent & Live View
+
+When the user asks the concierge to do something on a website, the Strands agent loop picks `browser_start` as its first tool. `browser_tools.py` runs **in-process** inside the orchestrator runtime, spawns an AgentCore Browser microVM over the bedrock-agentcore control plane, attaches Playwright via CDP, and immediately emits a `BrowserLiveView` UI event into the SSE stream. The frontend opens a sidebar and streams the DCV WebSocket, with a screenshot fallback on each navigation.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend (ChatInterface)
+    participant O as Orchestrator Runtime
+    participant BT as browser_tools.py<br/>(in-process)
+    participant AB as AgentCore Browser<br/>(microVM)
+    participant PW as Playwright (CDP)
+    participant SB as BrowserLiveViewSidebar
+    participant CF as ConciergeFlowSidebar
+
+    U->>FE: "Find flights to Seattle"
+    FE->>O: POST /invocations (mode=chatbot)
+    O->>BT: @tool browser_start()
+    BT->>AB: start_browser_session(aws.browser.v1)
+    AB-->>BT: session_id + live view URL
+    BT->>PW: connect_over_cdp(session)
+    BT-->>O: SSE ui event → BrowserLiveView
+    O-->>FE: SSE: {component: "BrowserLiveView", props: {url}}
+    FE->>SB: mount DCV WebSocket stream
+    FE->>CF: mark Runtime + Browser nodes active
+
+    loop Agent loop
+        O->>BT: @tool browser_navigate(url)
+        BT->>PW: page.goto(url)
+        BT-->>O: ok + screenshot (fallback)
+        O-->>FE: SSE: BrowserScreenshot (base64 JPEG)
+        O->>BT: @tool browser_get_text()
+        BT->>PW: page.inner_text("body")
+        BT-->>O: page text → LLM decides next action
+        O->>BT: browser_type / browser_click / browser_press_key
+    end
+
+    O->>BT: @tool browser_stop()
+    BT->>AB: terminate session
+    O-->>FE: SSE: final answer
+    FE->>CF: mark nodes idle
+```
+
+The `ConciergeFlowSidebar` (ReactFlow) subscribes to SSE events and highlights AgentCore components as they activate — Runtime, Gateway, Memory, Browser, Code Interpreter — so users see the architecture work in real time.
+
+---
+
+## Knowledge Base — Single Store, Three Logical Views
+
+The platform uses a **single physical Bedrock Knowledge Base** (S3 Vectors backend), but every ingested document is tagged with a logical `pipeline` attribute that carves the KB into three views:
+
+| Pipeline tag      | Source                                          | What's in it                                         |
+| ----------------- | ----------------------------------------------- | ---------------------------------------------------- |
+| `bistro_research` | Bistro Deep Dive (`mode=research_execute`)      | 12-section PDF research reports                      |
+| `open_research`   | Open Research (`mode=generic_research_execute`) | Enhanced research reports with images + data sources |
+| `menu`            | Menu Builder (`mode=menu`)                      | Restaurant menu PDFs with dish photography           |
+
+Every experience that reads from the KB does so with a server-enforced filter. The filter is injected by a `PipelineScopeHook` (`patterns/utils/pipeline_scope.py`) so the LLM cannot accidentally cross boundaries.
+
+| Mode                                            | Writes pipeline   | Reads pipelines                                                                                         |
+| ----------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------- |
+| `research` / `research_execute`                 | `bistro_research` | `bistro_research`                                                                                       |
+| `generic_research` / `generic_research_execute` | `open_research`   | `open_research`                                                                                         |
+| `menu`                                          | `menu`            | `bistro_research`, `open_research` (for cuisine/market intel — menus are NOT read to avoid circularity) |
+| `chatbot` (AI Concierge)                        | —                 | `menu` (answers menu/dining questions)                                                                  |
+| `archive_chat` (Report Archive)                 | —                 | _(no filter — reads every view)_                                                                        |
+| Voice Avatar                                    | —                 | _(user-controlled chip multi-select — defaults to all)_                                                 |
+
+### Ingestion flow
+
+Every PDF produced by the research or menu pipelines is automatically discoverable in future sessions. The `kb_ingest` Lambda is **not** a Gateway tool — it is an S3-triggered Lambda wired up in the Shared stack that reacts to `ObjectCreated` events on `reports/*.pdf` and `menus/*.pdf`.
+
+```mermaid
+sequenceDiagram
+    participant BDD as Bistro Deep Dive<br/>(research_execute)
+    participant OR as Open Research<br/>(generic_research_execute)
+    participant MB as Menu Builder<br/>(menu)
+    participant PDF as pdf_generator Lambda
+    participant RB as reportsBucket
+    participant KI as kb_ingest Lambda
+    participant KB as kbDocsBucket
+    participant BKB as Bedrock KB (S3 Vectors)
+
+    BDD->>PDF: pipeline="bistro_research"
+    OR->>PDF: pipeline="open_research"
+    MB->>PDF: pipeline="menu"
+    PDF->>RB: put reports/{...}.pdf OR menus/{...}.pdf<br/>Metadata: { user_id, pipeline }
+    RB-->>KI: S3 ObjectCreated (prefix+suffix filter)
+    KI->>RB: head_object → read user_id + pipeline from metadata<br/>(falls back to prefix if pipeline missing, maps legacy "research" → "bistro_research")
+    KI->>KB: copy → generated/{reports|menus}/...pdf<br/>Tags: source=generated, pipeline=<value>, generated_date
+    KI->>KB: put .metadata.json sidecar<br/>{ source, pipeline, user_id }
+    KI->>BKB: StartIngestionJob(data_source_id)
+    BKB-->>BKB: chunk + embed (Nova Multimodal) → S3 Vectors index
+```
+
+### Read paths
+
+```mermaid
+graph LR
+    subgraph KB["Single Bedrock KB — three logical views"]
+        BR[docs tagged<br/>pipeline=bistro_research]
+        OR[docs tagged<br/>pipeline=open_research]
+        M[docs tagged<br/>pipeline=menu]
+    end
+
+    BDDP[Bistro Deep Dive<br/>planner<br/><i>filter: bistro_research</i>]
+    MDR[Menu Designer<br/><i>filter: bistro_research,<br/>open_research</i>]
+    AIC[AI Concierge<br/><i>filter: menu</i>]
+    ARC[Report Archive<br/><i>no filter</i>]
+    VA[Voice Avatar<br/><i>user multi-select</i>]
+
+    BR --> BDDP
+    BR --> MDR
+    OR --> MDR
+    M --> AIC
+    BR --> ARC
+    OR --> ARC
+    M --> ARC
+    BR --> VA
+    OR --> VA
+    M --> VA
+```
+
+The `.metadata.json` sidecar stores both `user_id` (tenant isolation) and `pipeline` (logical view). The `kb_search` tool composes Bedrock filter clauses with `andAll` — users only ever see their own documents, scoped to whichever pipelines the current experience allows.
+
+---
+
 ## Gateway Tools
 
 ```
@@ -145,7 +302,7 @@ gateway/tools/
 └── kb_ingest/              # Not a Gateway tool — S3-triggered Lambda that auto-ingests generated PDFs into the KB
 ```
 
-Each tool is a self-contained directory with `handler.py` and `tool_spec.json`. The Gateway authenticates via Cognito JWT and routes MCP tool calls to the corresponding Lambda function.
+18 tools register with the Gateway by default (everything above except `research_orchestrator`, which is feature-gated, and `kb_ingest`, which is wired as an S3 event handler rather than an MCP tool). Each tool is a self-contained directory with `handler.py` and `tool_spec.json`. The Gateway authenticates via Cognito JWT and routes MCP tool calls to the corresponding Lambda function.
 
 ---
 
@@ -288,8 +445,8 @@ gartner-app-dev-research-agent/
 │   ├── synthesizer-agent/           # Cross-reference → executive summary
 │   ├── pdf-writer-agent/            # 12-section PDF generation
 │   ├── avatar-agent/                # BidiAgent WebSocket (Nova 2 Sonic)
-│   └── utils/                       # auth.py, ssm.py, heartbeat.py
-├── gateway/tools/                   # 17 Lambda-backed MCP tools + kb_ingest S3 trigger
+│   └── utils/                       # auth.py, ssm.py, heartbeat.py, tool_guard.py, pipeline_scope.py
+├── gateway/tools/                   # 18 Lambda-backed MCP tools + kb_ingest S3 trigger
 ├── lib/stacks/frontend/app/
 │   ├── scripts/sync-dcv-sdk.mjs     # Sync NICE DCV Web Client SDK into public/ for browser live view
 │   └── src/components/

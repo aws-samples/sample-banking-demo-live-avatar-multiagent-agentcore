@@ -20,6 +20,8 @@ export interface PresignParams {
     language?: string;
     /** Voice ID for TTS */
     voiceId?: string;
+    /** Initial KB pipeline multi-select as a comma-separated string value */
+    kbPipelines?: string[];
 }
 
 /**

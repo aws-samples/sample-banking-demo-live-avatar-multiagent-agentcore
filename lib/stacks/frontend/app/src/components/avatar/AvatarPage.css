@@ -24,15 +24,16 @@
 
 .avatar-page__main {
     flex: 1;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
     overflow: hidden;
-    gap: 0;
     min-height: 0;
+    /* ResizablePanelLayout.resizable-layout takes care of the horizontal layout
+       (via react-resizable-panels Group). Kept as a marker class so existing
+       CSS selectors (mic-hot glow) still match. */
 }
 
 .avatar-page__main--with-pdf {
-    grid-template-columns: 1fr 1fr 1fr;
+    /* Deprecated — panel layout is now driven by ResizablePanelLayout config.
+       Retained for backward compatibility with any lingering CSS selectors. */
 }
 
 /* Avatar column */
@@ -40,6 +41,7 @@
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--color-border-divider-default, #e9ebed);
+    height: 100%;
     min-height: 0;
     overflow: hidden;
 }
@@ -66,7 +68,12 @@
 .avatar-page__avatar-canvas {
     flex: 1;
     position: relative;
-    min-height: 300px;
+    /* No min-height/width floor here — it was papering over collapsed columns
+       at 4K. The mobile media queries below still apply min-height for the
+       stacked layout. Aspect-ratio camera reframing (Avatar3D.ts) handles
+       sizing across 1440/2560/3840+ displays. */
+    min-height: 0;
+    min-width: 0;
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
     transition: box-shadow 0.3s ease;
 }
@@ -114,6 +121,7 @@
 .avatar-page__chat-col {
     display: flex;
     flex-direction: column;
+    height: 100%;
     min-height: 0;
     overflow: hidden;
 }
@@ -257,6 +265,7 @@
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--color-border-divider-default, #e9ebed);
+    height: 100%;
     min-height: 0;
     overflow: hidden;
     animation: pdfSlideIn 0.3s ease-out;
@@ -424,19 +433,8 @@
    Responsive breakpoints
    ============================ */
 
-/* Large Desktop (1440+) */
-@media (min-width: 1440px) {
-    .avatar-page__avatar-canvas {
-        min-height: 500px;
-    }
-}
-
-/* Desktop (1024-1439) */
-@media (min-width: 1024px) and (max-width: 1439px) {
-    .avatar-page__avatar-canvas {
-        min-height: 400px;
-    }
-}
+/* Desktop 1024+: width-gated min-height overrides removed — aspect-ratio
+   camera reframing now handles sizing across 1440/2560/3840+ displays. */
 
 /* Tablet (768-1023): stack avatar and chat vertically */
 @media (min-width: 768px) and (max-width: 1023px) {

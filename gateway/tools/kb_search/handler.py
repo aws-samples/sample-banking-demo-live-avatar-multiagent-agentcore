@@ -49,13 +49,80 @@ def _presign_s3_uri(s3_uri: str, page: int | None = None) -> str | None:
         return None
 
 
-def _retrieve_and_generate(knowledge_base_id: str, query: str, max_results: int, user_id: str = "") -> str:
+# Valid pipeline tags — must stay in sync with kb_ingest / pdf_generator / orchestrator.
+VALID_PIPELINES = {"bistro_research", "open_research", "menu"}
+MAX_PIPELINES = 10
+
+
+def _sanitize_pipelines(pipelines) -> list[str]:
+    """Return a deduplicated list of valid pipeline values, empty if none are valid.
+
+    Unknown entries are logged and dropped rather than causing a hard error so
+    the search still runs; the caller's own validation remains the source of
+    truth for rejecting bad input.
+    """
+    if not pipelines:
+        return []
+    if not isinstance(pipelines, list):
+        logger.warning("kb_search: pipelines must be a list, got %r", type(pipelines).__name__)
+        return []
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for p in pipelines[:MAX_PIPELINES]:
+        if not isinstance(p, str):
+            continue
+        p = p.strip()
+        if p not in VALID_PIPELINES:
+            logger.warning("kb_search: dropping unknown pipeline value: %r", p)
+            continue
+        if p in seen:
+            continue
+        seen.add(p)
+        cleaned.append(p)
+    return cleaned
+
+
+def _build_filter(user_id: str, pipelines: list[str]) -> dict | None:
+    """Compose the Bedrock vectorSearchConfiguration filter.
+
+    Shapes:
+    - Neither: None (returns all docs).
+    - user_id only: equals on user_id.
+    - pipelines only (len 1): equals on pipeline.
+    - pipelines only (len 2+): in on pipeline.
+    - Both: andAll of user_id equals + pipeline equals/in.
+    """
+    user_clause: dict | None = None
+    if user_id:
+        user_clause = {"equals": {"key": "user_id", "value": user_id}}
+
+    pipeline_clause: dict | None = None
+    if pipelines:
+        if len(pipelines) == 1:
+            pipeline_clause = {"equals": {"key": "pipeline", "value": pipelines[0]}}
+        else:
+            pipeline_clause = {"in": {"key": "pipeline", "value": pipelines}}
+
+    if user_clause and pipeline_clause:
+        return {"andAll": [user_clause, pipeline_clause]}
+    return user_clause or pipeline_clause
+
+
+def _retrieve_and_generate(
+    knowledge_base_id: str,
+    query: str,
+    max_results: int,
+    user_id: str = "",
+    pipelines: list[str] | None = None,
+) -> str:
     """Query Bedrock Knowledge Base using Retrieve.
 
     When user_id is provided, applies server-side Bedrock filtering to scope
-    results to that user's generated research. Untagged shared documents are
-    returned regardless because S3 Vectors only filters on documents that
-    actually have the metadata key present.
+    results to that user's generated research. When pipelines is provided,
+    further scopes results to the given logical pipeline(s) (bistro_research,
+    open_research, menu). Untagged shared documents are returned regardless
+    because S3 Vectors only filters on documents that actually have the
+    metadata key present.
     """
     vector_config: dict = {
         "numberOfResults": max_results,
@@ -67,16 +134,24 @@ def _retrieve_and_generate(knowledge_base_id: str, query: str, max_results: int,
         logger.warning("kb_search: invalid user_id rejected: %r", user_id)
         user_id = ""
 
-    # Optional per-user scoping: when user_id is provided, prefer that user's
-    # generated docs. Documents without a user_id tag (shared base docs) are
-    # always included because S3 Vectors only filters on documents that have
-    # the metadata key — untagged documents pass through automatically.
-    if user_id:
-        vector_config["filter"] = {"equals": {"key": "user_id", "value": user_id}}
-    else:
-        logger.info("kb_search: no user_id provided, returning all docs (unfiltered)")
+    pipelines = _sanitize_pipelines(pipelines or [])
 
-    logger.info(f"Retrieving from KB {knowledge_base_id} with filter: {vector_config.get('filter', 'none')}")
+    # Optional per-user + per-pipeline scoping. Documents without the relevant
+    # metadata key are always included because S3 Vectors only filters on
+    # documents that have the metadata key — untagged documents pass through.
+    composed_filter = _build_filter(user_id, pipelines)
+    if composed_filter:
+        vector_config["filter"] = composed_filter
+    else:
+        logger.info("kb_search: no user_id or pipelines provided, returning all docs (unfiltered)")
+
+    logger.info(
+        "Retrieving from KB %s with filter: %s (user_id=%s, pipelines=%s)",
+        knowledge_base_id,
+        vector_config.get("filter", "none"),
+        bool(user_id),
+        pipelines,
+    )
 
     response = bedrock_agent.retrieve(
         knowledgeBaseId=knowledge_base_id,
@@ -187,6 +262,7 @@ def handler(event, context):
             query = event.get("query", "")
             max_results = event.get("max_results", 5)
             user_id = event.get("user_id", "")
+            pipelines = event.get("pipelines", [])
 
             if not query:
                 return {"error": "Missing required parameter: query"}
@@ -195,7 +271,7 @@ def handler(event, context):
             if not knowledge_base_id:
                 return {"error": "KNOWLEDGE_BASE_ID environment variable not configured"}
 
-            result = _retrieve_and_generate(knowledge_base_id, query, max_results, user_id)
+            result = _retrieve_and_generate(knowledge_base_id, query, max_results, user_id, pipelines)
             return {"content": [{"type": "text", "text": result}]}
         else:
             return {"error": f"This Lambda only supports 'kb_search', received: {tool_name}"}
@@ -203,3 +279,28 @@ def handler(event, context):
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)
         return {"error": f"Internal server error: {str(e)}"}
+
+
+# ── Smoke test ────────────────────────────────────────────────────────────
+# Run directly (`python handler.py`) to verify filter shapes without hitting AWS.
+if __name__ == "__main__":
+    import pprint
+
+    test_cases = [
+        ("no filter", "", []),
+        ("user only", "user-abc", []),
+        ("single pipeline", "", ["menu"]),
+        ("multi pipeline", "", ["bistro_research", "open_research"]),
+        ("both user + single pipeline", "user-abc", ["menu"]),
+        ("both user + multi pipeline", "user-abc", ["bistro_research", "menu"]),
+        ("unknown pipeline dropped", "user-abc", ["bistro_research", "bogus"]),
+        ("bogus pipelines type", "user-abc", "not-a-list"),
+        ("duplicate pipelines deduped", "", ["menu", "menu", "open_research"]),
+    ]
+    for label, uid, pipes in test_cases:
+        cleaned = _sanitize_pipelines(pipes) if isinstance(pipes, list) or pipes is None else _sanitize_pipelines(pipes)
+        composed = _build_filter(uid, cleaned)
+        print(f"\n[{label}]  user_id={uid!r}  pipelines={pipes!r}")
+        print("  cleaned :", cleaned)
+        print("  filter  :", end=" ")
+        pprint.pprint(composed, compact=True)

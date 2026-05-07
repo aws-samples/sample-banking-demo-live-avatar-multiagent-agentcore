@@ -52,7 +52,7 @@ def _add_paragraphs(story, text, style):
         story.append(Paragraph(_safe_text(p), style))
 
 
-def _generate_pdf(topic: str, report: dict, user_id: str = "") -> str:
+def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "bistro_research") -> str:
     """Generate a comprehensive PDF report and upload to S3, returning a presigned URL."""
     from reportlab.lib.enums import TA_CENTER
     from reportlab.platypus import PageBreak
@@ -647,7 +647,7 @@ def _generate_pdf(topic: str, report: dict, user_id: str = "") -> str:
         ContentType="application/pdf",
         Metadata={
             "generated_date": datetime.utcnow().strftime("%Y-%m-%d"),
-            "pipeline": "research",
+            "pipeline": pipeline,
             "page_count": str(total_pages),
             **({"user_id": user_id} if user_id else {}),
         },
@@ -701,7 +701,7 @@ def _fetch_image(s3_key: str = "", image_url: str = "") -> BytesIO | None:
     return None
 
 
-def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "") -> str:
+def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "", pipeline: str = "menu") -> str:
     """Generate a polished restaurant menu PDF with dish photos and upload to S3."""
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT
     from reportlab.platypus import HRFlowable
@@ -949,7 +949,7 @@ def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "") -> str:
         ContentType="application/pdf",
         Metadata={
             "generated_date": datetime.utcnow().strftime("%Y-%m-%d"),
-            "pipeline": "menu",
+            "pipeline": pipeline,
             **({"user_id": user_id} if user_id else {}),
         },
     )
@@ -1000,16 +1000,29 @@ def handler(event, context):
             fmt = event.get("format", "research")
             user_id = event.get("user_id", "")
 
+            # Validate pipeline. Defaults:
+            #   fmt=menu     -> "menu"
+            #   fmt=research -> "bistro_research" (backward compatible: legacy callers
+            #                   for the Bistro Deep Dive pipeline need no changes).
+            # Callers on the Open Research pipeline must pass pipeline="open_research".
+            allowed_pipelines = {"bistro_research", "open_research", "menu"}
+            pipeline = event.get("pipeline")
+            if pipeline not in allowed_pipelines:
+                if pipeline:
+                    logger.warning("pdf_generator: unknown pipeline %r, falling back to default", pipeline)
+                pipeline = "menu" if fmt == "menu" else "bistro_research"
+            logger.info(f"pdf_generator: fmt={fmt} pipeline={pipeline} user_id={'yes' if user_id else 'no'}")
+
             if fmt == "menu":
                 menu_title = event.get("title", "Menu")
                 menu_data = event.get("menu", {})
-                result = _generate_menu_pdf(menu_title, menu_data, user_id=user_id)
+                result = _generate_menu_pdf(menu_title, menu_data, user_id=user_id, pipeline=pipeline)
             else:
                 topic = event.get("topic", "Report")
                 report = event.get("report", {})
                 if not topic:
                     return {"error": "Missing required parameter: topic"}
-                result = _generate_pdf(topic, report, user_id=user_id)
+                result = _generate_pdf(topic, report, user_id=user_id, pipeline=pipeline)
 
             return {"content": [{"type": "text", "text": result}]}
         else:
