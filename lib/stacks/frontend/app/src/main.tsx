@@ -18,7 +18,15 @@ import "./styles/globals.css";
  */
 function migrateResizablePanelLayouts(): void {
     try {
-        const legacyKeys = ["resizable-layout-chat", "resizable-layout-menu"];
+        const legacyKeys = [
+            "resizable-layout-chat",
+            "resizable-layout-menu",
+            // v2 clamped minSize/maxSize too tightly on narrow viewports.
+            // v3 drops maxSize and lowers the floor so the divider can slide
+            // across the full viewport width.
+            "resizable-layout-chat-v2",
+            "resizable-layout-menu-v2",
+        ];
         for (const key of legacyKeys) {
             if (window.localStorage.getItem(key) !== null) {
                 window.localStorage.removeItem(key);

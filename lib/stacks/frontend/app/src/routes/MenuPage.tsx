@@ -107,16 +107,16 @@ export default function MenuPage(): JSX.Element {
 
     // Panel configs: main chat takes most of the width; sidebar adds a panel
     // entry only when shown. Collapsed state just shrinks its defaultSize.
-    // Constraints are intentionally loose so the user can drag the divider
-    // across most of the viewport if they want to focus on either side.
+    // Constraints are intentionally minimal — 3-5% floor, no maxSize — so the
+    // divider can slide the full viewport width. The collapse button covers
+    // the "snap shut" use case.
     const menuPanels = useMemo(() => {
-        const configs: ResizablePanelConfig[] = [{ id: "menu-main", defaultSize: 75, minSize: 10 }];
+        const configs: ResizablePanelConfig[] = [{ id: "menu-main", defaultSize: 75, minSize: 5 }];
         if (showSidebar) {
             configs.push({
                 id: "menu-sidebar",
                 defaultSize: sidebarCollapsed ? 5 : 25,
                 minSize: 3,
-                maxSize: 70,
             });
         }
         const total = configs.reduce((s, c) => s + c.defaultSize, 0);
@@ -134,10 +134,10 @@ export default function MenuPage(): JSX.Element {
 
     return (
         <ResizablePanelLayout
-            autoSaveId="menu-v2"
+            autoSaveId="menu-v3"
             direction="horizontal"
             panels={menuPanels}
-            className="h-full"
+            className="h-full w-full"
         >
             <div className="h-full w-full min-w-0">
                 <ChatInterface
