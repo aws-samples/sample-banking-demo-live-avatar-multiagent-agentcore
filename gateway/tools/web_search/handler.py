@@ -28,9 +28,7 @@ def _web_search(query: str, max_results: int) -> str:
             messages=[
                 {
                     "role": "user",
-                    "content": [
-                        {"text": query}
-                    ],
+                    "content": [{"text": query}],
                 }
             ],
             system=[
@@ -42,9 +40,7 @@ def _web_search(query: str, max_results: int) -> str:
                     )
                 }
             ],
-            toolConfig={
-                "tools": [{"systemTool": {"name": "nova_grounding"}}]
-            },
+            toolConfig={"tools": [{"systemTool": {"name": "nova_grounding"}}]},
         )
 
         # Extract text with interleaved citations
@@ -59,9 +55,7 @@ def _web_search(query: str, max_results: int) -> str:
                 for citation in block["citationsContent"].get("citations", []):
                     web = citation.get("location", {}).get("web", {})
                     if web.get("url"):
-                        citations.append(
-                            {"url": web["url"], "domain": web.get("domain", "")}
-                        )
+                        citations.append({"url": web["url"], "domain": web.get("domain", "")})
 
         return json.dumps(
             {
@@ -85,9 +79,7 @@ def handler(event, context):
     try:
         delimiter = "___"
         original_tool_name = context.client_context.custom["bedrockAgentCoreToolName"]
-        tool_name = original_tool_name[
-            original_tool_name.index(delimiter) + len(delimiter) :
-        ]
+        tool_name = original_tool_name[original_tool_name.index(delimiter) + len(delimiter) :]
 
         logger.info(f"Processing tool: {tool_name}")
 
@@ -101,9 +93,7 @@ def handler(event, context):
             result = _web_search(query, max_results)
             return {"content": [{"type": "text", "text": result}]}
         else:
-            return {
-                "error": f"This Lambda only supports 'web_search', received: {tool_name}"
-            }
+            return {"error": f"This Lambda only supports 'web_search', received: {tool_name}"}
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)

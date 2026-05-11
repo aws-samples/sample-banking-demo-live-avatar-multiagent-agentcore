@@ -1,6 +1,6 @@
 # Gartner AppDev Research Agent
 
-A multi-agent research platform built on **Amazon Bedrock AgentCore** that produces comprehensive PDF research reports through a human-in-the-loop pipeline. Two AgentCore Runtimes, 18 Gateway tools, four CDK stacks, zero cost when idle.
+A multi-agent research platform built on **Amazon Bedrock AgentCore** that produces comprehensive PDF research reports through a human-in-the-loop pipeline. Two AgentCore Runtimes, 18 Gateway tools, five CDK stacks (Frontend, Auth, Shared, Backend, FrontendDeployment), zero cost when idle.
 
 **Demo flow**: Home &rarr; Research &rarr; Menu &rarr; Chat &rarr; Avatar
 
@@ -274,6 +274,8 @@ graph LR
 
 The `.metadata.json` sidecar stores both `user_id` (tenant isolation) and `pipeline` (logical view). The `kb_search` tool composes Bedrock filter clauses with `andAll` — users only ever see their own documents, scoped to whichever pipelines the current experience allows.
 
+> **Isolation model:** see [docs/kb-isolation.md](docs/kb-isolation.md) for the full threat model, enforcement points, and a runbook for cleaning up legacy untagged docs.
+
 ---
 
 ## Gateway Tools
@@ -310,9 +312,9 @@ gateway/tools/
 
 | Layer                  | Technology                                    | Version                                    |
 | ---------------------- | --------------------------------------------- | ------------------------------------------ |
-| **Infrastructure**     | AWS CDK                                       | 2.1108.0 (pinned)                          |
-| **CDK Constructs**     | `@aws-cdk/aws-bedrock-agentcore-alpha`        | 2.240.0+                                   |
-| **Agent Framework**    | Strands Agents SDK                            | 0.4.0+                                     |
+| **Infrastructure**     | AWS CDK                                       | 2.1121.0 (pinned)                          |
+| **CDK Constructs**     | `@aws-cdk/aws-bedrock-agentcore-alpha`        | 2.253.1-alpha.0+                           |
+| **Agent Framework**    | Strands Agents SDK (Python)                   | `>=1.33.0,<2.0.0`                          |
 | **Orchestrator Model** | Claude Sonnet 4.6                             | `us.anthropic.claude-sonnet-4-6`           |
 | **Voice Model**        | Nova 2 Sonic                                  | `amazon.nova-2-sonic-v1:0`                 |
 | **Tool Selector**      | Nova 2 Lite                                   | `amazon.nova-2-lite-v1:0`                  |
@@ -326,6 +328,8 @@ gateway/tools/
 | **Flow Visualization** | ReactFlow                                     | 12.10+                                     |
 | **Lambda Runtime**     | Python 3.13, ARM64                            |                                            |
 | **Node.js**            | 22.8.0 (Volta-managed)                        |                                            |
+
+> **Alpha-channel note:** Amazon Bedrock AgentCore is GA as a service, but the CDK L2 construct (`@aws-cdk/aws-bedrock-agentcore-alpha`) is still shipped in the `-alpha.0` channel as of `2.253.1-alpha.0`. Minor-version bumps can still include breaking API changes — review the construct release notes when upgrading.
 
 ---
 

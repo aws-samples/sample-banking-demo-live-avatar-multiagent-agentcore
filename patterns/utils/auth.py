@@ -38,6 +38,46 @@ def _get_secrets_client():
     return _secrets_client
 
 
+def extract_user_id_from_token(token: str) -> str:
+    """
+    Extract the Cognito `sub` claim from a JWT without verifying its signature.
+
+    This function assumes the token has ALREADY been validated by an upstream
+    authenticator (AgentCore Runtime's JWT authorizer for HTTP/SSE, Cognito
+    Identity Pool's credential issuance for WebSocket). The function is
+    transport-agnostic; callers on HTTP/SSE use `extract_user_id_from_context`,
+    WebSocket callers pass the ID token from the signed handshake URL.
+
+    Args:
+        token: Raw JWT string (no "Bearer " prefix). Must contain a `sub` claim.
+
+    Returns:
+        The user ID (sub claim).
+
+    Raises:
+        ValueError: If token is empty, malformed, or missing the `sub` claim.
+    """
+    if not token:
+        raise ValueError("Empty JWT token passed to extract_user_id_from_token")
+
+    # Decode without signature verification — upstream already validated.
+    try:
+        claims = jwt.decode(  # nosemgrep: unverified-jwt-decode
+            jwt=token,
+            options={"verify_signature": False},
+            algorithms=["RS256"],
+        )
+    except jwt.PyJWTError as exc:
+        raise ValueError(f"Failed to decode JWT: {exc}") from exc
+
+    user_id = claims.get("sub")
+    if not user_id:
+        raise ValueError("JWT token does not contain a 'sub' claim. Cannot determine user identity.")
+
+    logger.info("Extracted user_id from JWT: %s", user_id)
+    return user_id
+
+
 def extract_user_id_from_context(context: RequestContext) -> str:
     """
     Securely extract the user ID from the JWT token in the request context.
@@ -77,21 +117,7 @@ def extract_user_id_from_context(context: RequestContext) -> str:
 
     # Remove "Bearer " prefix to get the raw JWT token
     token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else auth_header
-
-    # Decode without signature verification — Runtime already validated the token.
-    # We use options to skip all verification since this is a trusted, pre-validated token.
-    claims = jwt.decode(  # nosemgrep: unverified-jwt-decode
-        jwt=token,
-        options={"verify_signature": False},
-        algorithms=["RS256"],
-    )
-
-    user_id = claims.get("sub")
-    if not user_id:
-        raise ValueError("JWT token does not contain a 'sub' claim. Cannot determine user identity.")
-
-    logger.info("Extracted user_id from JWT: %s", user_id)
-    return user_id
+    return extract_user_id_from_token(token)
 
 
 def get_secret(secret_name: str) -> str:

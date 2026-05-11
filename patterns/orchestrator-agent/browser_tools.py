@@ -168,6 +168,22 @@ def browser_start() -> str:
         },
     )
 
+    # One-shot notice so users understand the per-turn microVM lifecycle.
+    # The frontend renders this as a dismissible banner and remembers the
+    # dismissal in localStorage, so it only surfaces for first-time users.
+    # Each chatbot turn starts a fresh module-level _state and a fresh microVM;
+    # multi-step flows need to be completed in a single user message.
+    _emit_ui(
+        "BrowserSessionNotice",
+        {
+            "message": (
+                "A new browser microVM starts for each chat turn. "
+                "Complete multi-step flows (like booking a reservation) in a single message — "
+                "the session terminates when this turn ends."
+            ),
+        },
+    )
+
     return "Browser session started. Live view is now streaming to the user."
 
 

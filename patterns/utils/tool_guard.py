@@ -23,6 +23,7 @@ USER_SCOPED_TOOLS: frozenset[str] = frozenset(
         "gateway_nova_canvas_generate",
         "gateway_nova_canvas_edit",
         "gateway_nova_reel_generate",
+        "gateway_place_order",
     }
 )
 

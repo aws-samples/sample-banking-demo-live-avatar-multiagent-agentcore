@@ -1,76 +1,75 @@
-# Resizable Side-Panel Bug — Audit & Fix Plan
+# Resizable Side-Panel Bug — Audit & Status
 
 ## Summary
 
-Dragging the divider on `/menu` and `/chat` does nothing — the sidebar appears as
-a ~320 px sliver on the left and never resizes. Root cause: the **direct
-children of each `Panel`** fix their own width with Tailwind classes
-(`w-80 lg:w-96 flex-none`), which overrides the Panel's percent-based flex-basis
-sizing. The Panel happily resizes its wrapper `div`, but the fixed-width child
-inside never changes size, so the user sees no effect.
+Dragging the divider on `/menu` and `/chat` used to do nothing — the sidebar
+appeared as a ~320 px sliver on the left and never resized. Root cause: the
+**direct children of each `Panel`** fixed their own width with Tailwind
+classes (`w-80 lg:w-96 flex-none`), which overrode the Panel's percent-based
+flex-basis sizing.
 
-A second, cumulative cause: `react-resizable-panels@4` rehydrates layouts from
-`localStorage` on every mount. Any session that previously persisted a
-collapsed/broken layout (e.g. `{menu-main: 95, menu-sidebar: 5}`) stays broken
-forever on that browser until the key is cleared.
+A second, cumulative cause: `react-resizable-panels@4` rehydrates layouts
+from `localStorage` on every mount. Any session that previously persisted
+a collapsed/broken layout stayed broken forever on that browser until the
+key was cleared.
+
+**Status: FIXED.** All three fixes below are in the current codebase. The
+file is kept as a reference for anyone adding new consumers of
+`ResizablePanelLayout`.
 
 ## Consumers of `ResizablePanelLayout`
 
-Found via `rg -l ResizablePanelLayout src/`:
+| File                                    | `autoSaveId`  | Status                                                                   |
+| --------------------------------------- | ------------- | ------------------------------------------------------------------------ |
+| `components/chat/ChatInterface.tsx`     | `"chat-v3"`   | ✅ Fixed — main column uses `h-full w-full min-w-0`, no hardcoded widths |
+| `routes/MenuPage.tsx`                   | `"menu-v3"`   | ✅ Fixed — collapsed + expanded sidebar both use `h-full w-full min-w-0` |
+| `components/avatar/AvatarInterface.tsx` | `"avatar-v2"` | ✅ OK — was always using CSS-class children with no hard-coded widths    |
 
-| File | `autoSaveId` | Status |
-|---|---|---|
-| `components/chat/ChatInterface.tsx` | `"chat"` | **Broken** — main column uses `flex-1` fighting Panel sizing; sidebars are OK (use `w-full`). Bump to `"chat-v2"`. |
-| `routes/MenuPage.tsx` | `"menu"` | **Broken** — `MenuPipelineSidebar` child uses `w-80 lg:w-96 flex-none` (expanded) and `flex-none` (collapsed). Bump to `"menu-v2"`. |
-| `components/avatar/AvatarInterface.tsx` | `"avatar-v2"` | **OK** — already uses CSS-class children with no hard-coded widths; already versioned. No change needed. |
+Searches confirm the absence of offenders:
 
-No other files import the layout. `/research`, `/research-studio`, `/archive`
-all render via `ChatInterface`, so the chat fix covers them.
+```bash
+rg -n 'w-80 lg:w-96|flex-none' lib/stacks/frontend/app/src/routes/MenuPage.tsx
+rg -n 'w-80|w-96|flex-none' lib/stacks/frontend/app/src/components/menu/MenuSidePanel.tsx
+```
 
-## Direct-child offenders (fixed-width inside a `Panel`)
+Both return zero matches.
 
-| File | Line | Offending class | Fix |
-|---|---|---|---|
-| `routes/MenuPage.tsx` | 61 | `flex-none flex flex-col items-center py-3 glass-panel-strong` (collapsed sidebar) | Drop `flex-none`; use `h-full w-full min-w-0 flex flex-col items-center py-3 glass-panel-strong`. |
-| `routes/MenuPage.tsx` | 76 | `w-80 lg:w-96 flex-none overflow-y-auto flex flex-col glass-panel-strong` (expanded sidebar) | Drop `w-80 lg:w-96 flex-none`; use `h-full w-full min-w-0 overflow-y-auto flex flex-col glass-panel-strong`. |
-| `components/chat/ChatInterface.tsx` | 184 | `flex flex-col h-full min-w-0 flex-1` (main chat column inside a Panel) | Drop `flex-1` — the Panel already sizes; keep `min-w-0 h-full w-full flex flex-col`. |
-| `components/menu/MenuSidePanel.tsx` | 23 | `w-80 lg:w-96 flex-none overflow-y-auto flex flex-col glass-panel-strong` | Same swap. **Note:** `MenuSidePanel` is not currently imported anywhere (dead code) — fixing it preserves consistency for when it is re-wired. |
+## Fixes applied
 
-## Safe existing patterns (don't change)
+1. **Direct-child width classes removed.** Every `Panel` direct child now
+   uses `h-full w-full min-w-0` (plus `flex flex-col` where needed). The
+   Panel's flex-basis percentage is what sizes the wrapper.
 
-- `ConciergeFlowSidebar.tsx` — `flex h-full w-full shrink-0 flex-col`. `w-full`
-  fills the Panel; `shrink-0` is inert because the Panel wrapper controls the
-  flex-basis. OK as-is.
-- `BrowserLiveViewSidebar.tsx` — same pattern. OK.
-- `AvatarInterface.tsx` — uses CSS-class children (`avatar-page__avatar-col`,
-  etc.) that flex naturally. OK.
+2. **`autoSaveId` bumps.** `"chat"` → `"chat-v3"`, `"menu"` → `"menu-v3"`
+   force fresh layouts for users who had broken saved state.
 
-## Drag-handle affordance issues
+3. **`localStorage` migration in `main.tsx`.** `migrateResizablePanelLayouts()`
+   removes legacy keys (`resizable-layout-chat`, `resizable-layout-menu`,
+   `resizable-layout-chat-v2`, `resizable-layout-menu-v2`) on every app
+   boot. Idempotent; safe on repeat.
 
-- Handle is only 4 px wide — hard to grab on a high-DPI display.
-- Grip dots have `opacity: 0` at idle — no visual hint the handle is
-  interactive.
-- Only a single AWS-orange hover colour indicates drag capability.
+## If you add a new consumer
 
-Fix: widen the **hit target** to ~16 px via `::before` (keep the visible strip
-at ~6 px), raise idle grip-dot opacity to ~0.35, keep AWS orange
-(`#FF9900`) on hover/focus. `react-resizable-panels` already emits
-`role="separator"` with ArrowLeft/ArrowRight keyboard support — do not clobber.
+- Put `h-full w-full min-w-0` on every direct child of a `Panel`. `min-w-0`
+  in particular is required so the Panel can actually shrink below the
+  child's natural content width.
+- Never use `flex-none` or `w-{px}` on a direct child of a `Panel` — it
+  overrides `react-resizable-panels`' width control.
+- If you change panel semantics in a way that could break saved layouts,
+  bump the `autoSaveId` and add the old key to `migrateResizablePanelLayouts`
+  in `main.tsx`.
 
-## localStorage cleanup
+## Related fixes
 
-Bump `autoSaveId`s:
-- `"chat"` → `"chat-v2"`
-- `"menu"` → `"menu-v2"`
-- `"avatar-v2"` stays (already versioned).
+The panel fixes landed alongside `Task 8` from the `audit-and-fixes` plan,
+which also added:
 
-Add a one-time migration in `main.tsx` that removes legacy keys
-(`resizable-layout-chat`, `resizable-layout-menu`). Idempotent; safe on repeat.
+- `place_order` to `USER_SCOPED_TOOLS` so the concierge's ordering path
+  has a verified `customerId` on every DynamoDB item.
+- `asyncio.get_running_loop()` replacements for the three deprecated
+  `asyncio.get_event_loop()` call sites in `orchestrator_agent.py`.
+- A 30-second timeout on the chatbot's `_tool_use_active` flag so a
+  missing `message` event doesn't permanently swallow streamed text.
 
-## Follow-ups (not in this PR)
-
-- Consider extracting the sidebars' width/collapse state into Zustand so
-  toggles persist across navigations (currently re-mounts reset state).
-- `MenuSidePanel.tsx` is dead code; decide whether to delete or wire it up.
-- Avatar's `KbPipelineChips` strip sits above the resizable area — no panel
-  treatment needed today.
+See `docs/kb-isolation.md` for the broader isolation model these fixes
+are part of.

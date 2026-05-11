@@ -36,17 +36,32 @@ from utils.pipeline_scope import PipelineScopeHook, mode_config
 from utils.ssm import get_ssm_parameter
 from utils.tool_guard import UserScopeHook
 
-try:
-    from browser_tools import BROWSER_TOOLS
-    from browser_tools import cleanup as browser_cleanup
-    from browser_tools import set_ui_queue as set_browser_ui_queue
-except Exception as _browser_import_err:  # pragma: no cover — browser deps optional
+# Browser tools are feature-gated: CDK sets ENABLE_BROWSER_TOOLS from
+# features.browser in cdk.json. When disabled, the chatbot still runs — it
+# just doesn't get the browser microVM tools. Log the decision so boot-time
+# state is visible in CloudWatch.
+_ENABLE_BROWSER_TOOLS = os.environ.get("ENABLE_BROWSER_TOOLS", "true").lower() == "true"
+if _ENABLE_BROWSER_TOOLS:
+    try:
+        from browser_tools import BROWSER_TOOLS
+        from browser_tools import cleanup as browser_cleanup
+        from browser_tools import set_ui_queue as set_browser_ui_queue
+
+        print("[ORCHESTRATOR] Browser tools: enabled")
+    except Exception as _browser_import_err:  # pragma: no cover — browser deps optional
+        BROWSER_TOOLS = []
+
+        def browser_cleanup() -> None: ...
+        def set_browser_ui_queue(_q) -> None: ...
+
+        print(f"[ORCHESTRATOR] Browser tools: import failed — {_browser_import_err}")
+else:
     BROWSER_TOOLS = []
 
     def browser_cleanup() -> None: ...
     def set_browser_ui_queue(_q) -> None: ...
 
-    print(f"[ORCHESTRATOR] Browser tools unavailable: {_browser_import_err}")
+    print("[ORCHESTRATOR] Browser tools: disabled (ENABLE_BROWSER_TOOLS=false)")
 
 _SSE_HEADERS = {
     "X-Accel-Buffering": "no",
@@ -1298,6 +1313,13 @@ async def _handle_chatbot(
     # ── Callback handler — fires inside the agent thread ──
     _prev_tool_use_id = [None]  # track by toolUseId only (not full dict)
     _tool_use_active = [False]  # suppress data tokens during tool calls
+    _tool_use_active_since = [0.0]  # monotonic timestamp when flag was last raised
+    # If the `message` event that clears the flag never arrives (LLM error,
+    # partial stream, etc.), streamed text is swallowed indefinitely. Reset
+    # the flag if `data` arrives more than this many seconds after the flag
+    # was raised — the user sees a bit of in-tool-call text leak through,
+    # which is strictly better than a stuck UI.
+    _TOOL_USE_ACTIVE_TIMEOUT_SEC = 30.0
 
     def _callback_handler(**kwargs):
         """Push streaming events onto the thread-safe queue."""
@@ -1307,6 +1329,7 @@ async def _handle_chatbot(
         current_tool_use = kwargs.get("current_tool_use")
         if current_tool_use and current_tool_use.get("name"):
             _tool_use_active[0] = True
+            _tool_use_active_since[0] = time.monotonic()
             tool_use_id = current_tool_use.get("toolUseId", "")
             tool_name = current_tool_use.get("name", "")
 
@@ -1351,10 +1374,24 @@ async def _handle_chatbot(
                         )
                     )
 
-        # Incremental text — only emit when NOT inside a tool call
+        # Incremental text — only emit when NOT inside a tool call.
+        # Recovery: if the flag has been stuck for more than the timeout,
+        # assume the clearing `message` event is lost and allow the text
+        # through.
         data = kwargs.get("data", "")
-        if data and not _tool_use_active[0]:
-            tq.put(("stream", {"data": data}))
+        if data:
+            if _tool_use_active[0]:
+                stuck_for = time.monotonic() - _tool_use_active_since[0]
+                if stuck_for > _TOOL_USE_ACTIVE_TIMEOUT_SEC:
+                    print(
+                        f"[CHATBOT] _tool_use_active stuck for {stuck_for:.1f}s — "
+                        "resetting flag and emitting pending text"
+                    )
+                    _tool_use_active[0] = False
+                    _prev_tool_use_id[0] = None
+                    tq.put(("stream", {"data": data}))
+            else:
+                tq.put(("stream", {"data": data}))
 
         # Reasoning / thinking text
         reasoning = kwargs.get("reasoningText", "")
@@ -1379,11 +1416,17 @@ async def _handle_chatbot(
     _pipeline_scope = PipelineScopeHook(
         write_pipeline=_pipeline_cfg.get("write"),
         read_filter=_pipeline_cfg.get("read_filter"),
+        is_archive=_pipeline_cfg.get("archive", False),
     )
     print(
         f"[CHATBOT] Pipeline scope (mode={mode}): write={_pipeline_cfg.get('write')!r}, "
-        f"read_filter={_pipeline_cfg.get('read_filter')!r}"
+        f"read_filter={_pipeline_cfg.get('read_filter')!r}, archive={_pipeline_cfg.get('archive', False)}"
     )
+
+    # Browser tools are only useful for the restaurant concierge (mode="chatbot").
+    # archive_chat is a read-only KB search experience — its prompt forbids
+    # browser usage, so we don't attach the tools there either.
+    browser_tools = BROWSER_TOOLS if mode == "chatbot" else []
 
     try:
         agent = _create_agent(
@@ -1393,7 +1436,7 @@ async def _handle_chatbot(
             session_id,
             gateway_client,
             bedrock_model,
-            extra_tools=BROWSER_TOOLS,
+            extra_tools=browser_tools,
             pipeline_scope=_pipeline_scope,
         )
         # Attach our streaming callback handler
@@ -1422,7 +1465,7 @@ async def _handle_chatbot(
     heartbeat_thread = threading.Thread(target=_heartbeat_thread, daemon=True)
     heartbeat_thread.start()
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     agent_future = loop.run_in_executor(None, _run_agent_sync)
 
     try:
@@ -1512,10 +1555,11 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
         _pipeline_scope = PipelineScopeHook(
             write_pipeline=_pipeline_cfg.get("write"),
             read_filter=_pipeline_cfg.get("read_filter"),
+            is_archive=_pipeline_cfg.get("archive", False),
         )
         print(
             f"[ORCHESTRATOR] Plan-only pipeline scope: write={_pipeline_cfg.get('write')!r}, "
-            f"read_filter={_pipeline_cfg.get('read_filter')!r}"
+            f"read_filter={_pipeline_cfg.get('read_filter')!r}, archive={_pipeline_cfg.get('archive', False)}"
         )
         agent = _create_agent(
             "planner",
@@ -1558,7 +1602,7 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
     hb_thread = threading.Thread(target=_heartbeat_fn, daemon=True)
     hb_thread.start()
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     agent_future = loop.run_in_executor(None, _run_planner_sync)
 
     try:
@@ -1700,13 +1744,14 @@ async def orchestrate(payload: dict, context: RequestContext):
             session_id,
             requested_model,
             initial_accumulated=initial_accumulated,
+            mode="generic_research_execute",
         ):
             yield event
         return
 
     # ── Research plan-only mode (default "research"): run planner, emit plan for approval ──
     if mode == "research":
-        async for event in _run_plan_only(query, user_id, session_id, requested_model, research_depth):
+        async for event in _run_plan_only(query, user_id, session_id, requested_model, research_depth, mode="research"):
             yield event
         return
 
@@ -1729,6 +1774,7 @@ async def orchestrate(payload: dict, context: RequestContext):
             session_id,
             requested_model,
             initial_accumulated=initial_accumulated,
+            mode="research_execute",
         ):
             yield event
         return
@@ -1788,10 +1834,11 @@ async def _run_pipeline(
     _pipeline_scope = PipelineScopeHook(
         write_pipeline=_pipeline_cfg.get("write"),
         read_filter=_pipeline_cfg.get("read_filter"),
+        is_archive=_pipeline_cfg.get("archive", False),
     )
     print(
         f"[ORCHESTRATOR] Pipeline scope: write={_pipeline_cfg.get('write')!r}, "
-        f"read_filter={_pipeline_cfg.get('read_filter')!r}"
+        f"read_filter={_pipeline_cfg.get('read_filter')!r}, archive={_pipeline_cfg.get('archive', False)}"
     )
 
     for phase in phases:
@@ -1938,7 +1985,7 @@ async def _run_pipeline(
         heartbeat_thread.start()
 
         # Run agent in executor so it doesn't block the event loop
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         agent_future = loop.run_in_executor(None, _run_agent_sync)
 
         try:

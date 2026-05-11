@@ -18,14 +18,23 @@ METADATA_TABLE = os.environ.get("METADATA_TABLE", "")
 
 
 def handler(event, context):
-    """Place a restaurant order."""
+    """Place a restaurant order.
+
+    Requires `user_id` in the event (injected by UserScopeHook at the
+    runtime layer). The DynamoDB item is keyed by order_id but also carries
+    `customerId` so order lookups can be scoped per-user by future readers.
+    """
     try:
         logger.info("Received event: %s", json.dumps(event))
 
+        user_id = event.get("user_id", "")
         items = event.get("items", [])
         special_instructions = event.get("special_instructions", "")
         guest_name = event.get("guest_name", "Guest")
         table_number = event.get("table_number", "")
+
+        if not user_id:
+            return {"content": [{"type": "text", "text": "Missing user_id — runtime hook not wired."}]}
 
         if not items:
             return {"content": [{"type": "text", "text": "No items specified in the order."}]}
@@ -42,6 +51,7 @@ def handler(event, context):
                 "PK": f"order#{order_id}",
                 "SK": f"placed#{timestamp}",
                 "orderId": order_id,
+                "customerId": user_id,
                 "items": items,
                 "specialInstructions": special_instructions,
                 "guestName": guest_name,

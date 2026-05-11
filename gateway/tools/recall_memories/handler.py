@@ -1,9 +1,26 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+"""
+recall_memories — retrieve stored memory records for a user.
+
+Primary backend: AgentCore Memory's `retrieve_memory_records` API, scoped
+to the user's actor namespace (`/actors/{user_id}/`). This does not require
+the individual memory strategy IDs to be known at deploy time — strategies
+asynchronously write records into this shared actor namespace.
+
+Fallback backend: Neptune Analytics graph (only when `NEPTUNE_ENDPOINT` env
+var is set). The fallback uses parameterized openCypher queries — no string
+interpolation — so LLM-controlled `content` values can't inject Cypher.
+
+When neither backend is configured, returns a structured `{"status": "disabled"}`
+result rather than an error, so chatbot turns stay graceful.
+"""
+
 import json
 import logging
 import os
+import urllib.parse
 import urllib.request
 
 import boto3
@@ -32,10 +49,21 @@ def _sign_request(method: str, url: str, body: str = "") -> dict:
     return dict(request.headers)
 
 
-def _execute_neptune_query(query: str) -> dict:
-    """Execute an openCypher query against Neptune Analytics."""
+def _execute_neptune_query(query: str, parameters: dict | None = None) -> dict:
+    """Execute a parameterized openCypher query against Neptune Analytics.
+
+    Uses Neptune's `parameters` form-field for bound variables rather than
+    string interpolation — prevents Cypher injection from LLM-controlled
+    content values.
+    """
     url = f"https://{NEPTUNE_ENDPOINT}/queries"
-    body = f"query={query}&lang=opencypher"
+    form_fields = {
+        "query": query,
+        "lang": "opencypher",
+    }
+    if parameters:
+        form_fields["parameters"] = json.dumps(parameters)
+    body = urllib.parse.urlencode(form_fields)
 
     headers = _sign_request("POST", url, body)
     headers["Content-Type"] = "application/x-www-form-urlencoded"
@@ -50,35 +78,38 @@ def _execute_neptune_query(query: str) -> dict:
         raise
 
 
-def _recall_memories(user_id: str, query: str, limit: int) -> str:
-    """Recall memories from the Neptune graph for a user."""
-    # Escape query for Cypher
-    safe_query = query.replace("'", "\\'").replace('"', '\\"') if query else ""
+def _recall_from_neptune(user_id: str, query: str, limit: int) -> str:
+    """Fallback retrieval path via Neptune graph.
 
-    if safe_query:
-        # Search for memories matching the query
+    Uses parameterized Cypher ($user_id, $query, $limit) — never string
+    interpolation of LLM content.
+    """
+    # The openCypher spec forbids parameters for LIMIT, so we cast and embed
+    # safely (int() guards against injection).
+    safe_limit = int(limit)
+
+    if query:
         cypher = (
-            f"MATCH (u:User {{userId: '{user_id}'}})-[:HAS_MEMORY]->(m:Memory) "
-            f"WHERE m.content CONTAINS '{safe_query}' "
-            f"RETURN m.memoryId AS memoryId, m.content AS content, "
-            f"m.type AS type, m.createdAt AS createdAt "
-            f"ORDER BY m.createdAt DESC LIMIT {limit}"
+            "MATCH (u:User {userId: $user_id})-[:HAS_MEMORY]->(m:Memory) "
+            "WHERE m.content CONTAINS $query "
+            "RETURN m.memoryId AS memoryId, m.content AS content, "
+            "m.type AS type, m.createdAt AS createdAt "
+            f"ORDER BY m.createdAt DESC LIMIT {safe_limit}"
         )
+        params = {"user_id": user_id, "query": query}
     else:
-        # Return all memories for the user
         cypher = (
-            f"MATCH (u:User {{userId: '{user_id}'}})-[:HAS_MEMORY]->(m:Memory) "
-            f"RETURN m.memoryId AS memoryId, m.content AS content, "
-            f"m.type AS type, m.createdAt AS createdAt "
-            f"ORDER BY m.createdAt DESC LIMIT {limit}"
+            "MATCH (u:User {userId: $user_id})-[:HAS_MEMORY]->(m:Memory) "
+            "RETURN m.memoryId AS memoryId, m.content AS content, "
+            "m.type AS type, m.createdAt AS createdAt "
+            f"ORDER BY m.createdAt DESC LIMIT {safe_limit}"
         )
+        params = {"user_id": user_id}
 
-    result = _execute_neptune_query(cypher)
+    result = _execute_neptune_query(cypher, params)
 
-    # Format results
     memories = []
-    results_data = result.get("results", [])
-    for row in results_data:
+    for row in result.get("results", []):
         memories.append(
             {
                 "memory_id": row.get("memoryId", ""),
@@ -94,16 +125,60 @@ def _recall_memories(user_id: str, query: str, limit: int) -> str:
             "query": query,
             "memories": memories,
             "count": len(memories),
+            "backend": "neptune",
         }
     )
+
+
+def _recall_from_agentcore(user_id: str, memory_id: str, query: str, limit: int) -> str | None:
+    """Primary retrieval path via AgentCore Memory.
+
+    Returns a JSON string on success, or None if the call fails (caller
+    should then try Neptune or return disabled).
+
+    Scopes by `/actors/{user_id}/` namespace — this prefix matches all
+    strategy types (episodic, semantic, user_preference) that use
+    `{memoryStrategyId}/actors/{actorId}/...` namespace patterns. We walk
+    the actor hierarchy without needing to know each strategy's generated
+    ID at deploy time.
+    """
+    try:
+        agentcore_client = boto3.client("bedrock-agentcore")
+        namespace = f"/actors/{user_id}/"
+        memory_response = agentcore_client.retrieve_memory_records(
+            memoryId=memory_id,
+            namespace=namespace,
+            searchCriteria={"searchQuery": query, "topK": limit},
+            maxResults=limit,
+        )
+        records = memory_response.get("memoryRecords", [])
+        memories = [
+            {
+                "content": r.get("content", ""),
+                "timestamp": r.get("timestamp", ""),
+            }
+            for r in records
+        ]
+        return json.dumps(
+            {
+                "user_id": user_id,
+                "query": query,
+                "memories": memories,
+                "count": len(memories),
+                "backend": "agentcore",
+            }
+        )
+    except Exception as e:
+        logger.warning("AgentCore Memory retrieval failed: %s", e)
+        return None
 
 
 def handler(event, context):
     """
     Recall memories tool Lambda handler.
 
-    Reads memories from a Neptune Analytics graph for a specific user.
-    Optionally filters by a search query string.
+    Tries AgentCore Memory first; falls back to Neptune if unavailable;
+    returns `{"status": "disabled"}` if neither is configured.
     """
     logger.info(f"Received event: {json.dumps(event)}")
 
@@ -114,58 +189,47 @@ def handler(event, context):
 
         logger.info(f"Processing tool: {tool_name}")
 
-        if tool_name == "recall_memories":
-            user_id = event.get("user_id", "")
-            query = event.get("query", "")
-            limit = event.get("limit", 10)
-
-            if not user_id:
-                return {"error": "Missing required parameter: user_id"}
-
-            # Primary: AgentCore Memory retrieval
-            memory_id = os.environ.get("MEMORY_ID", "")
-            strategy_id = os.environ.get("MEMORY_STRATEGY_ID", "")
-            if memory_id:
-                try:
-                    agentcore_client = boto3.client("bedrock-agentcore")
-                    # Build namespace scoped to strategy + user
-                    namespace = f"/strategies/{strategy_id}/actors/{user_id}/" if strategy_id else None
-                    retrieve_kwargs = {
-                        "memoryId": memory_id,
-                        "searchCriteria": {"searchQuery": query, "topK": limit},
-                        "maxResults": limit,
-                    }
-                    if namespace:
-                        retrieve_kwargs["namespace"] = namespace
-                    memory_response = agentcore_client.retrieve_memory_records(**retrieve_kwargs)
-                    records = memory_response.get("memoryRecords", [])
-                    if records:
-                        memory_results = [
-                            {
-                                "content": r.get("content", ""),
-                                "timestamp": r.get("timestamp", ""),
-                            }
-                            for r in records
-                        ]
-                        return {
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": json.dumps({"memories": memory_results}),
-                                }
-                            ]
-                        }
-                except Exception as e:
-                    logger.warning("AgentCore Memory retrieval failed, falling back: %s", str(e))
-
-            # Fallback: Neptune graph memory
-            if not NEPTUNE_ENDPOINT:
-                return {"error": "No memory backend configured (MEMORY_ID and NEPTUNE_ENDPOINT both unavailable)"}
-
-            result = _recall_memories(user_id, query, limit)
-            return {"content": [{"type": "text", "text": result}]}
-        else:
+        if tool_name != "recall_memories":
             return {"error": f"This Lambda only supports 'recall_memories', received: {tool_name}"}
+
+        user_id = event.get("user_id", "")
+        query = event.get("query", "")
+        limit = event.get("limit", 10)
+
+        if not user_id:
+            return {"error": "Missing required parameter: user_id"}
+
+        memory_id = os.environ.get("MEMORY_ID", "")
+
+        # 1. Primary: AgentCore Memory
+        if memory_id:
+            agentcore_result = _recall_from_agentcore(user_id, memory_id, query, limit)
+            if agentcore_result is not None:
+                return {"content": [{"type": "text", "text": agentcore_result}]}
+
+        # 2. Fallback: Neptune graph
+        if NEPTUNE_ENDPOINT:
+            result = _recall_from_neptune(user_id, query, limit)
+            return {"content": [{"type": "text", "text": result}]}
+
+        # 3. Neither available — graceful disable.
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "user_id": user_id,
+                            "query": query,
+                            "memories": [],
+                            "count": 0,
+                            "status": "disabled",
+                            "reason": "No memory backend configured (neither MEMORY_ID nor NEPTUNE_ENDPOINT)",
+                        }
+                    ),
+                }
+            ]
+        }
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)

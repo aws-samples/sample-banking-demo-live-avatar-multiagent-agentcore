@@ -22,9 +22,10 @@ from strands.experimental.bidi import BidiAgent
 from strands.experimental.bidi.models import BidiNovaSonicModel
 from strands.tools.mcp import MCPClient
 from system_prompt_augmenter import augment_system_prompt
-from utils.auth import get_gateway_access_token
+from utils.auth import extract_user_id_from_token, get_gateway_access_token
 from utils.pipeline_scope import VALID_PIPELINES, PipelineScopeHook
 from utils.ssm import get_ssm_parameter
+from utils.tool_guard import UserScopeHook
 
 # --- Configuration (defaults, overridden per-connection by query params) ---
 
@@ -128,6 +129,7 @@ def create_gateway_mcp_client(access_token: str) -> MCPClient:
 
 def create_avatar_agent(
     tools: list,
+    user_id: str,
     persona: str = DEFAULT_PERSONA,
     voice_id: str = DEFAULT_VOICE_ID,
     sensitivity: str = "MEDIUM",
@@ -136,6 +138,10 @@ def create_avatar_agent(
     """Create a BidiAgent configured for voice conversation.
 
     Args:
+        user_id: Verified Cognito `sub` claim, extracted from the id_token
+            on the signed WebSocket handshake URL. Attached to every
+            user-scoped gateway tool call by UserScopeHook — the LLM
+            cannot spoof another user's identity.
         kb_pipelines_holder: Optional single-element mutable list whose value is
             the current kb pipelines multi-select (e.g. ["bistro_research", "menu"]).
             When None or empty, the avatar searches every pipeline view.
@@ -143,12 +149,19 @@ def create_avatar_agent(
             so mid-session changes (via kbPipelinesChange WebSocket messages)
             take effect on the very next kb_search call.
     """
+    if not user_id:
+        # Defensive — the websocket handler should always extract a user_id
+        # before calling us, but make the contract loud rather than silently
+        # producing a cross-tenant agent.
+        raise ValueError("create_avatar_agent requires a non-empty user_id")
+
     logger.info(
-        "[AVATAR] Creating BidiNovaSonicModel: model=%s, region=%s, voice=%s, sensitivity=%s",
+        "[AVATAR] Creating BidiNovaSonicModel: model=%s, region=%s, voice=%s, sensitivity=%s, user_id=%s",
         MODEL_ID,
         BEDROCK_REGION,
         voice_id,
         sensitivity,
+        user_id,
     )
 
     model = BidiNovaSonicModel(
@@ -180,15 +193,26 @@ def create_avatar_agent(
     base_prompt = get_persona_prompt(persona)
     system_prompt = augment_system_prompt(base_prompt, GATEWAY_TOOL_NAMES)
 
-    # Build a PipelineScopeHook backed by the mutable holder so the user's
-    # chip multi-select is honored mid-session without re-creating the agent.
-    hooks: list = []
+    # Hooks force-inject the verified user_id and mode-specific KB read filter
+    # into all relevant Gateway tool calls. The avatar wires both: UserScopeHook
+    # matches the orchestrator's behavior; PipelineScopeHook honors the user's
+    # chip multi-select mid-session without re-creating the agent.
+    hooks: list = [UserScopeHook(user_id)]
     if kb_pipelines_holder is not None:
 
         def _read_filter_provider() -> list[str] | None:
             # Always read the latest value — the holder is a single-element list
             # whose only element is mutated when the frontend sends kbPipelinesChange.
-            return kb_pipelines_holder[0] if kb_pipelines_holder else None
+            #
+            # UI semantics: the chip bar's "All" state maps to an empty list
+            # on the wire (see lib/stacks/frontend/app/src/stores/avatarKbPipelinesStore.ts).
+            # Here we expand that to the full valid-pipeline set so the fail-closed
+            # PipelineScopeHook injects a real list into kb_search rather than
+            # refusing the call. Any user-selected subset is returned as-is.
+            raw = kb_pipelines_holder[0] if kb_pipelines_holder else None
+            if not raw:
+                return list(VALID_PIPELINES)
+            return raw
 
         hooks.append(PipelineScopeHook(read_filter=_read_filter_provider))
 
@@ -213,12 +237,31 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
     """
     WebSocket endpoint for real-time voice conversation on AgentCore Runtime.
 
+    Authentication: the presigned SigV4 URL (from lib/stacks/frontend/app/src/
+    lib/websocket-client/sigv4.ts) carries the Cognito ID token as an
+    `id_token` query-string param. Cognito Identity Pool already verified the
+    token upstream when issuing the SigV4 credentials, so we parse the `sub`
+    claim without re-verifying the signature. A missing or malformed id_token
+    causes the handshake to be refused with code 4401.
+
     Matches the pattern from aws-samples/sample-nova-sonic-websocket-agentcore:
     - Accepts WebSocket connection explicitly
     - Uses agent.run(inputs=[receive_json], outputs=[send_json])
     - Reads persona/voice from query params
     """
     logger.info("[AVATAR] New WebSocket connection")
+
+    # ── Verify identity BEFORE accepting the socket ─────────────────────────
+    # We close with 4401 (application-level unauthorized) when id_token is
+    # missing or malformed. This is a pre-accept close so the frontend sees
+    # a clean handshake failure.
+    id_token = websocket.query_params.get("id_token", "")
+    try:
+        user_id = extract_user_id_from_token(id_token)
+    except ValueError as exc:
+        logger.warning("[AVATAR] Refusing handshake — invalid id_token: %s", exc)
+        await websocket.close(code=4401, reason="invalid_id_token")
+        return
 
     # Read persona/voice/language from query params (sent by frontend)
     persona = websocket.query_params.get("persona", DEFAULT_PERSONA)
@@ -235,7 +278,8 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
     kb_pipelines_holder: list[list[str] | None] = [initial_kb_pipelines]
 
     logger.info(
-        "[AVATAR] Connection params: persona=%s, voice=%s, language=%s, sensitivity=%s, kb_pipelines=%r",
+        "[AVATAR] Connection params: user_id=%s, persona=%s, voice=%s, language=%s, sensitivity=%s, kb_pipelines=%r",
+        user_id,
         persona,
         voice_id,
         language,
@@ -257,6 +301,7 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
         logger.info("[AVATAR] Step 3: Creating BidiAgent...")
         agent, system_prompt = create_avatar_agent(
             tools=[gateway_client],
+            user_id=user_id,
             persona=persona,
             voice_id=voice_id,
             sensitivity=sensitivity,
@@ -274,6 +319,14 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
         if isinstance(first_msg, dict) and first_msg.get("type") == "sessionStart":
             session_id = first_msg.get("sessionId", "unknown")
             logger.info("[AVATAR] Received sessionStart, session_id=%s", session_id)
+            # sessionStart may also carry kbPipelines — honor it as a belt-and-
+            # suspenders alternative to the query-string path. If the frontend
+            # ever drops the query-string param (or a SigV4 presigning path
+            # omits it), the JSON handshake still seeds the initial scope.
+            if "kbPipelines" in first_msg:
+                parsed = _parse_kb_pipelines(first_msg.get("kbPipelines"))
+                kb_pipelines_holder[0] = parsed
+                logger.info("[AVATAR] sessionStart kbPipelines=%r", parsed)
             await websocket.send_json({"type": "sessionStart", "sessionId": session_id})
         else:
             logger.warning(
@@ -304,6 +357,17 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
                         "text": msg.get("content", ""),
                         "role": "user",
                     }
+                elif msg_type == "kbPipelinesChange":
+                    # Mid-session chip toggle — mutate the holder so the
+                    # PipelineScopeHook's read_filter provider picks up the
+                    # new scope on the very next kb_search call. The hook
+                    # was attached to the agent at connect time with a
+                    # closure over this same holder; we don't need to
+                    # rebuild the agent.
+                    parsed = _parse_kb_pipelines(msg.get("kbPipelines"))
+                    kb_pipelines_holder[0] = parsed
+                    logger.info("[AVATAR] kbPipelinesChange: holder=%r", parsed)
+                    continue
                 elif msg_type in (
                     "sessionStart",
                     "ping",

@@ -13,7 +13,7 @@
     ],
     "scripts": {
         "preinstall": "npm config set registry=https://registry.npmjs.com/",
-        "postinstall": "uv venv --allow-existing && uv tool install ruff && find lib -name 'requirements.txt' -exec uv pip install -r {} \\;",
+        "postinstall": "uv venv --allow-existing && uv tool install ruff && find lib patterns -name 'requirements.txt' -exec uv pip install -r {} \\; && uv pip install pytest",
         "prepare": "husky",
         "format": "prettier --write . && ruff format .",
         "lint": "eslint . && ruff check .",
@@ -24,7 +24,8 @@
         "build": "tsc",
         "watch": "tsc -w",
         "test": "jest",
-        "cdk": "npx aws-cdk@2.1108.0"
+        "test:python": "./.venv/bin/pytest",
+        "cdk": "npx aws-cdk@2.1121.0"
     },
     "lint-staged": {
         "*.{js,jsx,ts,tsx}": [
@@ -56,7 +57,7 @@
         "@types/jest": "^30.0.0",
         "@types/node": "^25.3.3",
         "archiver": "^7.0.1",
-        "aws-cdk": "^2.1108.0",
+        "aws-cdk": "^2.1121.0",
         "chalk": "4.1.2",
         "commander": "^14.0.3",
         "commitizen": "^4.3.1",
@@ -77,9 +78,9 @@
         "yaml": "^2.8.2"
     },
     "dependencies": {
-        "@aws-cdk/aws-bedrock-agentcore-alpha": "^2.240.0-alpha.0",
-        "@aws-cdk/aws-bedrock-alpha": "^2.240.0-alpha.0",
-        "@aws-cdk/aws-lambda-python-alpha": "^2.240.0-alpha.0",
+        "@aws-cdk/aws-bedrock-agentcore-alpha": "^2.253.1-alpha.0",
+        "@aws-cdk/aws-bedrock-alpha": "^2.253.1-alpha.0",
+        "@aws-cdk/aws-lambda-python-alpha": "^2.253.1-alpha.0",
         "@aws-lambda-powertools/event-handler": "^2.31.0",
         "@aws-lambda-powertools/logger": "^2.31.0",
         "@aws-lambda-powertools/parameters": "^2.31.0",
@@ -88,9 +89,8 @@
         "@aws/pdk": "^0.26.15",
         "@cdklabs/deploy-time-build": "^0.0.7",
         "@cdklabs/generative-ai-cdk-constructs": "^0.1.314",
-        "@strands-agents/sdk": "^0.4.0",
         "aws-appsync": "^4.1.10",
-        "aws-cdk-lib": "^2.240.0",
+        "aws-cdk-lib": "^2.253.1",
         "cdk-nag": "^2.37.55",
         "constructs": "^10.4.5",
         "ob-appsync-events-request": "^0.0.7"

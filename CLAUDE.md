@@ -195,7 +195,7 @@ Applied globally via `App({ propertyInjectors })` in `bin/app.ts`. Never duplica
 
 - **LogGroupInjector**: 3-month retention, DESTROY removal
 - **FunctionLogGroupInjector**: Auto-creates LogGroup per Lambda
-- **FunctionPlatformInjector**: ARM64 architecture, Node.js 22.x / Python 3.12 runtimes
+- **FunctionPlatformInjector**: ARM64 architecture, Node.js 22.x / Python 3.13 runtimes
 - **BucketInjector**: Block all public access, enforce SSL, auto-delete + DESTROY removal
 
 ## Key Files

@@ -807,6 +807,7 @@ export default function AvatarInterface(): JSX.Element {
                 language,
                 voiceId,
                 kbPipelines,
+                idToken: auth.user.id_token,
             },
             handleWSMessage,
             setConnectionState
@@ -828,7 +829,16 @@ export default function AvatarInterface(): JSX.Element {
                     config.awsRegion,
                     credentials,
                     sessionIdRef.current,
-                    { persona, language, voiceId }
+                    {
+                        persona,
+                        language,
+                        voiceId,
+                        kbPipelines,
+                        // Backend extracts the `sub` claim on the id_token to
+                        // attach UserScopeHook to the BidiAgent. Without it
+                        // the handshake is refused with code 4401.
+                        idToken: auth.user.id_token,
+                    }
                 );
                 console.log("[AvatarInterface] Connecting with SigV4 presigned URL");
                 client.connect(presignedUrl);

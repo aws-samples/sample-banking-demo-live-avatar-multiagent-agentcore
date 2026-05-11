@@ -6,9 +6,23 @@ Each orchestrator mode maps to a logical pipeline taxonomy:
   writes `open_research`
 - Menu Builder (mode=menu) writes `menu` and reads from {bistro_research, open_research}
 - AI Concierge (mode=chatbot) reads only `menu`
-- Report Archive (mode=archive_chat) reads everything (no filter)
+- Report Archive (mode=archive_chat) reads everything (no pipeline filter). This is
+  the only intentional fail-open path — and it is signalled explicitly by setting
+  `tool_input["archive_mode"] = True` so kb_search has a positive flag to check.
 
 The hook lets the runtime (not the LLM) control these scopes — mirroring UserScopeHook.
+
+Isolation contract (enforced here + in gateway/tools/kb_search/handler.py):
+
+1. Any mode other than archive_chat MUST inject a concrete `pipelines` list. An
+   empty list is the fail-closed signal to kb_search — unfiltered reads are
+   refused. This closes the previous fail-open path where unknown modes
+   returned `read_filter=None` → no filter at all.
+2. Archive mode is opt-in via the `is_archive` constructor flag. The hook sets
+   `archive_mode=True` on the tool input so kb_search can verify it came from
+   the runtime, not the LLM.
+3. `pdf_generator` writes are tagged on known write modes; chatbot/archive
+   never write.
 """
 
 import logging
@@ -23,24 +37,35 @@ logger = logging.getLogger(__name__)
 VALID_PIPELINES: frozenset[str] = frozenset({"bistro_research", "open_research", "menu"})
 
 
-# Mode → { "write": <pipeline or None>, "read_filter": <list[str] or None> }.
-# `write` is the pipeline value injected into gateway_pdf_generator calls.
-# `read_filter` is the pipelines array injected into gateway_kb_search calls.
-# A `None` read_filter means "no filter — read everything."
+# Mode → { "write": <pipeline or None>, "read_filter": <list[str] or None>, "archive": bool }.
+# - `write` is the pipeline value injected into gateway_pdf_generator calls.
+# - `read_filter` is the pipelines array injected into gateway_kb_search calls.
+#   A `None` or empty `read_filter` is treated as "fail closed" UNLESS
+#   `archive=True`, which signals the intentional fail-open for the report
+#   archive view.
+# - `archive` flags archive_chat mode so the hook can set `archive_mode=True`
+#   on tool inputs (kb_search requires this positive signal to return
+#   unfiltered results).
 MODE_PIPELINE_CONFIG: dict[str, dict[str, Any]] = {
-    "research": {"write": "bistro_research", "read_filter": ["bistro_research"]},
-    "research_execute": {"write": "bistro_research", "read_filter": ["bistro_research"]},
-    "generic_research": {"write": "open_research", "read_filter": ["open_research"]},
-    "generic_research_execute": {"write": "open_research", "read_filter": ["open_research"]},
-    "menu": {"write": "menu", "read_filter": ["bistro_research", "open_research"]},
-    "chatbot": {"write": None, "read_filter": ["menu"]},
-    "archive_chat": {"write": None, "read_filter": None},
+    "research": {"write": "bistro_research", "read_filter": ["bistro_research"], "archive": False},
+    "research_execute": {"write": "bistro_research", "read_filter": ["bistro_research"], "archive": False},
+    "generic_research": {"write": "open_research", "read_filter": ["open_research"], "archive": False},
+    "generic_research_execute": {"write": "open_research", "read_filter": ["open_research"], "archive": False},
+    "menu": {"write": "menu", "read_filter": ["bistro_research", "open_research"], "archive": False},
+    "chatbot": {"write": None, "read_filter": ["menu"], "archive": False},
+    "archive_chat": {"write": None, "read_filter": None, "archive": True},
 }
 
 
 def mode_config(mode: str) -> dict[str, Any]:
-    """Return the pipeline config for a mode, with safe fallbacks for unknown modes."""
-    return MODE_PIPELINE_CONFIG.get(mode, {"write": None, "read_filter": None})
+    """Return the pipeline config for a mode, with safe fail-closed fallback for unknowns.
+
+    Unknown modes resolve to `{write: None, read_filter: None, archive: False}`,
+    which — combined with the fail-closed hook — means kb_search receives
+    `pipelines=[]` and refuses to return results. Callers who intend archive
+    semantics must pass `mode="archive_chat"` explicitly.
+    """
+    return MODE_PIPELINE_CONFIG.get(mode, {"write": None, "read_filter": None, "archive": False})
 
 
 class PipelineScopeHook(HookProvider):
@@ -50,15 +75,22 @@ class PipelineScopeHook(HookProvider):
     zero-arg callable that returns the current value at tool-call time. The
     callable form is used by the Voice Avatar so the user's chip-multi-select
     choice is honored mid-session without re-creating the agent.
+
+    When `is_archive=True`, the hook sets `tool_input["archive_mode"] = True`
+    on kb_search calls and skips `pipelines` injection entirely. This is the
+    single opt-in to unfiltered reads; every other code path falls through to
+    the fail-closed empty-list branch.
     """
 
     def __init__(
         self,
         write_pipeline=None,
         read_filter=None,
+        is_archive: bool = False,
     ) -> None:
         self._write_provider = self._as_provider(write_pipeline)
         self._read_provider = self._as_provider(read_filter)
+        self._is_archive = bool(is_archive)
 
     @staticmethod
     def _as_provider(value):
@@ -86,7 +118,7 @@ class PipelineScopeHook(HookProvider):
         if len(cleaned) != len(raw):
             dropped = [p for p in raw if p not in VALID_PIPELINES]
             logger.warning("pipeline_scope: dropping unknown read_filter values %r", dropped)
-        return cleaned if cleaned else None
+        return cleaned  # may be empty; caller decides whether that's fail-closed
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeToolCallEvent, self._inject_pipeline)
@@ -96,11 +128,26 @@ class PipelineScopeHook(HookProvider):
         tool_input: dict[str, Any] = event.tool_use["input"]
 
         if tool_name == "gateway_kb_search":
-            read_filter = self._coerce_read(self._read_provider())
-            if read_filter is None:
-                # Explicit "no filter" → leave whatever the LLM/user supplied (usually nothing).
+            if self._is_archive:
+                # Positive archive signal. kb_search verifies this flag before
+                # returning unfiltered results — the LLM cannot set it.
+                tool_input["archive_mode"] = True
+                logger.info("pipeline_scope: archive_mode=True on kb_search (runtime-authorized)")
+                # Strip any LLM-supplied pipelines so they can't narrow the archive.
+                tool_input.pop("pipelines", None)
                 return
+
+            read_filter = self._coerce_read(self._read_provider())
             original = tool_input.get("pipelines")
+            if not read_filter:
+                # Fail closed: no pipeline scope. Inject empty list so the
+                # kb_search handler's scope check sees the runtime decision
+                # (empty) rather than an LLM-supplied value. Combined with
+                # archive_mode=False (default), kb_search returns no results.
+                tool_input["pipelines"] = []
+                logger.warning("pipeline_scope: fail-closed kb_search — no read_filter (mode misconfigured?)")
+                return
+
             tool_input["pipelines"] = list(read_filter)
             if original and original != list(read_filter):
                 logger.info(

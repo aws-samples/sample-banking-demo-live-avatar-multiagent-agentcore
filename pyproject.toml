@@ -1,0 +1,19 @@
+[tool.pytest.ini_options]
+# pythonpath lets tests import the Strands hook modules without pip-installing
+# them as packages. `patterns/utils` matches the runtime layout inside the
+# orchestrator and avatar Docker images (they also add it to sys.path).
+#
+# Gateway tool handlers are loaded via importlib in the tests rather than
+# through pythonpath — every tool's file is named `handler.py`, so adding
+# them to pythonpath would collide.
+pythonpath = [
+    ".",
+    "patterns",
+    "patterns/utils",
+    "patterns/avatar-agent",
+    "patterns/orchestrator-agent",
+]
+testpaths = ["test/python"]
+# Keep output short so the kit CLI stays readable; individual tests can
+# still use capsys for verbose debugging.
+addopts = "-ra --tb=short"

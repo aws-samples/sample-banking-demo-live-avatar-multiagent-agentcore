@@ -215,17 +215,14 @@ export class Backend extends Stack {
             commonEnv.KNOWLEDGE_BASE_ID = kbId;
         }
 
-        // Pass memory IDs to tool Lambdas (used by recall_memories, save_memory)
+        // Pass memory IDs to tool Lambdas (used by recall_memories, save_memory).
+        // The tools use `/actors/{user_id}/` namespace for retrieval (no strategy
+        // prefix), which lets us avoid resolving the generated strategy IDs at
+        // deploy time. AgentCore Memory's CreateEvent API doesn't take a strategy
+        // ID either — strategies process events asynchronously into records that
+        // share the actor's namespace. See docs/kb-isolation.md for the broader
+        // memory architecture notes.
         commonEnv.MEMORY_ID = memoryId;
-        // Strategy ID is dynamic — the recall_memories handler reads it from this env var
-        // to build the namespace path for scoped retrieval
-        if (
-            features.episodic_memory ||
-            features.semantic_memory ||
-            features.user_preference_memory
-        ) {
-            commonEnv.MEMORY_STRATEGY_ID = "default";
-        }
 
         const toolDefs: Array<{
             dir: string;
@@ -458,6 +455,10 @@ export class Backend extends Stack {
                 environmentVariables: {
                     ...runtimeEnv,
                     MODEL_ID: models.orchestrator,
+                    // Gate the in-process browser_tools import so operators
+                    // can disable the microVM spend without rebuilding the
+                    // image. See patterns/orchestrator-agent/browser_tools.py.
+                    ENABLE_BROWSER_TOOLS: features.browser ? "true" : "false",
                 },
                 authorizerConfiguration: authorizerConfig,
                 requestHeaderConfiguration: {
@@ -835,6 +836,34 @@ export class Backend extends Stack {
                 );
 
                 orchestratorLambda.grantInvoke(gatewayRole);
+
+                // Register as a Gateway target so MCP clients can actually
+                // invoke it. Previously the Lambda was created but never
+                // attached to the Gateway, leaving it unreachable.
+                const orchestratorToolSpecPath = path.join(orchestratorDir, "tool_spec.json");
+                if (fs.existsSync(orchestratorToolSpecPath)) {
+                    const apiSpec = JSON.parse(fs.readFileSync(orchestratorToolSpecPath, "utf8"));
+                    const toolSpec = Array.isArray(apiSpec) ? apiSpec : [apiSpec];
+                    const target = new CfnGatewayTarget(this, "Target_research_orchestrator", {
+                        gatewayIdentifier: gateway.attrGatewayIdentifier,
+                        name: "research-orchestrator",
+                        description:
+                            "Lambda target for research_orchestrator (Durable Functions feature flag)",
+                        targetConfiguration: {
+                            mcp: {
+                                lambda: {
+                                    lambdaArn: orchestratorLambda.functionArn,
+                                    toolSchema: { inlinePayload: toolSpec },
+                                },
+                            },
+                        },
+                        credentialProviderConfigurations: [
+                            { credentialProviderType: "GATEWAY_IAM_ROLE" },
+                        ],
+                    });
+                    target.addDependency(gateway);
+                    target.node.addDependency(gatewayRole);
+                }
             }
         }
 

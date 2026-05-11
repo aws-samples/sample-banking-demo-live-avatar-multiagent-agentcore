@@ -108,6 +108,23 @@ def _build_filter(user_id: str, pipelines: list[str]) -> dict | None:
     return user_clause or pipeline_clause
 
 
+def _empty_result(query: str, reason: str) -> str:
+    """Return a structured empty result with a machine-readable reason code.
+
+    Used by the fail-closed scope check — the hook / runtime misconfigured
+    the call, so we refuse to return anything. The reason surfaces in logs
+    for debugging but carries no information the LLM can exploit.
+    """
+    return json.dumps(
+        {
+            "query": query,
+            "results": [],
+            "result_count": 0,
+            "reason": reason,
+        }
+    )
+
+
 def _retrieve_and_generate(
     knowledge_base_id: str,
     query: str,
@@ -136,14 +153,23 @@ def _retrieve_and_generate(
 
     pipelines = _sanitize_pipelines(pipelines or [])
 
-    # Optional per-user + per-pipeline scoping. Documents without the relevant
-    # metadata key are always included because S3 Vectors only filters on
-    # documents that have the metadata key — untagged documents pass through.
+    # Per-user + per-pipeline scoping. The handler entrypoint enforces that
+    # user_id is always set and pipelines is non-empty unless archive_mode=True
+    # (the only legit "filter on user_id alone" path, used by the Report Archive).
+    #
+    # CAVEAT: S3 Vectors only evaluates filter clauses against documents that
+    # have the metadata key present. Docs ingested without a `user_id` or
+    # `pipeline` sidecar pass through every filter. kb_ingest now refuses to
+    # write sidecars without user_id (see gateway/tools/kb_ingest/handler.py),
+    # but pre-existing / manually-uploaded docs may still leak.
+    # See docs/kb-isolation.md for mitigation runbook.
     composed_filter = _build_filter(user_id, pipelines)
     if composed_filter:
         vector_config["filter"] = composed_filter
     else:
-        logger.info("kb_search: no user_id or pipelines provided, returning all docs (unfiltered)")
+        # Should only reach here when archive_mode=True and user_id is empty,
+        # which the handler entrypoint blocks. Keep a loud warning if we do.
+        logger.warning("kb_search: reached _retrieve_and_generate with no filter — invariant broken")
 
     logger.info(
         "Retrieving from KB %s with filter: %s (user_id=%s, pipelines=%s)",
@@ -263,6 +289,7 @@ def handler(event, context):
             max_results = event.get("max_results", 5)
             user_id = event.get("user_id", "")
             pipelines = event.get("pipelines", [])
+            archive_mode = bool(event.get("archive_mode", False))
 
             if not query:
                 return {"error": "Missing required parameter: query"}
@@ -270,6 +297,25 @@ def handler(event, context):
             knowledge_base_id = os.environ.get("KNOWLEDGE_BASE_ID")
             if not knowledge_base_id:
                 return {"error": "KNOWLEDGE_BASE_ID environment variable not configured"}
+
+            # ── Fail-closed scope check ─────────────────────────────────────
+            # The runtime hooks (UserScopeHook + PipelineScopeHook) MUST wire
+            # up user_id and either a concrete pipelines list or archive_mode.
+            # If either invariant is violated, refuse to return results — this
+            # is the single source of truth for tenant + pipeline isolation.
+            # S3 Vectors only evaluates filter clauses against documents that
+            # have the metadata key present, which means missing-metadata docs
+            # historically leaked to every user. Refusing at this layer shuts
+            # that vector even for legacy/manually-uploaded documents.
+            if not user_id:
+                logger.warning("kb_search: refusing — missing user_id (UserScopeHook not wired?)")
+                return {"content": [{"type": "text", "text": _empty_result(query, "caller-scope-required")}]}
+            if not archive_mode and not pipelines:
+                logger.warning(
+                    "kb_search: refusing — missing pipelines and not in archive mode (user_id=%s)",
+                    user_id,
+                )
+                return {"content": [{"type": "text", "text": _empty_result(query, "caller-scope-required")}]}
 
             result = _retrieve_and_generate(knowledge_base_id, query, max_results, user_id, pipelines)
             return {"content": [{"type": "text", "text": result}]}

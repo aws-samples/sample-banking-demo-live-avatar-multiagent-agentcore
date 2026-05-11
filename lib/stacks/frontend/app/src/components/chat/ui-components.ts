@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { AgentActivityCard } from "./AgentActivityCard";
+import { BrowserSessionNotice } from "./BrowserSessionNotice";
 import { PdfDeliveryCard } from "./PdfDeliveryCard";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 
@@ -14,6 +15,7 @@ type AnyComponent = ComponentType<any>;
  */
 const UI_COMPONENTS: Record<string, AnyComponent> = {
     AgentActivity: AgentActivityCard,
+    BrowserSessionNotice,
     PdfDelivery: PdfDeliveryCard,
     ResearchPlan: ResearchPlanCard,
 };

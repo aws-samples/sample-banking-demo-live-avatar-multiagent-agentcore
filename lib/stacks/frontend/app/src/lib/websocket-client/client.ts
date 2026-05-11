@@ -42,6 +42,15 @@ export interface AvatarWSConfig {
     voiceId?: string;
     /** Initial KB pipeline multi-select. Empty / undefined = search all views. */
     kbPipelines?: KbPipeline[];
+    /**
+     * Cognito ID token. Required when connecting via a SigV4 presigned URL
+     * — the backend extracts the user's `sub` claim and attaches
+     * UserScopeHook. Without it, the handshake is refused with code 4401.
+     * The legacy bearer-subprotocol fallback still forwards this through
+     * the URL query for symmetry, but the backend requires id_token
+     * regardless of auth path.
+     */
+    idToken?: string;
 }
 
 export type AvatarWSMessageType =
@@ -135,6 +144,9 @@ export class AvatarWebSocketClient {
         }
         if (this.config.kbPipelines && this.config.kbPipelines.length > 0) {
             params.set("kb_pipelines", this.config.kbPipelines.join(","));
+        }
+        if (this.config.idToken) {
+            params.set("id_token", this.config.idToken);
         }
         return `${base}/runtimes/${escapedArn}/ws?${params.toString()}`;
     }
