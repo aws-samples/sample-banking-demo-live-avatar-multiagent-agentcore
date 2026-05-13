@@ -2,3 +2,15 @@
 **/cdk.out
 **/graphql/**/*.ts
 **/API.ts
+# Generated architecture artifacts — large autogen SVG/HTML/drawio
+architecture.svg
+architecture.html
+architecture.drawio
+architecture.drawio.svg
+architecture.drawio.dot
+architecture.dot
+tools/generative-architecture/architecture.svg
+tools/generative-architecture/architecture.html
+tools/generative-architecture/architecture.drawio
+tools/generative-architecture/research_agent_architecture.svg
+tools/generative-architecture/research_agent_architecture.dot

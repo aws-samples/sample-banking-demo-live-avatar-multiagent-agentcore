@@ -7,10 +7,13 @@ All 4 agents share one Gateway MCP client and use AgentCore Memory for session p
 """
 
 import asyncio
+import logging
 import os
 import threading
 import time
 import traceback
+
+logger = logging.getLogger(__name__)
 
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import (
@@ -1407,8 +1410,8 @@ async def _handle_chatbot(
             try:
                 msg_dict = message if isinstance(message, dict) else getattr(message, "__dict__", {})
                 tq.put(("stream", {"message": msg_dict}))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Failed to push chatbot stream message to SSE queue: %s", exc)
 
     chatbot_prompt = system_prompt_override or CHATBOT_PROMPT
 
@@ -1955,10 +1958,14 @@ async def _run_pipeline(
                                         },
                                     )
                                 )
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+                        except Exception as exc:
+                            logger.warning(
+                                "Pipeline callback failed to parse tool-result JSON: %s (text=%r)",
+                                exc,
+                                text_val[:200],
+                            )
+            except Exception as exc:
+                logger.warning("Pipeline callback failed walking message content: %s", exc)
 
         agent.callback_handler = _pipeline_callback
 

@@ -11,3 +11,9 @@ cdk.out
 
 *.env
 .env*
+
+# Generative architecture toolkit
+tools/generative-architecture/outputs/
+tools/generative-architecture/genai_architect.py
+tools/generative-architecture/research_agent_architecture.png
+tools/generative-architecture/gartner_appdev_2026_architecture.png

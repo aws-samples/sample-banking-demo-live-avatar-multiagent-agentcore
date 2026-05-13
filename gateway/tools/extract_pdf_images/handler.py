@@ -74,7 +74,7 @@ def _invoke_ci(session_id: str, name: str, arguments: dict) -> dict:
                             result.update(parsed)
                             continue
                     except Exception:
-                        pass
+                        pass  # nosec B110 — speculative ast.literal_eval, ValueError/SyntaxError is expected common case
                     result[key] = value
                 elif isinstance(value, dict):
                     result.update(value)

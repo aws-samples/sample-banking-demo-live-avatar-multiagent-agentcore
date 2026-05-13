@@ -8,6 +8,7 @@ import urllib.request
 import uuid
 from datetime import datetime
 from io import BytesIO
+from urllib.parse import urlparse
 
 import boto3
 from reportlab.lib import colors
@@ -692,8 +693,15 @@ def _fetch_image(s3_key: str = "", image_url: str = "") -> BytesIO | None:
 
     # Fallback to presigned URL
     if image_url:
+        # image_url originates from LLM-generated menu/report JSON; validate
+        # the scheme so a prompt-injection payload cannot coerce urlopen into
+        # following file:// or ftp:// URIs from inside the Lambda.
+        parsed = urlparse(image_url)
+        if parsed.scheme != "https":
+            logger.warning("Blocked non-https image_url scheme: %r", parsed.scheme)
+            return None
         try:
-            with urllib.request.urlopen(image_url, timeout=15) as resp:
+            with urllib.request.urlopen(image_url, timeout=15) as resp:  # nosec B310 — scheme validated above, https only
                 return BytesIO(resp.read())
         except Exception as e:
             logger.warning(f"URL fetch failed for {image_url[:80]}: {e}")

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import csv
 import re
-import subprocess
+import subprocess  # nosec B404 — subprocess import, entire module is a git-aware reviewer
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -82,7 +82,7 @@ def _blob_in_commit(sha: str, path: str) -> bool:
     isn't known locally.
     """
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 — git cat-file -p <sha>:<path>, args hardcoded, sha+path regex-validated
             ["git", "cat-file", "-e", f"{sha}:{path}"],
             cwd=REPO_ROOT,
             capture_output=True,
@@ -177,7 +177,7 @@ def _format_markdown(grouped: dict[str, list[Finding]]) -> tuple[str, int]:
 
 def _is_gitignored(path: str) -> bool:
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 B607 — git check-ignore, args hardcoded, path regex-validated
             ["git", "check-ignore", "-q", path],
             cwd=REPO_ROOT,
             capture_output=True,

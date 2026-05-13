@@ -535,7 +535,7 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
         try:
             await websocket.close()
         except Exception:
-            pass
+            pass  # nosec B110 — WebSocket close in finally, double-close must not raise
 
 
 # --- Application Entry ---
@@ -543,7 +543,7 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
 if __name__ == "__main__":
     import uvicorn
 
-    host = "0.0.0.0" if os.environ.get("DOCKER_CONTAINER") else "127.0.0.1"
+    host = "0.0.0.0" if os.environ.get("DOCKER_CONTAINER") else "127.0.0.1"  # nosec B104 — 0.0.0.0 required for AgentCore proxy traffic inside the runtime container; gated by DOCKER_CONTAINER env
     logger.info(
         "Starting avatar agent: model=%s, region=%s, host=%s",
         MODEL_ID,

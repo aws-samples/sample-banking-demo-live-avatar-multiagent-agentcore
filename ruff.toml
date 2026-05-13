@@ -4,6 +4,6 @@ target-version = "py311"
 [lint]
 select = ["E", "F", "W", "I"]
 # E501 in prompt strings and hex-color formatting; E402 for deferred imports
-per-file-ignores = { "patterns/**/*.py" = ["E501", "E402"], "gateway/**/*.py" = ["E501"] }
+per-file-ignores = { "patterns/**/*.py" = ["E501", "E402"], "gateway/**/*.py" = ["E501"], "tools/**/*.py" = ["E501"] }
 
 exclude = ["cdk.out/", ".venv/", "venv/", "node_modules/"]

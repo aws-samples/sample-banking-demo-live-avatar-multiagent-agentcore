@@ -72,7 +72,7 @@ def _execute_neptune_query(query: str, parameters: dict | None = None) -> dict:
     req = urllib.request.Request(url, data=body.encode("utf-8"), headers=headers, method="POST")
 
     try:
-        with urllib.request.urlopen(req, timeout=300) as response:
+        with urllib.request.urlopen(req, timeout=300) as response:  # nosec B310 — https://{NEPTUNE_ENDPOINT}/queries, host from CDK env var
             return json.loads(response.read().decode("utf-8"))
     except Exception as e:
         logger.error(f"Neptune query failed: {e}")

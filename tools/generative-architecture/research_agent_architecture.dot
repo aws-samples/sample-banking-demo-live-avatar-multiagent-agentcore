@@ -1,0 +1,1317 @@
+digraph "Gartner AppDev Research Agent -- Bedrock AgentCore on AWS   (stage: dev)" {
+	graph [bb="0,0,3355.2,4739.8",
+		dpi=200,
+		fontcolor="#2D3436",
+		fontname=Helvetica,
+		fontsize=15,
+		label="Gartner AppDev Research Agent -- Bedrock AgentCore on AWS   (stage: dev)",
+		lheight=0.22,
+		lp="1677.6,11.875",
+		lwidth=7.22,
+		nodesep=0.6,
+		pad=0.6,
+		rankdir=LR,
+		ranksep=1.2,
+		splines=ortho
+	];
+	node [fixedsize=true,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		height=1.4,
+		imagescale=true,
+		label="\N",
+		labelloc=b,
+		shape=box,
+		style=rounded,
+		width=1.4
+	];
+	edge [color="#7B8894"];
+	subgraph "cluster_User Journey" {
+		graph [bb="24.75,3301.8,515.15,3683.8",
+			bgcolor="#EEF2FF",
+			fontname="Sans-Serif",
+			fontsize=12,
+			label="User Journey",
+			labeljust=l,
+			lheight=0.18,
+			lp="68.375,3673.4",
+			lwidth=0.99,
+			pencolor="#3B82F6",
+			penwidth=2,
+			rankdir=LR,
+			shape=box,
+			style=filled
+		];
+		c9e71907d65e4b7b9803f7a2b76588c7	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/general/user.png",
+			label="1. User",
+			pos="83.15,3377.8",
+			shape=none];
+		"44f428ba5aa6448ab2274b86299b7a2e"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/network/cloudfront.png",
+			label="2. CloudFront",
+			pos="269.95,3377.8",
+			shape=none];
+		c9e71907d65e4b7b9803f7a2b76588c7 -> "44f428ba5aa6448ab2274b86299b7a2e"	[color="#3B82F6",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			penwidth=2,
+			pos="e,219.75,3377.8 133.21,3377.8 133.21,3377.8 206.73,3377.8 206.73,3377.8"];
+		"9cee342137fc401f9ab12c533d9cddbf"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/security/waf.png",
+			label="3. WAF (CloudFront)",
+			pos="456.75,3377.8",
+			shape=none];
+		"44f428ba5aa6448ab2274b86299b7a2e" -> "9cee342137fc401f9ab12c533d9cddbf"	[color="#3B82F6",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,406.55,3377.8 320.01,3377.8 320.01,3377.8 395.04,3377.8 395.04,3377.8",
+			style=dashed];
+		"98030071850a4883a0e265bb5cf2ee95"	[height=2.3,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/storage/simple-storage-service-s3.png",
+			label="4. Frontend
+(S3 + Vite)",
+			pos="456.75,3571.8",
+			shape=none];
+		"44f428ba5aa6448ab2274b86299b7a2e" -> "98030071850a4883a0e265bb5cf2ee95"	[color="#3B82F6",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			penwidth=2,
+			pos="e,406.77,3571.8 270.25,3446.1 270.25,3502 270.25,3571.8 270.25,3571.8 270.25,3571.8 393.74,3571.8 393.74,3571.8"];
+	}
+	subgraph "cluster_Auth and Edge" {
+		graph [bb="958.75,4333.8,2021.5,4731.8",
+			bgcolor="#FFF7ED",
+			fontname="Sans-Serif",
+			fontsize=12,
+			label="Auth and Edge",
+			labeljust=l,
+			lheight=0.18,
+			lp="1006.5,4721.4",
+			lwidth=1.10,
+			pencolor="#F59E0B",
+			penwidth=2,
+			rankdir=LR,
+			shape=box,
+			style=filled
+		];
+		"6ac66450e0484fc1a42366d90aa71560"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/security/cognito.png",
+			label="5. Cognito User Pool",
+			pos="1017.1,4452.8",
+			shape=none];
+		"6b847f2a7e524c3e9c17cf3878ba9b7b"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/security/cognito.png",
+			label="6. Identity Pool",
+			pos="1239.9,4589.8",
+			shape=none];
+		"6ac66450e0484fc1a42366d90aa71560" -> "6b847f2a7e524c3e9c17cf3878ba9b7b"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1223.2,4521.4 1067.3,4510.4 1128.3,4510.4 1223.2,4510.4 1223.2,4510.4 1223.2,4510.4 1223.2,4511.5 1223.2,4511.5",
+			style=invis];
+		"6ac66450e0484fc1a42366d90aa71560" -> "6b847f2a7e524c3e9c17cf3878ba9b7b"	[color="#F59E0B",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1256.2,4521.5 1067.3,4499.6 1137.4,4499.6 1256.2,4499.6 1256.2,4499.6 1256.2,4499.6 1256.2,4509.9 1256.2,4509.9"];
+		"9c81289178de48a69e246f80ed4474b7"	[height=1.9,
+			image="icons/Identity.png",
+			label="7. Federate / Midway",
+			pos="1463.7,4611.8",
+			shape=none];
+		"6ac66450e0484fc1a42366d90aa71560" -> "9c81289178de48a69e246f80ed4474b7"	[color="#F59E0B",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1463.2,4543.5 1067.5,4488.9 1184.1,4488.9 1463.2,4488.9 1463.2,4488.9 1463.2,4488.9 1463.2,4532 1463.2,4532",
+			style=dashed,
+			xlabel=Midway,
+			xlp="1264.4,4495.6"];
+		"0053036885844c74b154faf18d41ce97"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/security/cognito.png",
+			label="8. Cognito Domain",
+			pos="1239.9,4409.8",
+			shape=none];
+		"6ac66450e0484fc1a42366d90aa71560" -> "0053036885844c74b154faf18d41ce97"	[color="#F59E0B",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1189.8,4431.2 1067.4,4431.2 1067.4,4431.2 1178.3,4431.2 1178.3,4431.2"];
+		"6b847f2a7e524c3e9c17cf3878ba9b7b" -> "9c81289178de48a69e246f80ed4474b7"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,4600.8 1290.1,4600.8 1290.1,4600.8 1402.1,4600.8 1402.1,4600.8",
+			style=invis];
+		"86a97c4e820249f698877626dfa3afcd"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/security/waf.png",
+			label="9. WAF (Regional)",
+			pos="1463.7,4409.8",
+			shape=none];
+		"0053036885844c74b154faf18d41ce97" -> "86a97c4e820249f698877626dfa3afcd"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,4409.8 1290.1,4409.8 1290.1,4409.8 1402.1,4409.8 1402.1,4409.8",
+			style=invis];
+		a427802489494ad38730a8ccc7a4e16f	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/security/cognito.png",
+			label="10. M2M Client",
+			pos="1650.5,4409.8",
+			shape=none];
+		"86a97c4e820249f698877626dfa3afcd" -> a427802489494ad38730a8ccc7a4e16f	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1600.3,4409.8 1513.8,4409.8 1513.8,4409.8 1588.8,4409.8 1588.8,4409.8",
+			style=invis];
+		"5e5bbe5bb36d45489141b6d9570e7cdd"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/security/secrets-manager.png",
+			label="11. Secrets Manager",
+			pos="1963.1,4409.8",
+			shape=none];
+		a427802489494ad38730a8ccc7a4e16f -> "5e5bbe5bb36d45489141b6d9570e7cdd"	[color="#F59E0B",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1912.7,4409.8 1700.7,4409.8 1700.7,4409.8 1901.2,4409.8 1901.2,4409.8",
+			style=dashed];
+	}
+	subgraph "cluster_REST API" {
+		graph [bb="771.95,3930.8,1075.5,4283.8",
+			bgcolor="#FEF3C7",
+			fontname="Sans-Serif",
+			fontsize=12,
+			label="REST API",
+			labeljust=l,
+			lheight=0.18,
+			lp="807.32,4273.4",
+			lwidth=0.76,
+			pencolor="#D97706",
+			penwidth=2,
+			rankdir=LR,
+			shape=box,
+			style=filled
+		];
+		e410ec49d511468fba603704f35d31f2	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/network/api-gateway.png",
+			label="12. REST API Gateway",
+			pos="830.35,4186.8",
+			shape=none];
+		"2893bb8850754ebfa0b7620c6a99c369"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/compute/lambda.png",
+			label="13. Feedback Lambda",
+			pos="1017.1,4006.8",
+			shape=none];
+		e410ec49d511468fba603704f35d31f2 -> "2893bb8850754ebfa0b7620c6a99c369"	[color="#D97706",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,967.06,4006.8 830.25,4118.4 830.25,4067.5 830.25,4006.8 830.25,4006.8 830.25,4006.8 955.55,4006.8 955.55,4006.8"];
+		"731521d26bd745d09e8df4adc7a81d7b"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/compute/lambda.png",
+			label="14. KB Reset Lambda",
+			pos="1017.1,4186.8",
+			shape=none];
+		e410ec49d511468fba603704f35d31f2 -> "731521d26bd745d09e8df4adc7a81d7b"	[color="#D97706",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,966.95,4186.8 880.41,4186.8 880.41,4186.8 955.44,4186.8 955.44,4186.8",
+			xlabel="POST /kb-reset",
+			xlp="963.67,4193.5"];
+	}
+	subgraph "cluster_Amazon Bedrock AgentCore" {
+		graph [bb="577.15,1672.8,1724.9,3922.8",
+			bgcolor="#01A88D",
+			fontname="Sans-Serif",
+			fontsize=12,
+			label="Amazon Bedrock AgentCore",
+			labeljust=l,
+			lheight=0.18,
+			lp="660.9,3912.4",
+			lwidth=2.10,
+			pencolor="#047857",
+			penwidth=3,
+			rankdir=LR,
+			shape=box,
+			style=filled
+		];
+		subgraph "cluster_Orchestrator Runtime" {
+			graph [bb="585.15,1854.8,1716.9,2635.8",
+				bgcolor="#B3E5D9",
+				fontname="Sans-Serif",
+				fontsize=12,
+				label="Orchestrator Runtime",
+				labeljust=l,
+				lheight=0.18,
+				lp="649.77,2625.4",
+				lwidth=1.57,
+				pencolor="#01A88D",
+				penwidth=2,
+				rankdir=LR,
+				shape=box,
+				style=filled
+			];
+			subgraph "cluster_Multi-Agent Pipeline" {
+				graph [bb="958.75,2073.8,1708.9,2606.8",
+					bgcolor="#E0F2EE",
+					fontname="Sans-Serif",
+					fontsize=12,
+					label="Multi-Agent Pipeline",
+					labeljust=l,
+					lheight=0.18,
+					lp="1020.7,2596.4",
+					lwidth=1.50,
+					pencolor="#01A88D",
+					penwidth=1,
+					rankdir=LR,
+					shape=box,
+					style=filled
+				];
+				"35b5348f9f3e456493605084689ef7c9"	[height=1.9,
+					image="icons/Strands_Agent.png",
+					label="17. Planner",
+					pos="1017.1,2149.8",
+					shape=none];
+				"0fb02bca26e34aa28bc7327abb140875"	[height=1.9,
+					image="icons/Strands_Agent.png",
+					label="18. Researcher",
+					pos="1239.9,2149.8",
+					shape=none];
+				"35b5348f9f3e456493605084689ef7c9" -> "0fb02bca26e34aa28bc7327abb140875"	[color="#01A88D",
+					dir=forward,
+					fontcolor="#2D3436",
+					fontname="Sans-Serif",
+					fontsize=13,
+					pos="e,1189.8,2149.8 1067.4,2149.8 1067.4,2149.8 1178.3,2149.8 1178.3,2149.8"];
+				b4a4b289bfac44d586a1b2e047b4d485	[height=1.9,
+					image="icons/Strands_Agent.png",
+					label="19. Synthesizer",
+					pos="1463.7,2149.8",
+					shape=none];
+				"0fb02bca26e34aa28bc7327abb140875" -> b4a4b289bfac44d586a1b2e047b4d485	[color="#01A88D",
+					dir=forward,
+					fontcolor="#2D3436",
+					fontname="Sans-Serif",
+					fontsize=13,
+					pos="e,1413.6,2149.8 1290.1,2149.8 1290.1,2149.8 1402.1,2149.8 1402.1,2149.8"];
+				"2fb89ab0a7e24dd9bd7b60dc3d06a7ae"	[height=1.9,
+					image="icons/Strands_Agent.png",
+					label="20. PDF Writer",
+					pos="1650.5,2149.8",
+					shape=none];
+				b4a4b289bfac44d586a1b2e047b4d485 -> "2fb89ab0a7e24dd9bd7b60dc3d06a7ae"	[color="#01A88D",
+					dir=forward,
+					fontcolor="#2D3436",
+					fontname="Sans-Serif",
+					fontsize=13,
+					pos="e,1600.3,2149.8 1513.8,2149.8 1513.8,2149.8 1588.8,2149.8 1588.8,2149.8"];
+				"622329e0d07644a0af83166380057c67"	[height=1.9,
+					image="icons/Strands_Agent.png",
+					label="21. Menu Designer",
+					pos="1017.1,2509.8",
+					shape=none];
+				db22f17546714ad1bcd86628a189e3c6	[height=1.9,
+					image="icons/Strands_Agent.png",
+					label="22. Chatbot",
+					pos="1017.1,2329.8",
+					shape=none];
+			}
+			subgraph "cluster_Browser Tools (in-process)" {
+				graph [bb="1161.5,1862.8,1319.3,2065.8",
+					bgcolor="#E0F2EE",
+					fontname="Sans-Serif",
+					fontsize=12,
+					label="Browser Tools (in-process)",
+					labeljust=l,
+					lheight=0.18,
+					lp="1240.4,2055.4",
+					lwidth=1.97,
+					pencolor="#01A88D",
+					penwidth=1,
+					rankdir=LR,
+					shape=box,
+					style=filled
+				];
+				a0dcd31355dd419fa99aa2876e1c2a71	[height=2.3,
+					image="icons/Browser_Tool.png",
+					label="23. Browser Tools
+(Strands @tool)",
+					pos="1239.9,1953.8",
+					shape=none];
+			}
+			"149c8f24be134c5383a6cedeb972c0fd"	[height=1.9,
+				image="icons/Runtime.png",
+				label="15. Orchestrator Runtime",
+				pos="643.55,2329.8",
+				shape=none];
+			"530f0e9b574c4277ba6085078220748a"	[height=1.9,
+				image="icons/Runtime.png",
+				label="16. Persona Router",
+				pos="830.35,2329.8",
+				shape=none];
+			"149c8f24be134c5383a6cedeb972c0fd" -> "530f0e9b574c4277ba6085078220748a"	[color="#01A88D",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				pos="e,780.15,2329.8 693.61,2329.8 693.61,2329.8 768.64,2329.8 768.64,2329.8"];
+			"530f0e9b574c4277ba6085078220748a" -> "35b5348f9f3e456493605084689ef7c9"	[color="#01A88D",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				pos="e,967.06,2149.8 830.25,2261.4 830.25,2210.5 830.25,2149.8 830.25,2149.8 830.25,2149.8 955.55,2149.8 955.55,2149.8"];
+			"530f0e9b574c4277ba6085078220748a" -> "622329e0d07644a0af83166380057c67"	[color="#01A88D",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				pos="e,966.81,2509.8 855.25,2398.1 855.25,2449 855.25,2509.8 855.25,2509.8 855.25,2509.8 955.3,2509.8 955.3,2509.8",
+				style=dashed];
+			"530f0e9b574c4277ba6085078220748a" -> db22f17546714ad1bcd86628a189e3c6	[color="#01A88D",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				pos="e,966.95,2329.8 880.41,2329.8 880.41,2329.8 955.44,2329.8 955.44,2329.8",
+				style=dashed];
+			db22f17546714ad1bcd86628a189e3c6 -> a0dcd31355dd419fa99aa2876e1c2a71	[color="#01A88D",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				pos="e,1189.7,1953.8 1067.5,2306.9 1112.8,2306.9 1172.2,2306.9 1172.2,2306.9 1172.2,2306.9 1172.2,1953.8 1172.2,1953.8 1172.2,1953.8 \
+1178.2,1953.8 1178.2,1953.8",
+				style=dashed];
+		}
+		subgraph "cluster_Avatar Runtime" {
+			graph [bb="585.15,3495.8,888.75,3877.8",
+				bgcolor="#B3E5D9",
+				fontname="Sans-Serif",
+				fontsize=12,
+				label="Avatar Runtime",
+				labeljust=l,
+				lheight=0.18,
+				lp="634.4,3867.4",
+				lwidth=1.15,
+				pencolor="#01A88D",
+				penwidth=2,
+				rankdir=LR,
+				shape=box,
+				style=filled
+			];
+			"665c474004c641b98d15ab399fe22fae"	[height=1.9,
+				image="icons/Runtime.png",
+				label="24. Avatar Runtime",
+				pos="643.55,3571.8",
+				shape=none];
+			"98e431da97524f6185b37e8bcb764095"	[height=1.9,
+				image="icons/Strands_Agent.png",
+				label="25. BidiAgent",
+				pos="830.35,3571.8",
+				shape=none];
+			"665c474004c641b98d15ab399fe22fae" -> "98e431da97524f6185b37e8bcb764095"	[color="#01A88D",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				pos="e,780.15,3612.8 693.61,3612.8 693.61,3612.8 768.64,3612.8 768.64,3612.8"];
+			"56da67844f7f4b24aab142398f4aca87"	[height=2.3,
+				image="icons/Strands_Agent.png",
+				label="26. Tool Selector
+(Nova 2 Lite)",
+				pos="830.35,3765.8",
+				shape=none];
+			"665c474004c641b98d15ab399fe22fae" -> "56da67844f7f4b24aab142398f4aca87"	[color="#01A88D",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				pos="e,780.23,3765.8 660.25,3640.1 660.25,3696 660.25,3765.8 660.25,3765.8 660.25,3765.8 768.72,3765.8 768.72,3765.8"];
+		}
+		subgraph "cluster_MCP Gateway" {
+			graph [bb="771.95,2657.8,1075.5,3487.8",
+				bgcolor="#B3E5D9",
+				fontname="Sans-Serif",
+				fontsize=12,
+				label="MCP Gateway",
+				labeljust=l,
+				lheight=0.18,
+				lp="818.57,3477.4",
+				lwidth=1.07,
+				pencolor="#01A88D",
+				penwidth=2,
+				rankdir=LR,
+				shape=box,
+				style=filled
+			];
+			"7b215d0762a34277babb7d0507614f08"	[height=1.9,
+				image="icons/Gateway.png",
+				label="27. MCP Gateway",
+				pos="830.35,3166.8",
+				shape=none];
+			"3a0edc6bb11541e497cd900256c954e6"	[height=2.3,
+				image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/compute/lambda.png",
+				label="28. Knowledge & Search
+(kb_search . web_search)",
+				pos="1017.1,2957.8",
+				shape=none];
+			"7b215d0762a34277babb7d0507614f08" -> "3a0edc6bb11541e497cd900256c954e6"	[color="#EC4899",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				penwidth=2,
+				pos="e,967.06,2957.8 830.25,3098.6 830.25,3037.6 830.25,2957.8 830.25,2957.8 830.25,2957.8 954.04,2957.8 954.04,2957.8"];
+			e16c2321ba31497cbaa39c0b0f1f660d	[height=2.3,
+				image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/compute/lambda.png",
+				label="29. Content Generation
+(pdf . canvas . reel . website)",
+				pos="1017.1,3166.8",
+				shape=none];
+			"7b215d0762a34277babb7d0507614f08" -> e16c2321ba31497cbaa39c0b0f1f660d	[color="#EC4899",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				penwidth=2,
+				pos="e,966.95,3143.9 880.41,3143.9 880.41,3143.9 953.93,3143.9 953.93,3143.9"];
+			"232d4141108741eea67fc8a7536de1d8"	[height=2.3,
+				image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/compute/lambda.png",
+				label="30. Memory & Profile
+(save . recall . analyze . profile)",
+				pos="1017.1,3375.8",
+				shape=none];
+			"7b215d0762a34277babb7d0507614f08" -> "232d4141108741eea67fc8a7536de1d8"	[color="#EC4899",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				penwidth=2,
+				pos="e,967.06,3301.1 830.25,3235.1 830.25,3268.3 830.25,3301.1 830.25,3301.1 830.25,3301.1 954.04,3301.1 954.04,3301.1"];
+			"379a813a6941410d9848f7b02b20c924"	[height=2.3,
+				image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/compute/lambda.png",
+				label="31. Commerce & Data
+(place_order . data_sources . sample)",
+				pos="1017.1,2748.8",
+				shape=none];
+			"7b215d0762a34277babb7d0507614f08" -> "379a813a6941410d9848f7b02b20c924"	[color="#EC4899",
+				dir=forward,
+				fontcolor="#2D3436",
+				fontname="Sans-Serif",
+				fontsize=13,
+				penwidth=2,
+				pos="e,966.93,2748.8 805.25,3098.7 805.25,2980.2 805.25,2748.8 805.25,2748.8 805.25,2748.8 953.91,2748.8 953.91,2748.8"];
+		}
+		"149c8f24be134c5383a6cedeb972c0fd" -> "7b215d0762a34277babb7d0507614f08"	[color="#047857",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			penwidth=2,
+			pos="e,780.21,3143.9 643.25,2398.1 643.25,2594.1 643.25,3143.9 643.25,3143.9 643.25,3143.9 767.18,3143.9 767.18,3143.9"];
+		c42a3b97ea7541028193192c5f884703	[height=2.3,
+			image="icons/Memory.png",
+			label="32. AgentCore Memory
+(Episodic . Semantic . Preferences)",
+			pos="1239.9,3375.8",
+			shape=none];
+		"149c8f24be134c5383a6cedeb972c0fd" -> c42a3b97ea7541028193192c5f884703	[color="#01A88D",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1240.2,3293.2 631.25,2397.8 631.25,2614.1 631.25,3271.2 631.25,3271.2 631.25,3271.2 1240.2,3271.2 1240.2,3271.2 1240.2,3271.2 \
+1240.2,3281.6 1240.2,3281.6"];
+		"66159e3a62e84dcaae1d6ae7a9b3e32b"	[height=1.9,
+			image="icons/Policy_Engine_Agentic_Guardrails.png",
+			label="33. Bedrock Guardrails",
+			pos="1239.9,2711.8",
+			shape=none];
+		db22f17546714ad1bcd86628a189e3c6 -> "66159e3a62e84dcaae1d6ae7a9b3e32b"	[color="#01A88D",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1240.2,2643.8 1067.5,2352.6 1133.3,2352.6 1240.2,2352.6 1240.2,2352.6 1240.2,2352.6 1240.2,2632.3 1240.2,2632.3",
+			style=dashed,
+			xlabel=ApplyGuardrail,
+			xlp="1196,2399.3"];
+		"7fc01ee8c51b4ef3ae6ffb514b6bb04f"	[height=2.3,
+			image="icons/Browser_Tool.png",
+			label="34. AgentCore Browser
+(microVM)",
+			pos="1463.7,1763.8",
+			shape=none];
+		a0dcd31355dd419fa99aa2876e1c2a71 -> "7fc01ee8c51b4ef3ae6ffb514b6bb04f"	[color="#01A88D",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,1791.3 1240.2,1871.1 1240.2,1831 1240.2,1791.3 1240.2,1791.3 1240.2,1791.3 1402,1791.3 1402,1791.3",
+			style=dashed,
+			xlabel=CDP,
+			xlp="1267,1784.6"];
+		"665c474004c641b98d15ab399fe22fae" -> "7b215d0762a34277babb7d0507614f08"	[color="#047857",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			penwidth=2,
+			pos="e,780.29,3189.6 681.25,3503.4 681.25,3393.5 681.25,3189.6 681.25,3189.6 681.25,3189.6 767.26,3189.6 767.26,3189.6"];
+		"665c474004c641b98d15ab399fe22fae" -> c42a3b97ea7541028193192c5f884703	[color="#01A88D",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1240.2,3458.4 656.25,3503.4 656.25,3498.9 656.25,3496.1 656.25,3496.1 656.25,3496.1 1240.2,3496.1 1240.2,3496.1 1240.2,3496.1 \
+1240.2,3469.9 1240.2,3469.9"];
+		"49065f86a03040f0831f6eb2fd3e7c0c"	[height=1.9,
+			image="icons/Code_Interpreter.png",
+			label="35. AgentCore Code Interpreter",
+			pos="1239.9,3166.8",
+			shape=none];
+		e16c2321ba31497cbaa39c0b0f1f660d -> "49065f86a03040f0831f6eb2fd3e7c0c"	[color="#01A88D",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1189.8,3166.8 1067.4,3166.8 1067.4,3166.8 1178.3,3166.8 1178.3,3166.8",
+			style=dashed,
+			xlabel=extract_pdf_images,
+			xlp="1181.4,3173.5"];
+		"232d4141108741eea67fc8a7536de1d8" -> c42a3b97ea7541028193192c5f884703	[color="#01A88D",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1189.8,3375.8 1067.4,3375.8 1067.4,3375.8 1178.3,3375.8 1178.3,3375.8"];
+	}
+	subgraph "cluster_Bedrock Foundation Models" {
+		graph [bb="1181.5,1052.8,1708.9,1434.8",
+			bgcolor="#FAF5FF",
+			fontname="Sans-Serif",
+			fontsize=12,
+			label="Bedrock Foundation Models",
+			labeljust=l,
+			lheight=0.18,
+			lp="1264.5,1424.4",
+			lwidth=2.08,
+			pencolor="#8B5CF6",
+			penwidth=2,
+			rankdir=LR,
+			shape=box,
+			style=filled
+		];
+		"5f13d90dc2ff47e2b7275fba70f6f3be"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/ml/sagemaker.png",
+			label="36. Claude Sonnet 4.6",
+			pos="1239.9,1157.8",
+			shape=none];
+		"50c38394d89e40a7909cc77c72f2c8a5"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/ml/sagemaker.png",
+			label="37. Nova 2 Sonic",
+			pos="1463.7,1128.8",
+			shape=none];
+		"5f13d90dc2ff47e2b7275fba70f6f3be" -> "50c38394d89e40a7909cc77c72f2c8a5"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,1161.2 1290.1,1161.2 1290.1,1161.2 1402.1,1161.2 1402.1,1161.2",
+			style=invis];
+		"5f13d90dc2ff47e2b7275fba70f6f3be" -> "50c38394d89e40a7909cc77c72f2c8a5"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,1125.3 1290.1,1125.3 1290.1,1125.3 1402.1,1125.3 1402.1,1125.3",
+			style=invis];
+		f476ef41a8104541b37bd87d24b33061	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/ml/sagemaker.png",
+			label="38. Nova 2 Lite",
+			pos="1650.5,1337.8",
+			shape=none];
+		"50c38394d89e40a7909cc77c72f2c8a5" -> f476ef41a8104541b37bd87d24b33061	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1650.2,1269.6 1480.2,1197.1 1480.2,1215.8 1480.2,1231.1 1480.2,1231.1 1480.2,1231.1 1650.2,1231.1 1650.2,1231.1 1650.2,1231.1 \
+1650.2,1258.1 1650.2,1258.1",
+			style=invis];
+		"50c38394d89e40a7909cc77c72f2c8a5" -> f476ef41a8104541b37bd87d24b33061	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1625.2,1269.4 1447.2,1197.1 1447.2,1218.1 1447.2,1235.8 1447.2,1235.8 1447.2,1235.8 1625.2,1235.8 1625.2,1235.8 1625.2,1235.8 \
+1625.2,1257.9 1625.2,1257.9",
+			style=invis];
+		"021b770987cf4b8ab835663d7866ab66"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/ml/sagemaker.png",
+			label="39. Nova Canvas",
+			pos="1239.9,1337.8",
+			shape=none];
+		"952a673f04be4d1883db44e26e22acb5"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/ml/sagemaker.png",
+			label="40. Nova Reel",
+			pos="1463.7,1308.8",
+			shape=none];
+		"021b770987cf4b8ab835663d7866ab66" -> "952a673f04be4d1883db44e26e22acb5"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,1305.3 1290.1,1305.3 1290.1,1305.3 1402.1,1305.3 1402.1,1305.3",
+			style=invis];
+		f3b39725450d4225b8fd9e39f74b9377	[height=2.3,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/ml/sagemaker.png",
+			label="41. Nova 2 Multimodal
+Embeddings",
+			pos="1650.5,1143.8",
+			shape=none];
+		"952a673f04be4d1883db44e26e22acb5" -> f3b39725450d4225b8fd9e39f74b9377	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1675.2,1226.5 1513.8,1250 1576.4,1250 1675.2,1250 1675.2,1250 1675.2,1250 1675.2,1238 1675.2,1238",
+			style=invis];
+	}
+	subgraph "cluster_Knowledge Base" {
+		graph [bb="1181.5,564.75,3347.2,872.75",
+			bgcolor="#FFEDD5",
+			fontname="Sans-Serif",
+			fontsize=12,
+			label="Knowledge Base",
+			labeljust=l,
+			lheight=0.18,
+			lp="1235.3,862.38",
+			lwidth=1.27,
+			pencolor="#F97316",
+			penwidth=2,
+			rankdir=LR,
+			shape=box,
+			style=filled
+		];
+		"66c278637b7f47d39ddf3fa8b9a39cdd"	[height=2.3,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/ml/sagemaker.png",
+			label="42. Knowledge Base
+(Bedrock)",
+			pos="1239.9,760.75",
+			shape=none];
+		f43abe9d34b64efb96bf487940136b38	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/storage/simple-storage-service-s3.png",
+			label="43. Vector Index",
+			pos="1463.7,685.75",
+			shape=none];
+		"66c278637b7f47d39ddf3fa8b9a39cdd" -> f43abe9d34b64efb96bf487940136b38	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,728.75 1290.1,728.75 1290.1,728.75 1402.1,728.75 1402.1,728.75",
+			style=invis];
+		"66c278637b7f47d39ddf3fa8b9a39cdd" -> f43abe9d34b64efb96bf487940136b38	[color="#F97316",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,703.35 1290.1,703.35 1290.1,703.35 1402.1,703.35 1402.1,703.35"];
+		c38acbaf2f1e4b358ba8cd4b40aa6e17	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/storage/simple-storage-service-s3.png",
+			label="48. Data Source",
+			pos="1963.1,685.75",
+			shape=none];
+		"66c278637b7f47d39ddf3fa8b9a39cdd" -> c38acbaf2f1e4b358ba8cd4b40aa6e17	[color="#F97316",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1963.2,754.05 1290.2,776.48 1454.2,776.48 1963.2,776.48 1963.2,776.48 1963.2,776.48 1963.2,765.57 1963.2,765.57"];
+		aaa5c8de3d8448b2bc3c83476595ef19	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/storage/simple-storage-service-s3.png",
+			label="46. KB Supplemental S3",
+			pos="2978.9,752.75",
+			shape=none];
+		"66c278637b7f47d39ddf3fa8b9a39cdd" -> aaa5c8de3d8448b2bc3c83476595ef19	[color="#F97316",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,2928.5,798.82 1290.1,798.82 1290.1,798.82 2917,798.82 2917,798.82",
+			style=dashed];
+		bb598c220df7461eb3e4919977237300	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/storage/simple-storage-service-s3.png",
+			label="44. S3 Vectors",
+			pos="1650.5,685.75",
+			shape=none];
+		f43abe9d34b64efb96bf487940136b38 -> bb598c220df7461eb3e4919977237300	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1600.3,708.55 1513.8,708.55 1513.8,708.55 1588.8,708.55 1588.8,708.55",
+			style=invis];
+		f43abe9d34b64efb96bf487940136b38 -> bb598c220df7461eb3e4919977237300	[color="#F97316",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1600.3,662.95 1513.8,662.95 1513.8,662.95 1588.8,662.95 1588.8,662.95"];
+		bb598c220df7461eb3e4919977237300 -> c38acbaf2f1e4b358ba8cd4b40aa6e17	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1912.7,685.75 1700.7,685.75 1700.7,685.75 1901.2,685.75 1901.2,685.75",
+			style=invis];
+		"99874c9f86df4b02a4ecf54c56b2e3cf"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/storage/simple-storage-service-s3.png",
+			label="45. KB Docs S3",
+			pos="2472.3,685.75",
+			shape=none];
+		c38acbaf2f1e4b358ba8cd4b40aa6e17 -> "99874c9f86df4b02a4ecf54c56b2e3cf"	[color="#F97316",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,2422.1,662.95 2013.3,662.95 2013.3,662.95 2410.6,662.95 2410.6,662.95"];
+		"99874c9f86df4b02a4ecf54c56b2e3cf" -> aaa5c8de3d8448b2bc3c83476595ef19	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,2928.6,719.25 2522.3,719.25 2522.3,719.25 2917.1,719.25 2917.1,719.25",
+			style=invis];
+		"5a6611dbb3694ec7991fae11cbe23ee2"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/compute/lambda.png",
+			label="47. kb_ingest Lambda",
+			pos="3288.8,640.75",
+			shape=none];
+		aaa5c8de3d8448b2bc3c83476595ef19 -> "5a6611dbb3694ec7991fae11cbe23ee2"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,3238.5,696.75 3029,696.75 3029,696.75 3227,696.75 3227,696.75",
+			style=invis];
+		"5a6611dbb3694ec7991fae11cbe23ee2" -> "66c278637b7f47d39ddf3fa8b9a39cdd"	[color="#F97316",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1256.2,677.99 3238.6,606.1 2925.6,606.1 1256.2,606.1 1256.2,606.1 1256.2,606.1 1256.2,666.48 1256.2,666.48",
+			style=dashed,
+			xlabel=StartIngestionJob,
+			xlp="2164.7,599.35"];
+		"5a6611dbb3694ec7991fae11cbe23ee2" -> "99874c9f86df4b02a4ecf54c56b2e3cf"	[color="#F97316",
+			dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,2522.5,650.85 3238.7,650.85 3238.7,650.85 2534,650.85 2534,650.85"];
+	}
+	subgraph "cluster_Data Plane" {
+		graph [bb="1181.5,31.75,2021.5,384.75",
+			bgcolor="#FFF7ED",
+			fontname="Sans-Serif",
+			fontsize=12,
+			label="Data Plane",
+			labeljust=l,
+			lheight=0.18,
+			lp="1219.5,374.38",
+			lwidth=0.83,
+			pencolor="#F97316",
+			penwidth=2,
+			rankdir=LR,
+			shape=box,
+			style=filled
+		];
+		"62fc566af9334a309864eca88b3f19d1"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/database/dynamodb.png",
+			label="49. Sessions",
+			pos="1239.9,107.75",
+			shape=none];
+		ab36f16cd5b148f99a0d55832ac5db3d	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/database/dynamodb.png",
+			label="50. Customers",
+			pos="1463.7,107.75",
+			shape=none];
+		"62fc566af9334a309864eca88b3f19d1" -> ab36f16cd5b148f99a0d55832ac5db3d	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,84.95 1290.1,84.95 1290.1,84.95 1402.1,84.95 1402.1,84.95",
+			style=invis];
+		"3ec021de695345319c499fe94d02f7dc"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/database/dynamodb.png",
+			label="51. Metadata",
+			pos="1650.5,107.75",
+			shape=none];
+		ab36f16cd5b148f99a0d55832ac5db3d -> "3ec021de695345319c499fe94d02f7dc"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1600.3,84.95 1513.8,84.95 1513.8,84.95 1588.8,84.95 1588.8,84.95",
+			style=invis];
+		"58784f6652a04d1dae868bb82c85e567"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/database/dynamodb.png",
+			label="52. Feedback",
+			pos="1963.1,107.75",
+			shape=none];
+		"3ec021de695345319c499fe94d02f7dc" -> "58784f6652a04d1dae868bb82c85e567"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1912.7,84.95 1700.7,84.95 1700.7,84.95 1901.2,84.95 1901.2,84.95",
+			style=invis];
+		d3e01552c55847a6af20765654e60e45	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/storage/simple-storage-service-s3.png",
+			label="53. Reports S3",
+			pos="1239.9,287.75",
+			shape=none];
+		de3ef4b13fb548b39c9690a48b55221e	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/storage/simple-storage-service-s3.png",
+			label="54. Images S3",
+			pos="1463.7,287.75",
+			shape=none];
+		d3e01552c55847a6af20765654e60e45 -> de3ef4b13fb548b39c9690a48b55221e	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1413.6,264.95 1290.1,264.95 1290.1,264.95 1402.1,264.95 1402.1,264.95",
+			style=invis];
+		"931cac3fa25e4cbd9f483bc0ceb6fd86"	[height=1.9,
+			image="/opt/homebrew/lib/python3.13/site-packages/resources/aws/storage/simple-storage-service-s3.png",
+			label="55. Avatar S3",
+			pos="1650.5,287.75",
+			shape=none];
+		de3ef4b13fb548b39c9690a48b55221e -> "931cac3fa25e4cbd9f483bc0ceb6fd86"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,1600.3,287.75 1513.8,287.75 1513.8,287.75 1588.8,287.75 1588.8,287.75",
+			style=invis];
+	}
+	subgraph cluster_Legend {
+		graph [bb="1778.9,1251.8,3160.4,1576.8",
+			bgcolor="#FFFFFF",
+			fontname="Sans-Serif",
+			fontsize=12,
+			label=Legend,
+			labeljust=l,
+			lheight=0.18,
+			lp="1807.1,1566.4",
+			lwidth=0.56,
+			pencolor="#D1D5DB",
+			penwidth=1,
+			rank=same,
+			rankdir=LR,
+			shape=box,
+			style="rounded,filled"
+		];
+		d784f928314c4254aa1bac6108ba4aa7	[fixedsize=false,
+			fontname=Menlo,
+			fontsize=9,
+			height=4,
+			imagescale=false,
+			label="▸ LEFT:   USER / AUTH / REST API
+ 1. User                  End user / browser
+ 2. CloudFront            CloudFront distribution (\
+OAC to S3)
+ 3. WAF (CloudFront)      WAF web ACL (CloudFront scope)
+ 4. Frontend (S3 + Vite)  React + Vite SPA on S3
+ 5. Cognito \
+User Pool     Cognito User Pool (OIDC)
+ 6. Identity Pool         Cognito Identity Pool (SigV4)
+ 7. Federate / Midway     Federate / \
+Midway IdP
+ 8. Cognito Domain        Cognito hosted domain
+ 9. WAF (Regional)        WAF web ACL (Regional scope)
+10. M2M Client            \
+M2M OAuth2 client credentials
+11. Secrets Manager       Secrets Manager (M2M secret)
+12. REST API Gateway      REST API Gateway (\
+feedback, kb-reset)
+13. Feedback Lambda       Feedback persistence Lambda
+14. KB Reset Lambda       Knowledge Base reset Lambda",
+			labeljust=l,
+			margin="0.15,0.08",
+			pos="1963.1,1403.8",
+			shape=note,
+			width=4.8938];
+		b86aca3f0429491985e5698d3901b62c	[fixedsize=false,
+			fontname=Menlo,
+			fontsize=9,
+			height=4,
+			imagescale=false,
+			label="▸ MIDDLE: AMAZON BEDROCK AGENTCORE
+15. Orchestrator Runtime        AgentCore Runtime (HTTP/SSE)
+16. Persona Router              \
+Dispatches per-mode sub-agents
+17. Planner                     Decomposes query into plan
+18. Researcher                  KB + web \
+search + citations
+19. Synthesizer                 Cross-references, summarizes
+20. PDF Writer                  12-section PDF report
+\
+21. Menu Designer               Menu designer + dish images
+22. Chatbot                     Conversational agent (guarded)
+23. Browser \
+Tools (Strands @tool)  Strands browser @tool helpers
+24. Avatar Runtime              AgentCore Runtime (WebSocket)
+25. BidiAgent                   \
+Nova Sonic bidi agent
+26. Tool Selector (Nova 2 Lite)  Nova Lite tool selector
+27. MCP Gateway                 MCP Gateway (JWT-authorized)
+\
+28. Knowledge & Search (kb_search . web_search)  kb_search + web_search tools
+29. Content Generation (pdf . canvas . reel . website)  \
+PDF + Canvas + Reel tools
+30. Memory & Profile (save . recall . analyze . profile)  Memory + user profile tools
+31. Commerce & Data (\
+place_order . data_sources . sample)  Orders + data + sample tools
+32. AgentCore Memory (Episodic . Semantic . Preferences)  Episodic / \
+semantic / preference
+33. Bedrock Guardrails          Bedrock guardrail policy
+34. AgentCore Browser (microVM)  AgentCore Browser \
+microVM
+35. AgentCore Code Interpreter  AgentCore Code Interpreter",
+			labeljust=l,
+			margin="0.15,0.08",
+			pos="2472.3,1403.8",
+			shape=note,
+			width=6.8625];
+		d784f928314c4254aa1bac6108ba4aa7 -> b86aca3f0429491985e5698d3901b62c	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,2225.1,1355.8 2139.7,1355.8 2139.7,1355.8 2213.5,1355.8 2213.5,1355.8",
+			style=invis];
+		d784f928314c4254aa1bac6108ba4aa7 -> b86aca3f0429491985e5698d3901b62c	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,2225.1,1451.8 2139.7,1451.8 2139.7,1451.8 2213.5,1451.8 2213.5,1451.8",
+			style=invis];
+		"113f22a8ad0c465e9f573d9d764a1cc1"	[fixedsize=false,
+			fontname=Menlo,
+			fontsize=9,
+			height=4,
+			imagescale=false,
+			label="▸ RIGHT:  FM / KNOWLEDGE BASE / DATA
+36. Claude Sonnet 4.6           Claude Sonnet 4.6 (Converse)
+37. Nova 2 Sonic                \
+Nova 2 Sonic (voice bidi)
+38. Nova 2 Lite                 Nova 2 Lite (tool select)
+39. Nova Canvas                 Nova Canvas (\
+image gen)
+40. Nova Reel                   Nova Reel (video gen)
+41. Nova 2 Multimodal Embeddings  Nova 2 multimodal embeddings
+\
+42. Knowledge Base (Bedrock)    Bedrock Knowledge Base
+43. Vector Index                S3 Vectors index
+44. S3 Vectors                  \
+S3 Vectors bucket
+45. KB Docs S3                  KB source documents bucket
+46. KB Supplemental S3          Supplemental assets \
+bucket
+47. kb_ingest Lambda            S3-event ingestion Lambda
+48. Data Source                 KB data source binding
+49. Sessions                    \
+Session state table
+50. Customers                   Customer profiles table
+51. Metadata                    Metadata table
+52. Feedback                    \
+User feedback table
+53. Reports S3                  Generated reports bucket
+54. Images S3                   Generated images bucket
+\
+55. Avatar S3                   Avatar assets bucket",
+			labeljust=l,
+			margin="0.15,0.08",
+			pos="2978.9,1403.8",
+			shape=note,
+			width=4.8208];
+		b86aca3f0429491985e5698d3901b62c -> "113f22a8ad0c465e9f573d9d764a1cc1"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,2805.1,1451.8 2719.7,1451.8 2719.7,1451.8 2793.6,1451.8 2793.6,1451.8",
+			style=invis];
+		b86aca3f0429491985e5698d3901b62c -> "113f22a8ad0c465e9f573d9d764a1cc1"	[dir=forward,
+			fontcolor="#2D3436",
+			fontname="Sans-Serif",
+			fontsize=13,
+			pos="e,2805.1,1355.8 2719.7,1355.8 2719.7,1355.8 2793.6,1355.8 2793.6,1355.8",
+			style=invis];
+	}
+	c9e71907d65e4b7b9803f7a2b76588c7 -> "7fc01ee8c51b4ef3ae6ffb514b6bb04f"	[color="#3B82F6",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1413.3,1736.2 83.25,3309.6 83.25,2999.3 83.25,1736.2 83.25,1736.2 83.25,1736.2 1401.8,1736.2 1401.8,1736.2",
+		style=dashed,
+		xlabel="DCV live view",
+		xlp="41.625,1856.8"];
+	"98030071850a4883a0e265bb5cf2ee95" -> "6ac66450e0484fc1a42366d90aa71560"	[color="#F59E0B",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,966.96,4486.9 440.25,3654.2 440.25,3879.1 440.25,4486.9 440.25,4486.9 440.25,4486.9 955.45,4486.9 955.45,4486.9",
+		xlabel=OIDC,
+		xlp="423.75,4321.4"];
+	"98030071850a4883a0e265bb5cf2ee95" -> e410ec49d511468fba603704f35d31f2	[color="#D97706",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,780.32,4186.8 473.25,3654.4 473.25,3822.1 473.25,4186.8 473.25,4186.8 473.25,4186.8 768.81,4186.8 768.81,4186.8",
+		xlabel="POST /feedback",
+		xlp="424.5,4061.6"];
+	"98030071850a4883a0e265bb5cf2ee95" -> "149c8f24be134c5383a6cedeb972c0fd"	[color="#047857",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		penwidth=2,
+		pos="e,605.25,2398.1 507.03,3492.5 550.11,3492.5 605.25,3492.5 605.25,3492.5 605.25,3492.5 605.25,2411.2 605.25,2411.2",
+		xlabel="SigV4/JWT",
+		xlp="571.88,2994.2"];
+	"98030071850a4883a0e265bb5cf2ee95" -> "665c474004c641b98d15ab399fe22fae"	[color="#047857",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		penwidth=2,
+		pos="e,593.35,3571.8 506.81,3571.8 506.81,3571.8 580.33,3571.8 580.33,3571.8",
+		xlabel=WebSocket,
+		xlp="577.32,3565"];
+	e410ec49d511468fba603704f35d31f2 -> "6ac66450e0484fc1a42366d90aa71560"	[color="#F59E0B",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,967.09,4452.8 847.25,4254.9 847.25,4333.7 847.25,4452.8 847.25,4452.8 847.25,4452.8 955.58,4452.8 955.58,4452.8",
+		style=dashed,
+		xlabel=authorizer,
+		xlp="817.25,4401.2"];
+	e410ec49d511468fba603704f35d31f2 -> "86a97c4e820249f698877626dfa3afcd"	[color="#F59E0B",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1463.2,4341.4 813.25,4255.1 813.25,4278.2 813.25,4298.2 813.25,4298.2 813.25,4298.2 1463.2,4298.2 1463.2,4298.2 1463.2,4298.2 \
+1463.2,4329.8 1463.2,4329.8",
+		style=dashed];
+	"2893bb8850754ebfa0b7620c6a99c369" -> "58784f6652a04d1dae868bb82c85e567"	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1912.9,130.55 1067.4,4006.8 1232,4006.8 1744.2,4006.8 1744.2,4006.8 1744.2,4006.8 1744.2,130.55 1744.2,130.55 1744.2,130.55 1901.4,\
+130.55 1901.4,130.55"];
+	"731521d26bd745d09e8df4adc7a81d7b" -> "66c278637b7f47d39ddf3fa8b9a39cdd"	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1189.9,788.35 1067.5,4163.9 1093.7,4163.9 1120.2,4163.9 1120.2,4163.9 1120.2,4163.9 1120.2,788.35 1120.2,788.35 1120.2,788.35 \
+1178.4,788.35 1178.4,788.35",
+		style=dashed,
+		xlabel=StartIngestionJob,
+		xlp="1172.8,2466.7"];
+	"731521d26bd745d09e8df4adc7a81d7b" -> "99874c9f86df4b02a4ecf54c56b2e3cf"	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,2422.1,708.55 1067.2,4209.6 1290.2,4209.6 2182.2,4209.6 2182.2,4209.6 2182.2,4209.6 2182.2,708.55 2182.2,708.55 2182.2,708.55 \
+2410.6,708.55 2410.6,708.55",
+		style=dashed,
+		xlabel=DeleteObject,
+		xlp="2143.6,2895.6"];
+	"149c8f24be134c5383a6cedeb972c0fd" -> a427802489494ad38730a8ccc7a4e16f	[color="#F59E0B",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1667.2,4341.7 618.25,2397.9 618.25,2644.2 618.25,3473.8 618.25,3473.8 618.25,3473.8 1667.2,3473.8 1667.2,3473.8 1667.2,3473.8 \
+1667.2,4330.2 1667.2,4330.2",
+		style=dashed,
+		xlabel="M2M OAuth2",
+		xlp="994.4,3467"];
+	"149c8f24be134c5383a6cedeb972c0fd" -> "5f13d90dc2ff47e2b7275fba70f6f3be"	[color="#8B5CF6",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		penwidth=2,
+		pos="e,1189.7,1135 660.25,2261.7 660.25,2008.3 660.25,1135 660.25,1135 660.25,1135 1176.7,1135 1176.7,1135",
+		xlabel=Converse,
+		xlp="631.38,1433.3"];
+	"149c8f24be134c5383a6cedeb972c0fd" -> "62fc566af9334a309864eca88b3f19d1"	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1189.7,84.95 626.25,2261.6 626.25,1886.1 626.25,84.95 626.25,84.95 626.25,84.95 1178.2,84.95 1178.2,84.95"];
+	"665c474004c641b98d15ab399fe22fae" -> a427802489494ad38730a8ccc7a4e16f	[color="#F59E0B",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1633.2,4341.4 626.25,3640.1 626.25,3644.6 626.25,3647.4 626.25,3647.4 626.25,3647.4 1633.2,3647.4 1633.2,3647.4 1633.2,3647.4 \
+1633.2,4329.9 1633.2,4329.9",
+		style=dashed];
+	"665c474004c641b98d15ab399fe22fae" -> "50c38394d89e40a7909cc77c72f2c8a5"	[color="#8B5CF6",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		penwidth=2,
+		pos="e,1413.5,1074.8 693.86,3585.4 724.68,3585.4 758.25,3585.4 758.25,3585.4 758.25,3585.4 758.25,1074.8 758.25,1074.8 758.25,1074.8 \
+1400.5,1074.8 1400.5,1074.8",
+		xlabel="Sonic bidi",
+		xlp="729,2034.5"];
+	"665c474004c641b98d15ab399fe22fae" -> f476ef41a8104541b37bd87d24b33061	[color="#8B5CF6",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1600.2,1391.7 668.25,3503.6 668.25,3501.2 668.25,3499.8 668.25,3499.8 668.25,3499.8 1388.2,3499.8 1388.2,3499.8 1388.2,3499.8 \
+1388.2,1391.7 1388.2,1391.7 1388.2,1391.7 1588.7,1391.7 1588.7,1391.7",
+		xlabel="tool select",
+		xlp="1357.9,2700.6"];
+	"665c474004c641b98d15ab399fe22fae" -> "62fc566af9334a309864eca88b3f19d1"	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1189.6,130.55 693.74,3530.7 705.79,3530.7 715.25,3530.7 715.25,3530.7 715.25,3530.7 715.25,130.55 715.25,130.55 715.25,130.55 \
+1178.1,130.55 1178.1,130.55"];
+	"665c474004c641b98d15ab399fe22fae" -> "931cac3fa25e4cbd9f483bc0ceb6fd86"	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1650.2,356 693.69,3558.1 715.97,3558.1 737.25,3558.1 737.25,3558.1 737.25,3558.1 737.25,583.6 737.25,583.6 737.25,583.6 1650.2,\
+583.6 1650.2,583.6 1650.2,583.6 1650.2,367.51 1650.2,367.51"];
+	"7b215d0762a34277babb7d0507614f08" -> "6ac66450e0484fc1a42366d90aa71560"	[color="#F59E0B",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,966.9,4418.6 880.61,3189.6 902.5,3189.6 923.25,3189.6 923.25,3189.6 923.25,3189.6 923.25,4418.6 923.25,4418.6 923.25,4418.6 955.39,\
+4418.6 955.39,4418.6",
+		style=dashed,
+		xlabel=JWT,
+		xlp="909.75,3792"];
+	"3a0edc6bb11541e497cd900256c954e6" -> "5f13d90dc2ff47e2b7275fba70f6f3be"	[color="#8B5CF6",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1189.8,1180.5 1067.4,2985.3 1100.3,2985.3 1137.2,2985.3 1137.2,2985.3 1137.2,2985.3 1137.2,1180.5 1137.2,1180.5 1137.2,1180.5 \
+1178.3,1180.5 1178.3,1180.5",
+		style=dashed,
+		xlabel="Nova grounding",
+		xlp="1089.6,2090.6"];
+	"3a0edc6bb11541e497cd900256c954e6" -> "66c278637b7f47d39ddf3fa8b9a39cdd"	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		penwidth=2,
+		pos="e,1189.8,733.15 1067.1,2930.2 1085.7,2930.2 1102.2,2930.2 1102.2,2930.2 1102.2,2930.2 1102.2,733.15 1102.2,733.15 1102.2,733.15 \
+1176.8,733.15 1176.8,733.15",
+		xlabel=kb_search,
+		xlp="1071.1,1805.2"];
+	e16c2321ba31497cbaa39c0b0f1f660d -> "021b770987cf4b8ab835663d7866ab66"	[color="#8B5CF6",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		penwidth=2,
+		pos="e,1189.6,1337.8 1067.4,3089.7 1106.6,3089.7 1154.2,3089.7 1154.2,3089.7 1154.2,3089.7 1154.2,1337.8 1154.2,1337.8 1154.2,1337.8 \
+1176.6,1337.8 1176.6,1337.8"];
+	e16c2321ba31497cbaa39c0b0f1f660d -> "952a673f04be4d1883db44e26e22acb5"	[color="#8B5CF6",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		penwidth=2,
+		pos="e,1413.4,1341.2 1067.3,3095.5 1163.4,3095.5 1364.2,3095.5 1364.2,3095.5 1364.2,3095.5 1364.2,1341.2 1364.2,1341.2 1364.2,1341.2 \
+1400.4,1341.2 1400.4,1341.2"];
+	e16c2321ba31497cbaa39c0b0f1f660d -> d3e01552c55847a6af20765654e60e45	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1189.7,287.75 1067.4,3086.8 1077.6,3086.8 1085.2,3086.8 1085.2,3086.8 1085.2,3086.8 1085.2,287.75 1085.2,287.75 1085.2,287.75 \
+1178.2,287.75 1178.2,287.75",
+		xlabel=pdf_generator,
+		xlp="1043.2,1643"];
+	e16c2321ba31497cbaa39c0b0f1f660d -> de3ef4b13fb548b39c9690a48b55221e	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1413.4,310.55 1067.5,3092.6 1158.1,3092.6 1339.2,3092.6 1339.2,3092.6 1339.2,3092.6 1339.2,310.55 1339.2,310.55 1339.2,310.55 \
+1401.9,310.55 1401.9,310.55"];
+	"379a813a6941410d9848f7b02b20c924" -> ab36f16cd5b148f99a0d55832ac5db3d	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1413.4,130.55 1067.4,2797.3 1152.3,2797.3 1315.2,2797.3 1315.2,2797.3 1315.2,2797.3 1315.2,130.55 1315.2,130.55 1315.2,130.55 \
+1401.9,130.55 1401.9,130.55"];
+	"379a813a6941410d9848f7b02b20c924" -> "3ec021de695345319c499fe94d02f7dc"	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1600.3,130.55 1067.1,2814.4 1198.4,2814.4 1543.2,2814.4 1543.2,2814.4 1543.2,2814.4 1543.2,130.55 1543.2,130.55 1543.2,130.55 \
+1588.8,130.55 1588.8,130.55"];
+	"5f13d90dc2ff47e2b7275fba70f6f3be" -> d784f928314c4254aa1bac6108ba4aa7	[dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1786.6,1264.5 1290.2,1211.7 1382.9,1211.7 1571.2,1211.7 1571.2,1211.7 1571.2,1211.7 1571.2,1264.5 1571.2,1264.5 1571.2,1264.5 \
+1775.1,1264.5 1775.1,1264.5",
+		style=invis];
+	f476ef41a8104541b37bd87d24b33061 -> d784f928314c4254aa1bac6108ba4aa7	[dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1786.4,1337.8 1700.7,1337.8 1700.7,1337.8 1774.9,1337.8 1774.9,1337.8",
+		style=invis];
+	"66c278637b7f47d39ddf3fa8b9a39cdd" -> f3b39725450d4225b8fd9e39f74b9377	[color="#8B5CF6",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,1650.2,1061.1 1290.2,832.35 1399.8,832.35 1650.2,832.35 1650.2,832.35 1650.2,832.35 1650.2,1049.6 1650.2,1049.6",
+		style=dashed,
+		xlabel=embed,
+		xlp="1558.6,825.6"];
+	d3e01552c55847a6af20765654e60e45 -> "5a6611dbb3694ec7991fae11cbe23ee2"	[color="#F97316",
+		dir=forward,
+		fontcolor="#2D3436",
+		fontname="Sans-Serif",
+		fontsize=13,
+		pos="e,3238.6,594.85 1223.2,355.91 1223.2,446.38 1223.2,594.85 1223.2,594.85 1223.2,594.85 3227,594.85 3227,594.85",
+		style=dashed,
+		xlabel="S3 event",
+		xlp="2079.1,588.1"];
+}

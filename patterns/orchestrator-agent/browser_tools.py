@@ -76,7 +76,7 @@ def _emit_screenshot() -> None:
         b64 = _run_async(_snap())
         _ui_queue.put(("ui", {"component": "BrowserScreenshot", "props": {"image": b64}}))
     except Exception:
-        pass
+        pass  # nosec B110 — best-effort screenshot during tool teardown
 
 
 # ─── Event-loop worker thread ─────────────────────────────────────────────────
@@ -299,12 +299,12 @@ def browser_stop() -> str:
     try:
         _run_async(_close())
     except Exception:
-        pass
+        pass  # nosec B110 — Playwright page cleanup, page may already be closed
 
     try:
         _state["client"].stop()
     except Exception:
-        pass
+        pass  # nosec B110 — Playwright context cleanup, idempotent
 
     session_id = _state["session_id"]
     _state.update(
@@ -326,7 +326,7 @@ def cleanup() -> None:
         try:
             browser_stop()
         except Exception:
-            pass
+            pass  # nosec B110 — browser close on session end, safe if already gone
 
 
 BROWSER_TOOLS = [

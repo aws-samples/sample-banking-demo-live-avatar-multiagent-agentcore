@@ -26,7 +26,7 @@ def _query_wikipedia(query: str, max_results: int = 3) -> list[dict]:
     )
 
     req = urllib.request.Request(search_url, headers={"User-Agent": "GartnerResearchBot/1.0"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=15) as resp:  # nosec B310 — Wikipedia API, https://en.wikipedia.org/..., inputs urlencoded
         search_data = json.loads(resp.read().decode())
 
     results = []
@@ -36,7 +36,7 @@ def _query_wikipedia(query: str, max_results: int = 3) -> list[dict]:
         summary_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(title)}"
         try:
             req = urllib.request.Request(summary_url, headers={"User-Agent": "GartnerResearchBot/1.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310 — Wikipedia REST, same origin, inputs urlencoded
                 summary = json.loads(resp.read().decode())
             results.append(
                 {
@@ -75,7 +75,7 @@ def _query_arxiv(query: str, max_results: int = 5) -> list[dict]:
     )
 
     req = urllib.request.Request(url, headers={"User-Agent": "GartnerResearchBot/1.0"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=15) as resp:  # nosec B310 — arXiv API, https://export.arxiv.org/..., inputs quoted
         xml_data = resp.read().decode()
 
     root = ET.fromstring(xml_data)

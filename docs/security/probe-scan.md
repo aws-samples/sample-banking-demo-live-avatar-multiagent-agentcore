@@ -53,6 +53,21 @@ suppression diffs that add a new entry with no comment.
   why the pattern is safe in context (e.g. "CDK asset bundling, path is
   compile-time constant").
 
+### bandit — `# nosec B<NNN> — <justification>`
+
+- The comment must live on the triggering line (per bandit's rules) and
+  name each rule it suppresses, e.g.
+  `# nosec B310 — scheme validated above, https only` or
+  `# nosec B603 B607 — args hardcoded, path regex-validated`.
+- A justification must follow the rule list after an em-dash (`—`) so the
+  reviewer at `tools/security/review_probe_scan.py` and human readers can
+  tell at a glance why the pattern is safe in context. Suppressions without
+  a justification should fail review.
+- Prefer fixing the underlying issue (e.g. adding a `urlparse` scheme check
+  before `urllib.request.urlopen`) over suppressing. Use suppressions only
+  when the pattern is genuinely safe — hardcoded HTTPS endpoints, best-
+  effort cleanup `except: pass`, or AgentCore-required `0.0.0.0` binds.
+
 ## 2026-05-11 baseline
 
 | Scanner  | ERROR count | Remediation                                                                                                                                                                      |
@@ -68,8 +83,41 @@ suppression diffs that add a new entry with no comment.
   reach bundled deps. Risk is bounded: `@aws/pdk` is only used as a build-time
   scaffolding tool, not shipped to any runtime, and the affected `minimatch`
   calls are on trusted glob patterns from CDK templates (no user input).
+- `@aws/pdk` bundledDependencies also carry Critical advisories for `tmp`,
+  `js-yaml`, `lodash`, `brace-expansion`, and `diff`. Same limitation — the
+  overrides block cannot reach them, and the same "build-time-only, not
+  shipped" risk bound applies.
+- `commitizen` and its dev-tool chain (e.g. `cz-conventional-changelog`) pull
+  several transitive Criticals via their own `node_modules/` trees. These
+  are pre-commit-time tooling only — never shipped to any runtime — so we
+  accept the finding rather than force-patching upstream.
 - `.env.production` is regenerated locally by `npm run kit -- refresh-frontend`
   and must not be re-added to git.
+
+## 2026-05-13 baseline
+
+Scan `53d8fa38-013f-4dfc-b67c-9d52f077e543` against `main` produced **16
+Critical** (ERROR), 232 Warning, 60 Info. The new Critical set adds two
+scanners (**bandit**, **grype**) on top of the gitleaks/semgrep suppression
+regime codified on 2026-05-11.
+
+| Scanner            | ERROR count | Remediation                                                                                                                            |
+| ------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| bandit             | 11          | 2 fixes (orchestrator_agent.py logger adds ×3, pdf_generator.py urlparse guard) + 9 `# nosec` suppressions with justification comments |
+| grype              | 4           | All inside `@aws/pdk` bundledDependencies or commitizen dev-tool chain; cannot be overridden; see Known Limitations                    |
+| (gitleaks/semgrep) | 0 new       | Prior 2026-05-11 suppressions still cover HEAD                                                                                         |
+
+Real code fixes:
+
+- `patterns/orchestrator-agent/orchestrator_agent.py` — three silent
+  `try/except/pass` blocks (B110) in `_on_chatbot_event` and
+  `_pipeline_callback` replaced with `logger.debug` (SSE queue) /
+  `logger.warning` (parse failures) so silent truncations surface in
+  CloudWatch.
+- `gateway/tools/pdf_generator/handler.py` — `urlopen(image_url)` now goes
+  through a `urlparse` scheme guard that rejects anything that isn't
+  `https`, so prompt-injected `file://` or `ftp://` URIs from LLM-generated
+  menu/report JSON cannot coerce the Lambda into fetching local files.
 
 ## When to update this doc
 
