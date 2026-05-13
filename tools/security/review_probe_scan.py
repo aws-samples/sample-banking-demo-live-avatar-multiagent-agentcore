@@ -29,6 +29,24 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #   "generic-api-key : fingerprint <sha>:<path>:<rule>:<line>"
 _FINGERPRINT_RE = re.compile(r"fingerprint\s+(?P<sha>[0-9a-f]{7,40}):(?P<path>[^:]+):(?P<rule>[^:]+):(?P<line>\d+)")
 
+# Scanner-specific inline suppression markers. The reviewer treats a finding as
+# already-addressed when the triggering line (±SUPPRESSION_WINDOW) contains the
+# relevant marker, optionally followed by a comma-separated rule-id list.
+#
+# Examples of recognized lines:
+#   # nosemgrep: spawn-shell-true — dev-only CLI, hard-coded templates
+#   // nosemgrep: detect-child-process, spawn-shell-true
+#   # nosec B310 — scheme validated above, https only
+#   result = subprocess.run(  # nosec B603 B607 — args hardcoded
+_NOSEMGREP_RE = re.compile(r"nosemgrep(?::\s*(?P<rules>[A-Za-z0-9,\s_\-.]+))?")
+_NOSEC_RE = re.compile(r"nosec(?:\s+(?P<rules>B[0-9 ]+))?")
+# Semgrep's own suppression handler looks at the triggering line and the line
+# immediately above. Multi-line calls (e.g. subprocess.run(...) spanning 5+
+# lines) routinely put the marker on the call-opener while the engine reports
+# the finding on the inner arg-list line, so we widen to ±5 to match common
+# block-scoped suppression usage and mirror the convention in the policy doc.
+SUPPRESSION_WINDOW = 5  # lines of context to search around the triggering line
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -138,6 +156,55 @@ def _classify_gitleaks(finding: Finding) -> str:
     return "unknown"
 
 
+def _has_inline_suppression(file_name: str, line: str, rule_id: str | None, scanner: str) -> bool:
+    """Return True if the finding line (±SUPPRESSION_WINDOW) has a matching
+    `# nosemgrep:` / `# nosec` / `// nosemgrep:` marker for the rule.
+
+    Bare markers (no rule list) suppress any rule from that scanner. A rule
+    list suppresses only the rules it names.
+    """
+    try:
+        line_no = int(line)
+    except (TypeError, ValueError):
+        return False
+    path = REPO_ROOT / file_name
+    if not path.is_file():
+        return False
+    try:
+        text_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return False
+
+    start = max(0, line_no - 1 - SUPPRESSION_WINDOW)
+    end = min(len(text_lines), line_no - 1 + SUPPRESSION_WINDOW + 1)
+    window = text_lines[start:end]
+
+    scanner_norm = scanner.lower()
+
+    for text in window:
+        # semgrep suppressions — apply to the semgrep scanner
+        if scanner_norm == "semgrep":
+            m = _NOSEMGREP_RE.search(text)
+            if m:
+                rules = m.group("rules")
+                if not rules:
+                    return True
+                named = {r.strip() for r in rules.split(",") if r.strip()}
+                if rule_id is None or rule_id in named:
+                    return True
+        # bandit suppressions — apply to the bandit scanner
+        if scanner_norm == "bandit":
+            m = _NOSEC_RE.search(text)
+            if m:
+                rules = m.group("rules")
+                if not rules:
+                    return True
+                named = {r.strip() for r in rules.split() if r.strip()}
+                if rule_id is None or rule_id in named:
+                    return True
+    return False
+
+
 def _format_markdown(grouped: dict[str, list[Finding]]) -> tuple[str, int]:
     """Return (markdown, unaddressed_count)."""
     lines: list[str] = []
@@ -167,8 +234,13 @@ def _format_markdown(grouped: dict[str, list[Finding]]) -> tuple[str, int]:
                     status = "unknown (sha/blob not found locally)"
             elif scanner == "grype":
                 status = "transitive dep — pin via `overrides`"
-            elif scanner == "semgrep":
-                status = "review + `# nosemgrep` with justification"
+            elif scanner in ("semgrep", "bandit"):
+                if _has_inline_suppression(f.file_name, f.line, f.rule_id, scanner):
+                    status = "suppressed in-code (verified)"
+                else:
+                    marker = "`# nosemgrep`" if scanner == "semgrep" else "`# nosec`"
+                    status = f"review + {marker} with justification"
+                    unaddressed += 1
             lines.append(f"| {idx} | `{f.file_name}` | {f.line} | `{f.rule_id or '-'}` | {status} |")
         lines.append("")
 

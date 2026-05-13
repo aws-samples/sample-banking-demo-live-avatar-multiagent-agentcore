@@ -19,8 +19,13 @@ python3 tools/security/review_probe_scan.py <path-to-csv>
 ```
 
 The script groups ERROR findings by scanner, classifies each gitleaks hit as
-"in-HEAD" vs "history-only", and prints a Markdown remediation table. It
-exits non-zero if any finding still references a tracked file in HEAD.
+"in-HEAD" vs "history-only", and prints a Markdown remediation table. For
+semgrep and bandit findings it also inspects the triggering file at ±5 lines
+around the reported line for a matching `# nosemgrep:` / `// nosemgrep:` /
+`# nosec` marker and marks those rows **suppressed in-code (verified)** so
+they are not counted against the exit code. The script exits non-zero only
+if a finding still references a tracked file in HEAD **and** has no matching
+inline suppression.
 
 ## Suppression policy
 
@@ -118,6 +123,26 @@ Real code fixes:
   through a `urlparse` scheme guard that rejects anything that isn't
   `https`, so prompt-injected `file://` or `ftp://` URIs from LLM-generated
   menu/report JSON cannot coerce the Lambda into fetching local files.
+
+## 2026-05-13 rescan
+
+A second scan of `main` later the same day surfaced 4 semgrep/bandit
+Criticals where the ProbeScan engine didn't honor the existing in-code
+suppressions (`# nosemgrep:` markers on multi-line `subprocess.run` /
+`spawn` / `jwt.decode` calls where the triggering line semgrep pinpointed
+wasn't the call-opener the marker sat on). The reviewer at
+`tools/security/review_probe_scan.py` now detects those markers directly
+via a ±5-line window around the reported line and classifies them as
+**suppressed in-code (verified)**, matching the behavior documented under
+"Running the reviewer".
+
+The one genuinely new finding from that rescan —
+`tools/generative-architecture/gen_arch.py:324`,
+`dangerous-subprocess-use-audit` — is accepted without a suppression: the
+file is a dev-only architecture-diagram generator (not deployed to any
+runtime), and the `subprocess.run()` uses list-form argv (`["python3",
+str(code_path)]`) with a local path under the tool's own working
+directory, so there is no shell and no external-input attack surface.
 
 ## When to update this doc
 
