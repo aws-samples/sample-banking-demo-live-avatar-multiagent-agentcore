@@ -1,0 +1,38 @@
+# gitleaks allowlist — fingerprint-based suppressions.
+#
+# Each line is <commit-sha>:<path>:<rule>:<line> as reported by gitleaks.
+# Policy: a fingerprint suppression requires an accompanying `#` comment
+# explaining provenance (see docs/security/probe-scan.md).
+#
+# Generated in response to the 2026-05-11 ProbeScan ERROR findings.
+
+# --- Historical starter-kit Cloudscape mock fixtures ------------------------
+# File was deleted from the repo; the flagged values are Cloudscape
+# s3-resource-selector demo data (e.g. AKIAIOSFODNN7EXAMPLE-style keys),
+# not real credentials. History rewrite is out of scope.
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:78
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:108
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:183
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:235
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:254
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:365
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:383
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:466
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:481
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:509
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:668
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:717
+8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:730
+
+# --- Legacy CDK starter stack (file deleted from repo) ----------------------
+6f80fff86cab49f1f696f50450074fdf45b8227e:cdk-stacks/lib/cdk-backend-stack.ts:generic-api-key:35
+
+# --- Legacy starter-kit README example (file deleted from repo) -------------
+e19ce80bbb1bb460d21e9392e4b89939c8def94b:starter-kit-package/packages/webapp/README.md:generic-api-key:20
+
+# --- Current frontend env --------------------------------------------------
+# lib/stacks/frontend/app/.env.production is now gitignored; these two
+# lines were flagged at commit 2ba88f3. Values are public Cognito client
+# IDs (not secrets). Keep until a future history rewrite retires them.
+2ba88f3264a868c9d7422a8f66dd0b0840416b06:lib/stacks/frontend/app/.env.production:generic-api-key:7
+2ba88f3264a868c9d7422a8f66dd0b0840416b06:lib/stacks/frontend/app/.env.production:generic-api-key:10

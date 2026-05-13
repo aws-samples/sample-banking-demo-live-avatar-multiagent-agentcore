@@ -112,6 +112,11 @@ const executeCommand = <T extends boolean = false>(
     if (!save) console.info(`\n${blueBright("Executing command:")} ${command}\n`);
 
     return new Promise((resolve, reject) => {
+        // nosemgrep: detect-child-process, spawn-shell-true
+        // Dev-only CLI: `command` is assembled from hard-coded CDK templates
+        // inside this file (stage/stack pickers + string-literal prefixes), not
+        // from untrusted user input. Shell is required for `--` pass-through
+        // semantics expected by the CDK CLI.
         const childProcess = spawn(command, [], {
             stdio: save ? "pipe" : "inherit",
             shell: true,

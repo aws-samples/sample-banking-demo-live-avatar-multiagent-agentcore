@@ -62,8 +62,13 @@ def extract_user_id_from_token(token: str) -> str:
 
     # Decode without signature verification — upstream already validated.
     try:
-        claims = jwt.decode(  # nosemgrep: unverified-jwt-decode
+        claims = jwt.decode(
             jwt=token,
+            # nosemgrep: unverified-jwt-decode
+            # AgentCore's M2M/OIDC authorizer has already validated the JWT
+            # signature before this Lambda runs; we only extract the `sub`
+            # claim here. Re-verifying would require fetching the JWKS per
+            # invocation, which AgentCore explicitly owns upstream.
             options={"verify_signature": False},
             algorithms=["RS256"],
         )

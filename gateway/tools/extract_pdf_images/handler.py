@@ -155,6 +155,8 @@ def handler(event, context):
                 ).get("status", "")
                 if status == "READY":
                     break
+                # nosemgrep: arbitrary-sleep
+                # Bounded polling (30 * 1s) for AgentCore CI session READY state.
                 time.sleep(1)
 
             # Upload PDF to session using blob

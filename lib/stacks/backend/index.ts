@@ -280,10 +280,15 @@ export class Backend extends Stack {
                               tryBundle(outputDir: string): boolean {
                                   try {
                                       const cp = require("child_process");
+                                      // nosemgrep: detect-child-process
+                                      // CDK asset bundling: `outputDir` is a CDK-generated temp path,
+                                      // `toolDir` is a compile-time constant under gateway/tools/.
                                       cp.execSync(
                                           `python3 -m pip install -r ${path.join(toolDir, "requirements.txt")} -t "${outputDir}" --quiet --no-cache-dir --platform manylinux2014_aarch64 --only-binary :all: --implementation cp --python-version 3.13`,
                                           { stdio: "pipe" }
                                       );
+                                      // nosemgrep: detect-child-process
+                                      // Same rationale as above — CDK-controlled paths only.
                                       cp.execSync(`cp -r "${toolDir}/"* "${outputDir}/"`, {
                                           stdio: "pipe",
                                           shell: "/bin/bash",
@@ -575,10 +580,15 @@ export class Backend extends Stack {
                             tryBundle(outputDir: string): boolean {
                                 try {
                                     const cp = require("child_process");
+                                    // nosemgrep: detect-child-process
+                                    // CDK asset bundling: `outputDir` is a CDK-generated temp path,
+                                    // `feedbackLambdaDir` is a compile-time constant.
                                     cp.execSync(
                                         `python3 -m pip install -r ${path.join(feedbackLambdaDir, "requirements.txt")} -t "${outputDir}" --quiet --no-cache-dir`,
                                         { stdio: "pipe" }
                                     );
+                                    // nosemgrep: detect-child-process
+                                    // Same rationale as above — CDK-controlled paths only.
                                     cp.execSync(`cp -r "${feedbackLambdaDir}/"* "${outputDir}/"`, {
                                         stdio: "pipe",
                                         shell: "/bin/bash",
@@ -675,10 +685,15 @@ export class Backend extends Stack {
                                     tryBundle(outputDir: string): boolean {
                                         try {
                                             const cp = require("child_process");
+                                            // nosemgrep: detect-child-process
+                                            // CDK asset bundling: `outputDir` is a CDK-generated temp
+                                            // path, `kbResetLambdaDir` is a compile-time constant.
                                             cp.execSync(
                                                 `python3 -m pip install -r ${path.join(kbResetLambdaDir, "requirements.txt")} -t "${outputDir}" --quiet --no-cache-dir`,
                                                 { stdio: "pipe" }
                                             );
+                                            // nosemgrep: detect-child-process
+                                            // Same rationale as above — CDK-controlled paths only.
                                             cp.execSync(
                                                 `cp -r "${kbResetLambdaDir}/"* "${outputDir}/"`,
                                                 { stdio: "pipe", shell: "/bin/bash" }
