@@ -22,15 +22,6 @@ export interface PresignParams {
     voiceId?: string;
     /** Initial KB pipeline multi-select as a comma-separated string value */
     kbPipelines?: string[];
-    /**
-     * Cognito ID token (JWT). Sent as a query-string param so the backend
-     * can extract the user's `sub` claim and attach UserScopeHook to the
-     * BidiAgent. Cognito Identity Pool already validated this token when it
-     * issued the SigV4 credentials used for the presigned URL, so the
-     * backend parses it without re-verifying the signature.
-     * Without it, the backend refuses the handshake with code 4401.
-     */
-    idToken?: string;
 }
 
 /**
@@ -71,12 +62,9 @@ export async function presignAgentCoreWebSocket(
         // accepts comma-separated or JSON list; use comma for compact URL.
         query.kb_pipelines = params.kbPipelines.join(",");
     }
-    if (params?.idToken) {
-        // Backend extracts the `sub` claim on this token to attach
-        // UserScopeHook. See patterns/avatar-agent/avatar_agent.py.
-        // Without this param the backend refuses the handshake (code 4401).
-        query.id_token = params.idToken;
-    }
+    // id_token is NOT signed into the URL — the AgentCore Runtime WebSocket
+    // proxy drops arbitrary query params before they reach the container.
+    // The frontend sends it inside the sessionStart JSON message instead.
 
     const signer = new SignatureV4({
         service: "bedrock-agentcore",

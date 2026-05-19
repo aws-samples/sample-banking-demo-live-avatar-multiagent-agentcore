@@ -247,11 +247,10 @@ tools/export.ts                     # @export directive processor
 | `episodic_memory`        | true         | AgentCore episodic memory strategy                    |
 | `semantic_memory`        | true         | Semantic memory strategy                              |
 | `user_preference_memory` | true         | User preference memory strategy                       |
-| `agentcore_policy`       | false        | Cedar-based tool access control                       |
-| `agentcore_evaluations`  | false        | LLM-as-judge quality metrics                          |
-| `server_side_tools`      | true         | Server-side tool execution                            |
 | `durable_functions`      | false        | Lambda Durable Functions (research_orchestrator tool) |
 | `guardrails`             | true         | Bedrock Guardrails (chatbot mode)                     |
+| `browser`                | true         | AgentCore Browser tool (3D kitchen monitor)           |
+| `sample_tool`            | false        | Throwaway word-counter tool registered with Gateway   |
 
 ### Model Config (`models` in cdk.json)
 

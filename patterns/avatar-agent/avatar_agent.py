@@ -38,11 +38,17 @@ INPUT_SAMPLE_RATE = int(os.environ.get("INPUT_SAMPLE_RATE", "16000"))
 OUTPUT_SAMPLE_RATE = int(os.environ.get("OUTPUT_SAMPLE_RATE", "24000"))
 
 # Known tool names for system prompt augmentation (since MCP client
-# isn't connected at agent creation time, we list what the Gateway provides)
+# isn't connected at agent creation time, we list what the Gateway provides).
+# Must stay in sync with `toolDefs` in lib/stacks/backend/index.ts. The
+# `sample_tool` (word-counter demo) is intentionally excluded — it has no
+# voice-conversation utility.
 GATEWAY_TOOL_NAMES = [
     "gateway_kb_search",
     "gateway_web_search",
     "gateway_data_sources",
+    "gateway_pdf_generator",
+    "gateway_website_generator",
+    "gateway_extract_pdf_images",
     "gateway_nova_canvas_generate",
     "gateway_nova_canvas_edit",
     "gateway_nova_canvas_history",
@@ -139,9 +145,9 @@ def create_avatar_agent(
 
     Args:
         user_id: Verified Cognito `sub` claim, extracted from the id_token
-            on the signed WebSocket handshake URL. Attached to every
-            user-scoped gateway tool call by UserScopeHook — the LLM
-            cannot spoof another user's identity.
+            sent in the first `sessionStart` WebSocket message. Attached
+            to every user-scoped gateway tool call by UserScopeHook — the
+            LLM cannot spoof another user's identity.
         kb_pipelines_holder: Optional single-element mutable list whose value is
             the current kb pipelines multi-select (e.g. ["bistro_research", "menu"]).
             When None or empty, the avatar searches every pipeline view.
@@ -237,12 +243,15 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
     """
     WebSocket endpoint for real-time voice conversation on AgentCore Runtime.
 
-    Authentication: the presigned SigV4 URL (from lib/stacks/frontend/app/src/
-    lib/websocket-client/sigv4.ts) carries the Cognito ID token as an
-    `id_token` query-string param. Cognito Identity Pool already verified the
-    token upstream when issuing the SigV4 credentials, so we parse the `sub`
-    claim without re-verifying the signature. A missing or malformed id_token
-    causes the handshake to be refused with code 4401.
+    Authentication: the Cognito ID token is sent inside the first
+    `sessionStart` JSON message from the frontend, not the handshake URL.
+    AgentCore Runtime's WebSocket proxy does not forward arbitrary query-
+    string params to the inner container, so query-string auth silently
+    fails. Using `sessionStart` keeps auth on a transport the proxy does
+    not touch. Cognito Identity Pool already verified the token upstream
+    when issuing the SigV4 credentials, so we parse the `sub` claim
+    without re-verifying the signature. A missing or malformed id_token
+    causes a post-accept close with code 4401.
 
     Matches the pattern from aws-samples/sample-nova-sonic-websocket-agentcore:
     - Accepts WebSocket connection explicitly
@@ -250,18 +259,6 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
     - Reads persona/voice from query params
     """
     logger.info("[AVATAR] New WebSocket connection")
-
-    # ── Verify identity BEFORE accepting the socket ─────────────────────────
-    # We close with 4401 (application-level unauthorized) when id_token is
-    # missing or malformed. This is a pre-accept close so the frontend sees
-    # a clean handshake failure.
-    id_token = websocket.query_params.get("id_token", "")
-    try:
-        user_id = extract_user_id_from_token(id_token)
-    except ValueError as exc:
-        logger.warning("[AVATAR] Refusing handshake — invalid id_token: %s", exc)
-        await websocket.close(code=4401, reason="invalid_id_token")
-        return
 
     # Read persona/voice/language from query params (sent by frontend)
     persona = websocket.query_params.get("persona", DEFAULT_PERSONA)
@@ -272,22 +269,63 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
         sensitivity = "MEDIUM"
 
     # Voice Avatar KB pipeline multi-select. Default (None) = search every view.
+    # Query-string form is kept as a fallback seed — the authoritative source
+    # is the sessionStart JSON message below.
     initial_kb_pipelines = _parse_kb_pipelines(websocket.query_params.get("kb_pipelines"))
     # Single-element holder so the hook always reads the latest value. The
     # holder is mutated in-place on kbPipelinesChange WebSocket messages.
     kb_pipelines_holder: list[list[str] | None] = [initial_kb_pipelines]
 
-    logger.info(
-        "[AVATAR] Connection params: user_id=%s, persona=%s, voice=%s, language=%s, sensitivity=%s, kb_pipelines=%r",
-        user_id,
-        persona,
-        voice_id,
-        language,
-        sensitivity,
-        initial_kb_pipelines,
-    )
+    # Accept the socket BEFORE any JSON reads. A pre-accept close cannot
+    # send a custom close code through Starlette/FastAPI; the browser sees
+    # an HTTP upgrade failure / 1006 and auto-reconnects. Post-accept close
+    # with code 4401 IS valid and is what we want for an auth failure.
+    await websocket.accept()
+    logger.info("[AVATAR] WebSocket connection accepted")
 
     try:
+        # ── Verify identity from the first JSON message ─────────────────
+        # Frontend sends sessionStart with idToken as the very first message
+        # after connect. On missing/invalid token we close with code 4401
+        # and the client stops reconnecting (see AvatarWebSocketClient
+        # maxReconnectAttempts).
+        first_msg = await websocket.receive_json()
+        session_id = None
+        id_token = ""
+        if isinstance(first_msg, dict) and first_msg.get("type") == "sessionStart":
+            session_id = first_msg.get("sessionId", "unknown")
+            id_token = first_msg.get("idToken", "")
+            logger.info("[AVATAR] Received sessionStart, session_id=%s", session_id)
+            # sessionStart may also carry kbPipelines — honor it as the
+            # authoritative initial scope (query-string path is a fallback).
+            if "kbPipelines" in first_msg:
+                parsed = _parse_kb_pipelines(first_msg.get("kbPipelines"))
+                kb_pipelines_holder[0] = parsed
+                logger.info("[AVATAR] sessionStart kbPipelines=%r", parsed)
+        else:
+            logger.warning(
+                "[AVATAR] First message was not sessionStart: %s",
+                first_msg.get("type") if isinstance(first_msg, dict) else type(first_msg),
+            )
+
+        try:
+            user_id = extract_user_id_from_token(id_token)
+        except ValueError as exc:
+            logger.warning("[AVATAR] Refusing connection — invalid id_token: %s", exc)
+            await websocket.send_json({"type": "error", "content": "invalid_id_token"})
+            await websocket.close(code=4401, reason="invalid_id_token")
+            return
+
+        logger.info(
+            "[AVATAR] Connection params: user_id=%s, persona=%s, voice=%s, language=%s, sensitivity=%s, kb_pipelines=%r",
+            user_id,
+            persona,
+            voice_id,
+            language,
+            sensitivity,
+            kb_pipelines_holder[0],
+        )
+
         # Step 1: Authenticate with Gateway
         logger.info("[AVATAR] Step 1: Getting OAuth2 access token...")
         access_token = get_gateway_access_token()
@@ -297,7 +335,9 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
         logger.info("[AVATAR] Step 2: Creating Gateway MCP client...")
         gateway_client = create_gateway_mcp_client(access_token)
 
-        # Step 3: Create BidiAgent with per-connection persona and voice
+        # Step 3: Create BidiAgent with per-connection persona and voice.
+        # Deferred until after sessionStart so UserScopeHook(user_id) gets
+        # the verified Cognito `sub` from the sessionStart idToken.
         logger.info("[AVATAR] Step 3: Creating BidiAgent...")
         agent, system_prompt = create_avatar_agent(
             tools=[gateway_client],
@@ -308,31 +348,8 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
             kb_pipelines_holder=kb_pipelines_holder,
         )
 
-        # Step 4: Accept WebSocket and run bidirectional streaming
-        logger.info("[AVATAR] Step 4: Accepting WebSocket and starting voice conversation...")
-        await websocket.accept()
-        logger.info("[AVATAR] WebSocket connection accepted")
-
-        # Handle initial sessionStart from frontend (control message, not audio)
-        first_msg = await websocket.receive_json()
-        session_id = None
-        if isinstance(first_msg, dict) and first_msg.get("type") == "sessionStart":
-            session_id = first_msg.get("sessionId", "unknown")
-            logger.info("[AVATAR] Received sessionStart, session_id=%s", session_id)
-            # sessionStart may also carry kbPipelines — honor it as a belt-and-
-            # suspenders alternative to the query-string path. If the frontend
-            # ever drops the query-string param (or a SigV4 presigning path
-            # omits it), the JSON handshake still seeds the initial scope.
-            if "kbPipelines" in first_msg:
-                parsed = _parse_kb_pipelines(first_msg.get("kbPipelines"))
-                kb_pipelines_holder[0] = parsed
-                logger.info("[AVATAR] sessionStart kbPipelines=%r", parsed)
-            await websocket.send_json({"type": "sessionStart", "sessionId": session_id})
-        else:
-            logger.warning(
-                "[AVATAR] First message was not sessionStart: %s",
-                first_msg.get("type") if isinstance(first_msg, dict) else type(first_msg),
-            )
+        # Ack sessionStart now that auth + agent are ready.
+        await websocket.send_json({"type": "sessionStart", "sessionId": session_id})
 
         # --- Translation wrappers ---
         # Frontend sends {type:"audio", audioData} / {type:"text", content}

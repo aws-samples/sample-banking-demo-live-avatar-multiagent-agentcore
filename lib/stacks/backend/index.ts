@@ -248,13 +248,20 @@ export class Backend extends Stack {
             { dir: "data_sources", handler: "handler.handler", timeout: 30, memory: 128 },
             { dir: "website_generator", handler: "handler.handler", timeout: 900, memory: 512 },
             { dir: "extract_pdf_images", handler: "handler.handler", timeout: 900, memory: 256 },
-            {
+        ];
+
+        // sample_tool is a word-counter demo. Off by default — enable via
+        // `features.sample_tool` in cdk.json only when you actually want a
+        // throwaway tool registered with the live Gateway (e.g. when
+        // teaching the tool-registration loop).
+        if (features.sample_tool) {
+            toolDefs.push({
                 dir: "sample_tool",
                 handler: "sample_tool_lambda.handler",
                 timeout: 300,
                 memory: 128,
-            },
-        ];
+            });
+        }
 
         for (const def of toolDefs) {
             const toolDir = path.join(repoRoot, "gateway", "tools", def.dir);

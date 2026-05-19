@@ -797,11 +797,22 @@ export default function AvatarInterface(): JSX.Element {
         clearQueue();
         setInterruptCount(0);
 
+        // AgentCore Runtime WebSocket endpoints only honor SigV4 or
+        // OAuth Bearer (in the Authorization header). Browsers cannot
+        // set arbitrary WebSocket headers, so SigV4 presigned URL is
+        // the only viable path — hence Identity Pool + id_token are
+        // required.
+        if (!config.identityPoolId || !config.cognitoUserPoolId || !auth.user.id_token) {
+            setError(
+                "Avatar connection requires a Cognito Identity Pool and id_token — check deployment config."
+            );
+            return;
+        }
+
         const client = new AvatarWebSocketClient(
             {
                 runtimeArn: config.avatarRuntimeArn,
                 region: config.awsRegion,
-                accessToken: auth.user.access_token,
                 sessionId: sessionIdRef.current,
                 persona,
                 language,
@@ -815,46 +826,33 @@ export default function AvatarInterface(): JSX.Element {
 
         wsClientRef.current = client;
 
-        // Try SigV4 presigned URL if Identity Pool is configured
-        if (config.identityPoolId && config.cognitoUserPoolId && auth.user.id_token) {
-            try {
-                const credentials = await getAWSCredentials(
-                    auth.user.id_token,
-                    config.identityPoolId,
-                    config.cognitoUserPoolId,
-                    config.awsRegion
-                );
-                const presignedUrl = await presignAgentCoreWebSocket(
-                    config.avatarRuntimeArn,
-                    config.awsRegion,
-                    credentials,
-                    sessionIdRef.current,
-                    {
-                        persona,
-                        language,
-                        voiceId,
-                        kbPipelines,
-                        // Backend extracts the `sub` claim on the id_token to
-                        // attach UserScopeHook to the BidiAgent. Without it
-                        // the handshake is refused with code 4401.
-                        idToken: auth.user.id_token,
-                    }
-                );
-                console.log("[AvatarInterface] Connecting with SigV4 presigned URL");
-                client.connect(presignedUrl);
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : "Unknown error";
-                console.warn(
-                    `[AvatarInterface] SigV4 presigning failed, falling back to bearer token: ${msg}`
-                );
-                client.connect();
-            }
-        } else {
-            // Fall back to bearer token subprotocol
-            console.log("[AvatarInterface] Connecting with bearer token subprotocol");
-            client.connect();
+        try {
+            const credentials = await getAWSCredentials(
+                auth.user.id_token,
+                config.identityPoolId,
+                config.cognitoUserPoolId,
+                config.awsRegion
+            );
+            const presignedUrl = await presignAgentCoreWebSocket(
+                config.avatarRuntimeArn,
+                config.awsRegion,
+                credentials,
+                sessionIdRef.current,
+                {
+                    persona,
+                    language,
+                    voiceId,
+                    kbPipelines,
+                }
+            );
+            console.log("[AvatarInterface] Connecting with SigV4 presigned URL");
+            client.connect(presignedUrl);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            console.error(`[AvatarInterface] SigV4 presigning failed: ${msg}`);
+            setError(`Failed to establish avatar connection: ${msg}`);
         }
-    }, [config, auth.user, persona, language, voiceId, handleWSMessage, clearQueue]);
+    }, [config, auth.user, persona, language, voiceId, kbPipelines, handleWSMessage, clearQueue]);
 
     // --- Recording ---
     const stopRecording = useCallback((): void => {

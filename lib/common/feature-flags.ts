@@ -12,12 +12,10 @@ export interface FeatureFlags {
     episodic_memory: boolean;
     semantic_memory: boolean;
     user_preference_memory: boolean;
-    agentcore_policy: boolean;
-    agentcore_evaluations: boolean;
-    server_side_tools: boolean;
     durable_functions: boolean;
     guardrails: boolean;
     browser: boolean;
+    sample_tool: boolean;
 }
 
 export interface ModelConfig {
@@ -35,12 +33,10 @@ const DEFAULT_FEATURES: FeatureFlags = {
     episodic_memory: true,
     semantic_memory: true,
     user_preference_memory: true,
-    agentcore_policy: false,
-    agentcore_evaluations: false,
-    server_side_tools: true,
     durable_functions: false,
     guardrails: true,
     browser: true,
+    sample_tool: false,
 };
 
 const DEFAULT_MODELS: ModelConfig = {

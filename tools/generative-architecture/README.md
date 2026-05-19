@@ -91,9 +91,6 @@ When a feature flag is OFF, the corresponding cluster / node / edge is
 | `episodic_memory`        | true         | Memory strategy sub-label; entire Memory cluster only rendered if any memory flag is on               |
 | `semantic_memory`        | true         | (same as above)                                                                                       |
 | `user_preference_memory` | true         | (same as above)                                                                                       |
-| `agentcore_policy`       | false        | Policy Engine badge (currently always off)                                                            |
-| `agentcore_evaluations`  | false        | Evaluations badge                                                                                     |
-| `server_side_tools`      | true         | (runtime-only; does not affect the diagram)                                                           |
 | `durable_functions`      | false        | `g_durable_lambda` ghost node + its dashed callback edge                                              |
 | `guardrails`             | true         | Guardrails cluster + `r_chatbot → gr_guardrail_policy` edge                                           |
 | `browser`                | true         | Browser Tools (in-process) inner cluster + `br_agentcore_browser` + DCV edge + chatbot → browser edge |

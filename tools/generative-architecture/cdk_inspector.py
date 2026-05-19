@@ -44,12 +44,10 @@ DEFAULT_FEATURES: dict[str, object] = {
     "episodic_memory": True,
     "semantic_memory": True,
     "user_preference_memory": True,
-    "agentcore_policy": False,
-    "agentcore_evaluations": False,
-    "server_side_tools": True,
     "durable_functions": False,
     "guardrails": True,
     "browser": True,
+    "sample_tool": False,
 }
 
 
@@ -80,12 +78,10 @@ class FeatureFlags:
     episodic_memory: bool
     semantic_memory: bool
     user_preference_memory: bool
-    agentcore_policy: bool
-    agentcore_evaluations: bool
-    server_side_tools: bool
     durable_functions: bool
     guardrails: bool
     browser: bool
+    sample_tool: bool
 
 
 @dataclass(frozen=True)

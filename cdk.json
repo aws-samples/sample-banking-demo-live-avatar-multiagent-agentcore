@@ -43,9 +43,6 @@
             "kb_backend": "s3-vectors",
             "neptune": false,
             "episodic_memory": true,
-            "agentcore_policy": false,
-            "agentcore_evaluations": false,
-            "server_side_tools": true,
             "durable_functions": false,
             "guardrails": true
         },

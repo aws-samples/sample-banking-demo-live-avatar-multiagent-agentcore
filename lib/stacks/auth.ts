@@ -90,6 +90,10 @@ export class Auth extends Stack {
                 id: "AwsSolutions-COG3",
                 reason: "AdvancedSecurityMode is set to depreciate. Using Cognito feature plan's essential security feature.",
             },
+            {
+                id: "AwsSolutions-COG8",
+                reason: "Plus feature plan adds per-MAU cost for threat-protection features that are unnecessary for a short-lived demo user pool. Essentials plan provides sufficient security for the demo scope.",
+            },
         ]);
 
         new UserPoolGroup(this, "AdminUserPoolGroup", {

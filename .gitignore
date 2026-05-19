@@ -17,3 +17,8 @@ tools/generative-architecture/outputs/
 tools/generative-architecture/genai_architect.py
 tools/generative-architecture/research_agent_architecture.png
 tools/generative-architecture/gartner_appdev_2026_architecture.png
+
+# Generated architecture artifacts at repo root (regenerable via `npm run diagram`)
+/architecture.*
+/architecture-diagram.*
+/export.zip

@@ -46,7 +46,9 @@ def extract_user_id_from_token(token: str) -> str:
     authenticator (AgentCore Runtime's JWT authorizer for HTTP/SSE, Cognito
     Identity Pool's credential issuance for WebSocket). The function is
     transport-agnostic; callers on HTTP/SSE use `extract_user_id_from_context`,
-    WebSocket callers pass the ID token from the signed handshake URL.
+    WebSocket callers pass the ID token received in the first `sessionStart`
+    JSON message (query-string params are not forwarded by the AgentCore
+    Runtime WebSocket proxy).
 
     Args:
         token: Raw JWT string (no "Bearer " prefix). Must contain a `sub` claim.

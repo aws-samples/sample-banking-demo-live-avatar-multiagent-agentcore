@@ -1,7 +1,19 @@
+import { Buffer } from "buffer";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles/globals.css";
+
+// `@smithy/signature-v4` (used to presign AgentCore WebSocket URLs in
+// lib/websocket-client/sigv4.ts) references the Node `Buffer` global.
+// Vite does not polyfill Node globals by default, so in the browser the
+// presign call throws `Buffer is not defined` and the avatar connection
+// fails before the handshake. Expose the userland `buffer` package
+// (already a transitive dependency of the AWS SDK) as a window global
+// so the Smithy SigV4 signer can find it.
+if (typeof window !== "undefined" && typeof window.Buffer === "undefined") {
+    (window as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
+}
 
 /**
  * One-time localStorage migration: remove resizable-panel layouts persisted

@@ -30,8 +30,6 @@ export interface AvatarWSConfig {
     runtimeArn: string;
     /** AWS region (default: us-east-1) */
     region?: string;
-    /** Bearer token for auth */
-    accessToken: string;
     /** Session ID for continuity */
     sessionId: string;
     /** Selected persona */
@@ -43,12 +41,12 @@ export interface AvatarWSConfig {
     /** Initial KB pipeline multi-select. Empty / undefined = search all views. */
     kbPipelines?: KbPipeline[];
     /**
-     * Cognito ID token. Required when connecting via a SigV4 presigned URL
-     * — the backend extracts the user's `sub` claim and attaches
-     * UserScopeHook. Without it, the handshake is refused with code 4401.
-     * The legacy bearer-subprotocol fallback still forwards this through
-     * the URL query for symmetry, but the backend requires id_token
-     * regardless of auth path.
+     * Cognito ID token. Sent inside the first `sessionStart` JSON message
+     * so the backend can extract the user's `sub` claim and attach
+     * UserScopeHook. The AgentCore Runtime WebSocket proxy does not
+     * forward query-string params to the inner container, so this cannot
+     * travel on the URL. Without it, the backend closes the socket with
+     * code 4401 and this client stops reconnecting after maxReconnectAttempts.
      */
     idToken?: string;
 }
@@ -103,6 +101,7 @@ export class AvatarWebSocketClient {
     private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
     private _state: ConnectionState = "disconnected";
     private onStateChange?: (state: ConnectionState) => void;
+    private lastPresignedUrl: string | null = null;
 
     constructor(
         config: AvatarWSConfig,
@@ -124,41 +123,18 @@ export class AvatarWebSocketClient {
     }
 
     /**
-     * Builds the WebSocket URL for AgentCore Runtime.
-     */
-    private buildUrl(): string {
-        const region = this.config.region ?? "us-east-1";
-        const escapedArn = encodeURIComponent(this.config.runtimeArn);
-        const base = `wss://bedrock-agentcore.${region}.amazonaws.com`;
-        const params = new URLSearchParams({
-            session_id: this.config.sessionId,
-        });
-        if (this.config.persona) {
-            params.set("persona", this.config.persona);
-        }
-        if (this.config.language) {
-            params.set("language", this.config.language);
-        }
-        if (this.config.voiceId) {
-            params.set("voice_id", this.config.voiceId);
-        }
-        if (this.config.kbPipelines && this.config.kbPipelines.length > 0) {
-            params.set("kb_pipelines", this.config.kbPipelines.join(","));
-        }
-        if (this.config.idToken) {
-            params.set("id_token", this.config.idToken);
-        }
-        return `${base}/runtimes/${escapedArn}/ws?${params.toString()}`;
-    }
-
-    /**
-     * Opens a WebSocket connection.
+     * Opens a WebSocket connection using a SigV4-presigned URL.
      *
-     * @param presignedUrl - Optional SigV4-presigned wss:// URL. When provided,
-     *   the connection uses the presigned URL directly without bearer token subprotocol.
-     *   When omitted, falls back to bearer token subprotocol auth.
+     * AgentCore Runtime WebSocket endpoints only accept SigV4 headers,
+     * SigV4-presigned URLs, or OAuth Bearer tokens in the `Authorization`
+     * header. Browsers cannot set arbitrary WebSocket headers, and
+     * subprotocol-based auth is not honored by the AgentCore proxy, so
+     * the presigned URL is the only viable browser path.
+     *
+     * @param presignedUrl - A SigV4-presigned wss:// URL produced by
+     *   presignAgentCoreWebSocket().
      */
-    connect(presignedUrl?: string): void {
+    connect(presignedUrl: string): void {
         if (
             this.ws &&
             (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
@@ -168,14 +144,11 @@ export class AvatarWebSocketClient {
 
         this.setState("connecting");
 
-        if (presignedUrl) {
-            // SigV4 presigned URL — no subprotocol needed
-            this.ws = new WebSocket(presignedUrl);
-        } else {
-            // Legacy bearer token subprotocol
-            const url = this.buildUrl();
-            this.ws = new WebSocket(url, ["bearer", this.config.accessToken]);
-        }
+        this.ws = new WebSocket(presignedUrl);
+        // Cache the URL so reconnect attempts can reuse it. Presigned
+        // URLs expire (5 min default), so after that window the caller
+        // must tear down and re-open with a fresh presign.
+        this.lastPresignedUrl = presignedUrl;
 
         this.ws.binaryType = "arraybuffer";
 
@@ -186,7 +159,9 @@ export class AvatarWebSocketClient {
             // Start keepalive ping every 30 seconds
             this.startKeepalive();
 
-            // Send session start with persona + language config
+            // Send session start with persona + language config + id_token.
+            // idToken carries the user's Cognito `sub` claim — the backend
+            // closes the socket with 4401 if missing or invalid.
             this.sendJSON({
                 type: "sessionStart",
                 sessionId: this.config.sessionId,
@@ -194,6 +169,7 @@ export class AvatarWebSocketClient {
                 language: this.config.language ?? "en-US",
                 voiceId: this.config.voiceId ?? "tiffany",
                 kbPipelines: this.config.kbPipelines ?? [],
+                idToken: this.config.idToken ?? "",
             });
         };
 
@@ -277,7 +253,14 @@ export class AvatarWebSocketClient {
 
         this.reconnectTimer = setTimeout(
             () => {
-                this.connect();
+                // Presigned URLs expire (5 min default from sigv4.ts). If
+                // the cached URL is still within its window this will
+                // succeed; otherwise the server closes with 403 and the
+                // caller must re-open with a fresh presign via
+                // AvatarInterface.connect().
+                if (this.lastPresignedUrl) {
+                    this.connect(this.lastPresignedUrl);
+                }
             },
             Math.min(delay, 30000)
         );
