@@ -8,8 +8,8 @@
 
 # --- Historical starter-kit Cloudscape mock fixtures ------------------------
 # File was deleted from the repo; the flagged values are Cloudscape
-# s3-resource-selector demo data (e.g. AKIAIOSFODNN7EXAMPLE-style keys),
-# not real credentials. History rewrite is out of scope.
+# s3-resource-selector demo data (canonical AWS docs example keys of the
+# form AKIA…EXAMPLE), not real credentials. History rewrite is out of scope.
 8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:78
 8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:108
 8990fe2fd5c06bfdf9b8f62737f3993d1cdcc981:src/frontend/src/common/s3-resource-selector/mock-data.ts:generic-api-key:183
@@ -36,3 +36,10 @@ e19ce80bbb1bb460d21e9392e4b89939c8def94b:starter-kit-package/packages/webapp/REA
 # IDs (not secrets). Keep until a future history rewrite retires them.
 2ba88f3264a868c9d7422a8f66dd0b0840416b06:lib/stacks/frontend/app/.env.production:generic-api-key:7
 2ba88f3264a868c9d7422a8f66dd0b0840416b06:lib/stacks/frontend/app/.env.production:generic-api-key:10
+
+# --- Self-reference: the comment in this file at commit 188afcc contained
+# the canonical AWS docs example key literal (AKIA…EXAMPLE), which gitleaks'
+# aws-access-token rule matches. The literal has since been broken in the
+# comment (see line 11 above), but the historical commit still trips the
+# scanner. The string never represented a real credential.
+188afcc37a3d1caefa731a03e5c5e8d05a8457f0:.gitleaksignore:aws-access-token:11

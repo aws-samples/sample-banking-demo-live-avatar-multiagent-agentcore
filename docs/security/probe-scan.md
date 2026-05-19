@@ -144,6 +144,34 @@ runtime), and the `subprocess.run()` uses list-form argv (`["python3",
 str(code_path)]`) with a local path under the tool's own working
 directory, so there is no shell and no external-input attack surface.
 
+## 2026-05-19 rescan
+
+Scan `da8e6368-b814-46c0-96b3-203465a9cb7b` against `main` produced 13
+Critical, 6 Warning, 9 Info.
+
+| Scanner  | ERROR count | Remediation                                                                                                                                 |
+| -------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| gitleaks | 1           | Self-trigger on `.gitleaksignore` line 11 (canonical AWS docs example key in a comment). Literal broken in current file + fingerprint added |
+| grype    | 12          | All inside `@aws/pdk` bundledDependencies or commitizen dev-tool chain; same constraint documented under Known Limitations                  |
+
+Real fix:
+
+- `.gitleaksignore` — comment on line 11 reformatted so the canonical
+  `AKIA…EXAMPLE` literal no longer appears as a contiguous string. The
+  historical commit `188afcc` still trips the scanner (the literal lives
+  in git history), so the self-fingerprint is added with provenance.
+
+The grype findings overlap entirely with the 2026-05-11 known-limitations
+block: every `minimatch` / `lodash` / `js-yaml` / `diff` / `tmp` /
+`brace-expansion` hit traces to `@aws/pdk@0.26.15` bundled deps or
+`commitizen` / `eslint` / `archiver` dev-tool chains. None of these reach
+runtime Lambda code. `@aws/pdk` is imported only as
+`CloudfrontWebAcl` from `@aws/pdk/static-website` in
+`lib/stacks/frontend/index.ts`, which uses pdk for build-time WAF
+synthesis — the vulnerable `minimatch` calls inside pdk's bundled
+`projen` / `glob` / `shelljs` operate on CDK-author-controlled glob
+patterns, not user input.
+
 ## When to update this doc
 
 - A new ProbeScan baseline is taken (replace the timestamped reference).
