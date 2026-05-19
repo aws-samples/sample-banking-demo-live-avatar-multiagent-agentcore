@@ -100,8 +100,8 @@ export default function HomePage(): JSX.Element {
                         className="text-xs tracking-wide text-white/60 mb-8 max-w-lg"
                         style={{ textShadow: "0 1px 4px rgba(0,0,0,0.2)" }}
                     >
-                        Updated March 2026 &mdash; Claude Sonnet 4.6 &middot; Nova 2 Sonic &middot;
-                        S3 Vectors &middot; AgentCore GA
+                        Updated May 2026 &mdash; Claude Sonnet 4.6 &middot; Nova 2 Sonic &middot; S3
+                        Vectors &middot; AgentCore GA
                     </p>
                     <Button variant="primary" onClick={() => navigate("/research-studio")}>
                         Get Started
@@ -160,7 +160,7 @@ export default function HomePage(): JSX.Element {
                 {/* Architecture callout */}
                 <div className="mt-12 text-center" style={{ color: "var(--app-text-secondary)" }}>
                     <p className="text-sm font-medium mb-1">
-                        2 AgentCore Runtimes &middot; 18 Gateway Tools &middot; 3 CDK Stacks
+                        2 AgentCore Runtimes &middot; 17 Gateway Tools &middot; 5 CDK Stacks
                         &middot; $0 when idle
                     </p>
                     <p
@@ -168,7 +168,7 @@ export default function HomePage(): JSX.Element {
                         style={{ color: "var(--app-text-tertiary, var(--app-text-secondary))" }}
                     >
                         14 AWS releases (Jul 2025 &ndash; Feb 2026) &middot; Strands Agents &middot;
-                        Bedrock Guardrails &middot; Lambda Durable Functions
+                        Bedrock Guardrails &middot; AgentCore Memory
                     </p>
                 </div>
             </div>

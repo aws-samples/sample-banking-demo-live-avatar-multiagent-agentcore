@@ -34,7 +34,7 @@ bin/app.ts → lib/stage.ts (ApplicationStage)
   ├── Frontend         — S3 + CloudFront (OAC) + WAF (CloudFront scope)
   ├── Auth             — Cognito User Pool/Client/Identity Pool + M2M OAuth2 + WAF (Regional)
   ├── Shared           — DynamoDB (3 tables) + S3 (4 buckets) + Knowledge Base (S3 Vectors) + Neptune (optional)
-  ├── Backend          — AgentCore Gateway (MCP, 18 tools) + 2 Runtimes + Memory + Guardrails + Feedback API
+  ├── Backend          — AgentCore Gateway (MCP, 17 tools) + 2 Runtimes + Memory + Guardrails + Feedback API
   └── FrontendDeployment — CodeBuild builds React app in-cloud, deploys to S3
 ```
 

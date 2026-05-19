@@ -1,0 +1,159 @@
+# Grype ignore rules — per-(GHSA, package, version) suppressions.
+#
+# Policy mirrors `.gitleaksignore`: every rule names its GHSA, the package
+# + version it targets, and a `reason:` field with provenance. Rationale
+# for accepting these findings lives in docs/security/probe-scan.md
+# (see "Known limitations" under the 2026-05-11 baseline and the
+# 2026-05-19 rescan section).
+#
+# Common rationale across every entry below:
+#   - All vulnerable copies trace to `@aws/pdk` (build-time WAF synthesis
+#     via `CloudfrontWebAcl` in lib/stacks/frontend/index.ts) or to
+#     `commitizen`/`eslint`/`archiver` dev-tool chains.
+#   - `@aws/pdk` ships its dependency tree as `bundledDependencies`,
+#     which `package.json` `overrides` cannot reach (npm honors overrides
+#     only at the resolution layer; bundled deps come pre-resolved in
+#     the tarball).
+#   - None of these vulnerable libs reach runtime Lambda code; they
+#     execute only at `cdk synth`/lint/commit time, on inputs controlled
+#     by repo authors (CDK template globs, project-local file paths),
+#     never on user input.
+#
+# When a finding becomes fixable (pdk publishes a refreshed tarball or
+# the dev-tool chain is upgraded), remove the matching block and rerun
+# the scanner to confirm.
+
+ignore:
+    # --- minimatch (ReDoS family) ----------------------------------------
+    # Source: @aws/pdk bundled `glob`, projen's bundled `minimatch`,
+    #         shelljs's `glob` inside projen.
+    - vulnerability: GHSA-3ppc-4f35-3m26
+      package:
+          name: minimatch
+          version: "10.0.1"
+          type: npm
+      reason: "@aws/pdk bundledDependencies; build-time only; trusted glob inputs"
+    - vulnerability: GHSA-7r86-cg39-jmmj
+      package:
+          name: minimatch
+          version: "10.0.1"
+          type: npm
+      reason: "@aws/pdk bundledDependencies; build-time only; trusted glob inputs"
+    - vulnerability: GHSA-23c5-xmqv-rm74
+      package:
+          name: minimatch
+          version: "10.0.1"
+          type: npm
+      reason: "@aws/pdk bundledDependencies; build-time only; trusted glob inputs"
+
+    - vulnerability: GHSA-3ppc-4f35-3m26
+      package:
+          name: minimatch
+          version: "9.0.5"
+          type: npm
+      reason: "package.json override target; reachable only from build-time tooling"
+    - vulnerability: GHSA-7r86-cg39-jmmj
+      package:
+          name: minimatch
+          version: "9.0.5"
+          type: npm
+      reason: "package.json override target; reachable only from build-time tooling"
+    - vulnerability: GHSA-23c5-xmqv-rm74
+      package:
+          name: minimatch
+          version: "9.0.5"
+          type: npm
+      reason: "package.json override target; reachable only from build-time tooling"
+
+    - vulnerability: GHSA-3ppc-4f35-3m26
+      package:
+          name: minimatch
+          version: "5.1.6"
+          type: npm
+      reason: "projen bundled glob inside @aws/pdk; build-time only"
+    - vulnerability: GHSA-7r86-cg39-jmmj
+      package:
+          name: minimatch
+          version: "5.1.6"
+          type: npm
+      reason: "projen bundled glob inside @aws/pdk; build-time only"
+    - vulnerability: GHSA-23c5-xmqv-rm74
+      package:
+          name: minimatch
+          version: "5.1.6"
+          type: npm
+      reason: "projen bundled glob inside @aws/pdk; build-time only"
+
+    - vulnerability: GHSA-3ppc-4f35-3m26
+      package:
+          name: minimatch
+          version: "3.1.2"
+          type: npm
+      reason: "shelljs/glob inside projen inside @aws/pdk; build-time only"
+    - vulnerability: GHSA-7r86-cg39-jmmj
+      package:
+          name: minimatch
+          version: "3.1.2"
+          type: npm
+      reason: "shelljs/glob inside projen inside @aws/pdk; build-time only"
+    - vulnerability: GHSA-23c5-xmqv-rm74
+      package:
+          name: minimatch
+          version: "3.1.2"
+          type: npm
+      reason: "shelljs/glob inside projen inside @aws/pdk; build-time only"
+
+    # --- lodash (prototype pollution in _.unset / _.omit) ----------------
+    # Source: @aws/pdk + commitizen/inquirer dev-tool chain.
+    - vulnerability: GHSA-xxjr-mmjv-4gpg
+      package:
+          name: lodash
+          version: "4.17.21"
+          type: npm
+      reason: "@aws/pdk + commitizen dev-tool chain; never invoked at runtime; no untrusted input reaches _.unset/_.omit"
+
+    # --- js-yaml (prototype pollution via merge `<<`) --------------------
+    # Source: @aws/pdk projen / pnpm lockfile tooling, eslint cosmiconfig.
+    - vulnerability: GHSA-mh29-5h37-fv8m
+      package:
+          name: js-yaml
+          version: "4.1.0"
+          type: npm
+      reason: "@aws/pdk pnpm/eslint dev-time YAML parsing of repo-controlled files only"
+    - vulnerability: GHSA-mh29-5h37-fv8m
+      package:
+          name: js-yaml
+          version: "3.14.1"
+          type: npm
+      reason: "projen xmlbuilder2 inside @aws/pdk; never invoked at runtime"
+
+    # --- diff (jsdiff DoS in parsePatch / applyPatch) --------------------
+    - vulnerability: GHSA-73rr-hh4g-fpgx
+      package:
+          name: diff
+          version: "4.0.2"
+          type: npm
+      reason: "ts-node bundled inside @aws/pdk; never parses user-supplied patches"
+
+    # --- tmp (arbitrary file write via symlink dir param) ----------------
+    - vulnerability: GHSA-52f5-9888-hmc6
+      package:
+          name: tmp
+          version: "0.0.33"
+          type: npm
+      reason: "commitizen/inquirer external-editor dev-tool only; pre-commit-time, never deployed"
+
+    # --- brace-expansion (ReDoS) -----------------------------------------
+    # Pulled in transitively wherever minimatch lives.
+    - vulnerability: GHSA-v6h2-p8h4-qcjw
+      package:
+          name: brace-expansion
+          version: "2.0.1"
+          type: npm
+      reason: "transitive of minimatch; build-time only; trusted glob inputs"
+    - vulnerability: GHSA-v6h2-p8h4-qcjw
+      package:
+          name: brace-expansion
+          version: "1.1.11"
+          type: npm
+      reason: "transitive of minimatch; build-time only; trusted glob inputs"

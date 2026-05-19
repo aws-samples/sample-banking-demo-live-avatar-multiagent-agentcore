@@ -41,13 +41,20 @@ suppression diffs that add a new entry with no comment.
 - Live credentials must be rotated before suppressing. Do not suppress a hit
   for a file currently tracked in HEAD without also rotating.
 
-### grype — `package.json` overrides
+### grype — `package.json` overrides + `.grype.yaml`
 
 - Transitive CVEs get pinned via the `overrides` block with a fix-version
   confirmed against the GHSA advisory.
 - Nested bundled dependencies (e.g. `@aws/pdk` ships its own `node_modules/`
-  via `bundledDependencies`) cannot be overridden; document the exception
-  here rather than working around it.
+  via `bundledDependencies`) cannot be overridden. For those, add an entry
+  to `.grype.yaml` at the repo root, scoped per `(GHSA, package, version)`
+  tuple. Each entry must carry a `reason:` field explaining provenance
+  and why the finding is bounded (e.g. "build-time only, never deployed",
+  "trusted inputs from CDK templates"). Rule format reference:
+  `IgnoreRule` in `anchore/grype/grype/match/ignore.go`.
+- When a previously-suppressed dependency becomes fixable (pdk publishes a
+  refreshed tarball, dev-tool chain upgrades), remove the matching entry
+  and rerun the scanner before merging.
 
 ### semgrep — `# nosemgrep` / `// nosemgrep`
 
@@ -149,28 +156,32 @@ directory, so there is no shell and no external-input attack surface.
 Scan `da8e6368-b814-46c0-96b3-203465a9cb7b` against `main` produced 13
 Critical, 6 Warning, 9 Info.
 
-| Scanner  | ERROR count | Remediation                                                                                                                                 |
-| -------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| gitleaks | 1           | Self-trigger on `.gitleaksignore` line 11 (canonical AWS docs example key in a comment). Literal broken in current file + fingerprint added |
-| grype    | 12          | All inside `@aws/pdk` bundledDependencies or commitizen dev-tool chain; same constraint documented under Known Limitations                  |
+| Scanner  | ERROR count | Remediation                                                                                                                                              |
+| -------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| gitleaks | 1           | Self-trigger on `.gitleaksignore` line 11 (canonical AWS docs example key in a comment). Literal broken in current file + fingerprint added              |
+| grype    | 21          | New `.grype.yaml` with one rule per (GHSA, package, version) tuple — covers minimatch×12, lodash×1, js-yaml×2, diff×1, tmp×1, brace-expansion×2 findings |
 
-Real fix:
+Real fixes:
 
 - `.gitleaksignore` — comment on line 11 reformatted so the canonical
   `AKIA…EXAMPLE` literal no longer appears as a contiguous string. The
   historical commit `188afcc` still trips the scanner (the literal lives
   in git history), so the self-fingerprint is added with provenance.
+- `.grype.yaml` — new file at repo root. Replaces the previous
+  "accept the finding" stance with explicit per-(GHSA, package, version)
+  ignore rules. Every entry carries a `reason:` field linking the
+  finding back to its provenance (`@aws/pdk` bundled deps,
+  `commitizen`/`eslint`/`archiver` dev-tool chains).
 
-The grype findings overlap entirely with the 2026-05-11 known-limitations
-block: every `minimatch` / `lodash` / `js-yaml` / `diff` / `tmp` /
-`brace-expansion` hit traces to `@aws/pdk@0.26.15` bundled deps or
-`commitizen` / `eslint` / `archiver` dev-tool chains. None of these reach
-runtime Lambda code. `@aws/pdk` is imported only as
-`CloudfrontWebAcl` from `@aws/pdk/static-website` in
-`lib/stacks/frontend/index.ts`, which uses pdk for build-time WAF
-synthesis — the vulnerable `minimatch` calls inside pdk's bundled
-`projen` / `glob` / `shelljs` operate on CDK-author-controlled glob
-patterns, not user input.
+All grype findings still trace to the same root causes documented in the
+2026-05-11 Known Limitations: `@aws/pdk@0.26.15` ships
+`minimatch` / `lodash` / `js-yaml` / `diff` / `tmp` / `brace-expansion`
+as bundled deps that `package.json` `overrides` cannot reach. `@aws/pdk`
+is imported only as `CloudfrontWebAcl` from `@aws/pdk/static-website` in
+`lib/stacks/frontend/index.ts` for build-time WAF synthesis. The
+vulnerable code paths inside pdk's bundled `projen` / `glob` / `shelljs`
+operate on CDK-author-controlled glob patterns, never on user input,
+and never execute on the runtime Lambda hot path.
 
 ## When to update this doc
 

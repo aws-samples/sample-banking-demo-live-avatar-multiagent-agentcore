@@ -1,6 +1,6 @@
 # Gartner AppDev Research Agent
 
-A multi-agent research platform built on **Amazon Bedrock AgentCore** that produces comprehensive PDF research reports through a human-in-the-loop pipeline. Two AgentCore Runtimes, 18 Gateway tools, five CDK stacks (Frontend, Auth, Shared, Backend, FrontendDeployment), zero cost when idle.
+A multi-agent research platform built on **Amazon Bedrock AgentCore** that produces comprehensive PDF research reports through a human-in-the-loop pipeline. Two AgentCore Runtimes, 17 Gateway tools, five CDK stacks (Frontend, Auth, Shared, Backend, FrontendDeployment), zero cost when idle.
 
 **Demo flow**: Home &rarr; Research &rarr; Menu &rarr; Chat &rarr; Avatar
 
@@ -304,7 +304,7 @@ gateway/tools/
 └── kb_ingest/              # Not a Gateway tool — S3-triggered Lambda that auto-ingests generated PDFs into the KB
 ```
 
-18 tools register with the Gateway by default (everything above except `research_orchestrator`, which is feature-gated, and `kb_ingest`, which is wired as an S3 event handler rather than an MCP tool). Each tool is a self-contained directory with `handler.py` and `tool_spec.json`. The Gateway authenticates via Cognito JWT and routes MCP tool calls to the corresponding Lambda function.
+17 tools register with the Gateway by default (everything above except `sample_tool`, gated behind `features.sample_tool` and off by default; `research_orchestrator`, gated behind `features.durable_functions`; and `kb_ingest`, wired as an S3 event handler rather than an MCP tool). Each tool is a self-contained directory with `handler.py` and `tool_spec.json`. The Gateway authenticates via Cognito JWT and routes MCP tool calls to the corresponding Lambda function.
 
 ---
 
@@ -450,7 +450,7 @@ gartner-app-dev-research-agent/
 │   ├── pdf-writer-agent/            # 12-section PDF generation
 │   ├── avatar-agent/                # BidiAgent WebSocket (Nova 2 Sonic)
 │   └── utils/                       # auth.py, ssm.py, heartbeat.py, tool_guard.py, pipeline_scope.py
-├── gateway/tools/                   # 18 Lambda-backed MCP tools + kb_ingest S3 trigger
+├── gateway/tools/                   # 17 Lambda-backed MCP tools + kb_ingest S3 trigger
 ├── lib/stacks/frontend/app/
 │   ├── scripts/sync-dcv-sdk.mjs     # Sync NICE DCV Web Client SDK into public/ for browser live view
 │   └── src/components/

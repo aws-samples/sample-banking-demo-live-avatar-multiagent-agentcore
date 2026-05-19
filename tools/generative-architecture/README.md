@@ -37,9 +37,10 @@ we give it.
    band, it contains Planner / Researcher / Synthesizer / PDF Writer /
    Menu Designer / Chatbot sub-agents + in-process Browser tool group,
    all styled as `Custom:icons/AI_Agent.png`.
-4. **18 Gateway tools render as 5 logical Lambda groups** plus
-   `kb_ingest` on its own S3-triggered edge path, and
-   `research_orchestrator` as a ghost/dashed optional node.
+4. **17 Gateway tools render as 5 logical Lambda groups** plus
+   `kb_ingest` on its own S3-triggered edge path, and both
+   `sample_tool` and `research_orchestrator` as ghost/dashed
+   feature-flagged nodes.
 5. **Edge styling encodes semantics.** Solid = hot path;
    dashed = conditional; bold penwidth=2 for primary invocation paths;
    colored by source-cluster theme.
