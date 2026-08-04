@@ -21,6 +21,20 @@ export const parseStrandsChunk: ChunkParser = (line, callback) => {
     try {
         const json = JSON.parse(data);
 
+        // Terminal backend error. The orchestrator emits
+        // {"status": "error", "error": "..."} and then stops streaming, so this
+        // must be surfaced or the UI spins forever on the phase that failed.
+        if (json.status === "error") {
+            callback({
+                type: "stream_error",
+                message:
+                    typeof json.error === "string" && json.error
+                        ? json.error
+                        : "The agent pipeline failed.",
+            });
+            return;
+        }
+
         // Generative UI event
         if (json._ui) {
             callback({ type: "_ui", component: json._ui.component, props: json._ui.props ?? {} });

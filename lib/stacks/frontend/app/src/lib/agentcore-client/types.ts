@@ -40,6 +40,13 @@ export type StreamEvent =
     | { type: "agent_text"; agent: AgentId; content: string }
     | { type: "thinking"; agent: AgentId; content: string }
     | { type: "phase_progress"; phase: ResearchPhase; progress: number }
+    /**
+     * Terminal backend failure. The orchestrator yields
+     * `{"status": "error", "error": "..."}` when a pipeline phase raises. Without
+     * this event the payload was silently dropped by the parser and the UI span
+     * forever on the failed phase instead of reporting the error.
+     */
+    | { type: "stream_error"; message: string }
     | { type: "_ui"; component: string; props: Record<string, unknown> };
 
 /** Callback invoked with each stream event */

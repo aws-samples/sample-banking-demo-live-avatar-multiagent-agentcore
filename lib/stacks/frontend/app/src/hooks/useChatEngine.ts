@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Message, MessageSegment, ToolCall } from "@/components/chat/types";
 import { AgentCoreClient } from "@/lib/agentcore-client";
 import type { AgentPattern, StreamEvent } from "@/lib/agentcore-client";
+import type { AgentId, ResearchPhase } from "@/lib/agentcore-client/types";
 import { useAuth } from "react-oidc-context";
 import { useModelSelector } from "@/hooks/useModelSelector";
 import { useChatStore } from "@/stores/chatStore";
@@ -135,6 +136,11 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                     });
                 };
 
+                // Tracks the phase currently marked active in the research flow so
+                // a terminal `stream_error` can close it instead of leaving the
+                // node spinning. Cleared when the phase ends or errors.
+                let activePhaseRef: { agent: AgentId; phase: ResearchPhase } | null = null;
+
                 // Include research_depth for research modes
                 const depth = useChatStore.getState().researchDepth;
                 const depthExtra: Record<string, unknown> = {};
@@ -264,6 +270,14 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                             }
                             case "agent_phase": {
                                 if (event.status === "start") {
+                                    // Remember the in-flight phase so a terminal
+                                    // stream error can close it out (see
+                                    // "stream_error") instead of leaving the node
+                                    // spinning forever.
+                                    activePhaseRef = {
+                                        agent: event.agent,
+                                        phase: event.phase,
+                                    };
                                     researchDispatch({
                                         type: "AGENT_START",
                                         agent: event.agent,
@@ -280,12 +294,14 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                         agent: event.agent,
                                         phase: event.phase,
                                     });
+                                    activePhaseRef = null;
                                 } else {
                                     researchDispatch({
                                         type: "AGENT_END",
                                         agent: event.agent,
                                         phase: event.phase,
                                     });
+                                    activePhaseRef = null;
                                 }
                                 break;
                             }
@@ -302,6 +318,39 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                     type: "PHASE_PROGRESS",
                                     phase: event.phase,
                                     progress: event.progress,
+                                });
+                                break;
+                            }
+                            case "stream_error": {
+                                // The orchestrator failed and stopped streaming.
+                                // Close the in-flight phase, surface the reason in
+                                // its trace, and show a banner — otherwise the UI
+                                // spins indefinitely on the failed step.
+                                if (activePhaseRef) {
+                                    researchDispatch({
+                                        type: "THINKING",
+                                        agent: activePhaseRef.agent,
+                                        content: `Failed: ${event.message}`,
+                                    });
+                                    researchDispatch({
+                                        type: "AGENT_END",
+                                        agent: activePhaseRef.agent,
+                                        phase: activePhaseRef.phase,
+                                    });
+                                    activePhaseRef = null;
+                                }
+                                storeSetError(storeKey, event.message);
+                                setMessages(storeKey, (prev) => {
+                                    const updated = [...prev];
+                                    const last = updated[updated.length - 1];
+                                    if (last && last.role === "assistant") {
+                                        updated[updated.length - 1] = {
+                                            ...last,
+                                            content:
+                                                `${last.content ?? ""}\n\n**The request could not be completed.** ${event.message}`.trim(),
+                                        };
+                                    }
+                                    return updated;
                                 });
                                 break;
                             }

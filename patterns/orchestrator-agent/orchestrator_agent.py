@@ -1140,13 +1140,29 @@ def _apply_depth_to_phases(phases: list[dict], depth: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
+def _effort_for_budget(thinking_budget: int) -> str:
+    """Map a legacy thinking token budget onto Claude's `output_config.effort`.
+
+    Current Claude models take a qualitative effort level rather than a token
+    budget. Valid values are low / medium / high ("none" is rejected). The phase
+    tables still express depth as budgets (2048 quick → 16000 deep), so translate
+    rather than rewrite every call site.
+    """
+    if thinking_budget >= 10000:
+        return "high"
+    if thinking_budget >= 4096:
+        return "medium"
+    return "low"
+
+
 def _build_model(
     model_id: str, temperature: float, max_tokens: int = 65535, thinking_budget: int = 4096, **extra_kwargs
 ) -> BedrockModel:
     """Build a BedrockModel with model-appropriate extended thinking config.
 
-    - Claude Sonnet/Opus: thinking enabled with configurable budget, temperature omitted (must be 1)
-    - Claude Haiku:       temperature only, no thinking (not supported)
+    - Claude Sonnet/Opus: adaptive thinking + output_config.effort, temperature
+                          omitted (thinking requires temperature=1)
+    - Claude Haiku:       temperature only, no thinking (rejects adaptive)
     - Nova Pro+:          reasoningConfig.maxReasoningEffort = "medium", temperature preserved
     - Nova Lite/Micro:    temperature only, no reasoning (not supported)
     - Other models:       temperature only, no thinking
@@ -1159,8 +1175,10 @@ def _build_model(
     the maximum supported by Nova 2 Lite (Bedrock rejects 65536).
 
     Args:
-        thinking_budget: Token budget for Claude extended thinking. Higher values
-            allow deeper reasoning on complex synthesis tasks. Default 4096.
+        thinking_budget: Requested depth of Claude reasoning, expressed as a token
+            budget for historical reasons. The current Claude API takes a
+            qualitative effort level instead, so this is mapped onto
+            low/medium/high by `_effort_for_budget`. Default 4096.
     """
     is_claude_thinking = "anthropic" in model_id and "haiku" not in model_id
     is_nova = "nova" in model_id and "sonic" not in model_id
@@ -1176,8 +1194,20 @@ def _build_model(
     )
 
     if is_claude_thinking:
-        # Claude thinking requires temperature=1 (SDK default), so don't set it
-        kwargs["additional_request_fields"] = {"thinking": {"type": "enabled", "budget_tokens": thinking_budget}}
+        # Claude thinking requires temperature=1 (SDK default), so don't set it.
+        #
+        # The legacy {"thinking": {"type": "enabled", "budget_tokens": N}} shape is
+        # REJECTED by current Claude models with:
+        #   "thinking.type.enabled" is not supported for this model. Use
+        #   "thinking.type.adaptive" and "output_config.effort" ...
+        # Probed against every model in the frontend selector: adaptive+effort is
+        # accepted by claude-sonnet-5, opus-5, opus-4-7 AND sonnet-4-6, so it is
+        # the one shape that works across the whole list. (Haiku rejects adaptive
+        # and is already excluded above; Nova uses reasoningConfig below.)
+        kwargs["additional_request_fields"] = {
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": _effort_for_budget(thinking_budget)},
+        }
     elif is_nova_reasoning:
         kwargs["temperature"] = temperature
         kwargs["additional_request_fields"] = {"reasoningConfig": {"type": "enabled", "maxReasoningEffort": "medium"}}

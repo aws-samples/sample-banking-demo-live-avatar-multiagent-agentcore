@@ -158,10 +158,17 @@ def create_synthesizer_agent(user_id: str, session_id: str) -> Agent:
         ),
     }
 
-    # Enable extended thinking for Claude models that support it
+    # Enable extended thinking for Claude models that support it.
+    # Current Claude models reject the legacy {"type": "enabled", "budget_tokens"}
+    # shape and require adaptive thinking + output_config.effort. Verified against
+    # sonnet-5 / opus-5 / opus-4-7 / sonnet-4-6; Haiku rejects adaptive and is
+    # excluded. Kept in sync with orchestrator_agent._build_model.
     is_claude_thinking = "anthropic" in model_id and "haiku" not in model_id
     if is_claude_thinking:
-        model_kwargs["additional_request_fields"] = {"thinking": {"type": "enabled", "budget_tokens": 10000}}
+        model_kwargs["additional_request_fields"] = {
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": "high"},
+        }
     else:
         model_kwargs["temperature"] = 0.1
 
