@@ -151,9 +151,9 @@ def create_synthesizer_agent(user_id: str, session_id: str) -> Agent:
     guardrail_config = _load_guardrail_config()
     model_kwargs = {
         "model_id": model_id,
-        # 65536 is above every current ceiling, so this always resolves to the
-        # selected model's own limit (64000 for Haiku 4.5 / Sonnet 4.6, 65535
-        # for Nova 2 Lite, 128000 for Sonnet 5 / Opus 5 / Opus 4.7).
+        # Resolves to the selected model's own limit: 64000 on Haiku 4.5, 65535
+        # on Nova 2 Lite (Bedrock rejects 65536 there), and 65536 unchanged on
+        # the 128000-ceiling Claude models.
         "max_tokens": clamp_max_tokens(model_id, 65536),
         "boto_client_config": BotocoreConfig(
             read_timeout=1800,

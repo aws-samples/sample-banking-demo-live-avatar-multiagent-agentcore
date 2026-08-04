@@ -1,10 +1,14 @@
 """Tests for the per-model output-token ceilings.
 
 The research pipeline picks `max_tokens` from its depth table while the model is
-chosen independently in the UI, so the two can disagree. Claude Haiku 4.5 and
-Sonnet 4.6 cap output at 64000 and reject anything higher with a
-ValidationException, which surfaced as "Planner failed: ... The maximum tokens
-you requested exceeds the model limit of 64000".
+chosen independently in the UI, so the two can disagree. Claude Haiku 4.5 caps
+output at 64000 and rejects anything higher with a ValidationException, which
+surfaced as "Planner failed: ... The maximum tokens you requested exceeds the
+model limit of 64000".
+
+Ceilings below were probed against `bedrock-runtime:Converse` in us-east-1 on
+4 Aug 2026, not taken from the model cards — the Sonnet 4.6 card says "64K" but
+the model accepts 128000.
 """
 
 from __future__ import annotations
@@ -17,13 +21,14 @@ from model_limits import (
     model_max_output_tokens,
 )
 
-# Every value in AVAILABLE_MODELS (useModelSelector.ts) mapped to its documented
-# Bedrock ceiling. Versioned and bare IDs are both represented on purpose.
+# Every value in AVAILABLE_MODELS (useModelSelector.ts) mapped to its
+# empirically confirmed Bedrock ceiling. Versioned and bare IDs are both
+# represented on purpose.
 SELECTOR_MODELS = {
     "us.anthropic.claude-sonnet-5": 128_000,
     "us.anthropic.claude-opus-5": 128_000,
     "us.anthropic.claude-opus-4-7": 128_000,
-    "us.anthropic.claude-sonnet-4-6": 64_000,
+    "us.anthropic.claude-sonnet-4-6": 128_000,
     "us.anthropic.claude-haiku-4-5-20251001-v1:0": 64_000,
     "us.amazon.nova-2-lite-v1:0": 65_535,
 }
@@ -56,14 +61,18 @@ def test_haiku_45_is_clamped_to_64000() -> None:
     assert clamp_max_tokens(model_id, DEPTH_MAX_TOKENS) == 64_000
 
 
-def test_sonnet_46_is_clamped_to_64000() -> None:
-    """Sonnet 4.6 shares Haiku's 64K ceiling and was broken by the same bug."""
-    assert clamp_max_tokens("us.anthropic.claude-sonnet-4-6", DEPTH_MAX_TOKENS) == 64_000
+def test_sonnet_46_is_not_clamped() -> None:
+    """Sonnet 4.6 accepts 128000 despite its model card claiming 64K.
+
+    Clamping it to 64000 would silently halve its output budget, so the depth
+    table's request must pass through untouched.
+    """
+    assert clamp_max_tokens("us.anthropic.claude-sonnet-4-6", DEPTH_MAX_TOKENS) == DEPTH_MAX_TOKENS
 
 
-def test_sonnet_46_is_not_matched_by_the_sonnet_5_fragment() -> None:
-    """Guard the substring table against `claude-sonnet-5` swallowing `4-6`."""
-    assert model_max_output_tokens("us.anthropic.claude-sonnet-4-6") == 64_000
+def test_sonnet_46_and_sonnet_5_resolve_independently() -> None:
+    """Guard the substring table against one Sonnet fragment shadowing another."""
+    assert model_max_output_tokens("us.anthropic.claude-sonnet-4-6") == 128_000
     assert model_max_output_tokens("us.anthropic.claude-sonnet-5") == 128_000
 
 

@@ -12,10 +12,14 @@ while the model is chosen independently by the user, so the two can disagree.
 `clamp_max_tokens` reconciles them by lowering the request to whatever the
 selected model actually accepts.
 
-Ceilings are sourced from the Bedrock model cards (verified 4 Aug 2026). The
-cards express them as "64K" / "128K"; the exact integers here come from the
-ValidationException text for Claude, and from Bedrock rejecting 65536 on
-Nova 2 Lite.
+Ceilings are established by probing `bedrock-runtime:Converse` in us-east-1
+(verified 4 Aug 2026), NOT by reading the model cards. The cards are rounded and
+can be stale: the Claude Sonnet 4.6 card states "64K" but the model accepts
+128000. Bedrock reports the true limit in the ValidationException message, so
+the cheapest way to (re)confirm a ceiling is to send an absurd maxTokens and
+read the number back out of the error:
+
+    The maximum tokens you requested exceeds the model limit of 128000.
 
 Keep in sync with AVAILABLE_MODELS in
 lib/stacks/frontend/app/src/hooks/useModelSelector.ts.
@@ -31,7 +35,7 @@ logger = logging.getLogger(__name__)
 # fragment is a prefix of another; the fragments below are mutually exclusive.
 MODEL_MAX_OUTPUT_TOKENS: tuple[tuple[str, int], ...] = (
     ("claude-haiku-4-5", 64_000),
-    ("claude-sonnet-4-6", 64_000),
+    ("claude-sonnet-4-6", 128_000),
     ("claude-sonnet-5", 128_000),
     ("claude-opus-5", 128_000),
     ("claude-opus-4-7", 128_000),

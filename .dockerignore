@@ -11,3 +11,13 @@ tools/
 lib/stacks/frontend/
 .git/
 .husky/
+# All three agent images build from the repo root (DockerImageAsset
+# `directory: repoRoot`), so anything not excluded here feeds the context hash.
+# None of the Dockerfiles COPY the paths below, but leaving them in meant a
+# docs edit rehashed every image and forced a redeploy of both AgentCore
+# runtimes plus the LiveKit worker.
+docs/
+.kiro/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/

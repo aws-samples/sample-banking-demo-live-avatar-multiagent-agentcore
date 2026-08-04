@@ -1175,8 +1175,8 @@ def _build_model(
     max_tokens controls the output budget (thinking + response). Default 65535 —
     the maximum supported by Nova 2 Lite (Bedrock rejects 65536). It is clamped
     to the selected model's own ceiling, because the depth table and the model
-    are chosen independently: Claude Haiku 4.5 and Sonnet 4.6 cap output at
-    64000 and reject anything higher with a ValidationException.
+    are chosen independently: Claude Haiku 4.5 caps output at 64000 and rejects
+    anything higher with a ValidationException.
 
     Args:
         thinking_budget: Requested depth of Claude reasoning, expressed as a token
