@@ -13,7 +13,7 @@
     ],
     "scripts": {
         "preinstall": "npm config set registry=https://registry.npmjs.com/",
-        "postinstall": "uv venv --allow-existing && uv tool install ruff && find lib patterns -name 'requirements.txt' -exec uv pip install -r {} \\; && uv pip install pytest && uv pip install -r tools/generative-architecture/requirements.txt",
+        "postinstall": "uv venv --allow-existing && uv tool install ruff && find lib patterns -name 'requirements.txt' -exec uv pip install -r {} \\; && uv pip install pytest pip && uv pip install -r tools/generative-architecture/requirements.txt",
         "prepare": "husky",
         "format": "prettier --write . && ruff format .",
         "lint": "eslint . && ruff check .",
@@ -85,7 +85,6 @@
         "express-rate-limit": "8.3.0"
     },
     "dependencies": {
-        "@aws-cdk/aws-bedrock-agentcore-alpha": "^2.253.1-alpha.0",
         "@aws-cdk/aws-bedrock-alpha": "^2.253.1-alpha.0",
         "@aws-cdk/aws-lambda-python-alpha": "^2.253.1-alpha.0",
         "@aws-lambda-powertools/event-handler": "^2.31.0",

@@ -13,6 +13,7 @@ import {
     Bot,
     Circle,
     Diamond,
+    UserRound,
 } from "lucide-react";
 import type { AvatarVariantName, MouthShape } from "./AvatarVariant";
 import { analyzeChunk, resetAnalyzer } from "./lipSyncAnalyzer";
@@ -32,6 +33,7 @@ import ResizablePanelLayout, {
     type ResizablePanelConfig,
 } from "@/components/common/resizable/ResizablePanelLayout";
 import Avatar3DReactWrapper from "./Avatar3DReactWrapper";
+import TalkingHeadAvatar from "./TalkingHeadAvatar";
 import WebsiteMonitor from "./WebsiteMonitor";
 import { useAudioPlayer, AudioPlayerControls } from "./AudioPlayer";
 import { MarkdownRenderer } from "../chat/MarkdownRenderer";
@@ -51,6 +53,7 @@ import {
     VOICES,
 } from "@/lib/websocket-client/voice-config";
 import { presignAgentCoreWebSocket } from "@/lib/websocket-client/sigv4";
+import { AvatarLiveKitClient } from "@/lib/livekit-client/avatarLiveKitClient";
 import { getAWSCredentials } from "@/lib/auth/credentials";
 import { createPCMProcessorUrl, arrayBufferToBase64 } from "@/lib/websocket-client/audio-utils";
 import AvatarTextInput from "./AvatarTextInput";
@@ -140,8 +143,10 @@ export default function AvatarInterface(): JSX.Element {
     });
 
     // --- Avatar variant ---
+    // Default to the photorealistic advisor. The key is versioned (-v2) so
+    // existing sessions that had "robot" saved still pick up the new default.
     const [avatarVariant, setAvatarVariant] = useState<AvatarVariantName>(() => {
-        return (localStorage.getItem("avatar-variant") as AvatarVariantName) || "robot";
+        return (localStorage.getItem("avatar-variant-v2") as AvatarVariantName) || "realistic";
     });
 
     // --- Smart auto-scroll state ---
@@ -150,8 +155,18 @@ export default function AvatarInterface(): JSX.Element {
     const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastMessageCountRef = useRef(0);
 
+    // --- LiveKit (WebRTC) transport — gated behind VITE_LIVEKIT_TOKEN_URL.
+    // When set, the avatar uses LiveKit instead of the AgentCore WebSocket
+    // + SigV4 + mic AudioWorklet path. When absent, behavior is unchanged.
+    const liveKitTokenUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
+    const [liveKitSpeaking, setLiveKitSpeaking] = useState(false);
+    // Raw agent audio track — fed to the photorealistic avatar so it can run
+    // MFCC-based viseme detection on the signal itself.
+    const [agentAudioTrack, setAgentAudioTrack] = useState<MediaStreamTrack | null>(null);
+
     // --- Refs ---
     const wsClientRef = useRef<AvatarWebSocketClient | null>(null);
+    const liveKitClientRef = useRef<AvatarLiveKitClient | null>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const workletNodeRef = useRef<AudioWorkletNode | null>(null);
@@ -797,6 +812,33 @@ export default function AvatarInterface(): JSX.Element {
         clearQueue();
         setInterruptCount(0);
 
+        // --- LiveKit (WebRTC) path ---
+        if (liveKitTokenUrl) {
+            if (!auth.user?.id_token) {
+                setError("Avatar connection requires a Cognito id_token — check authentication.");
+                return;
+            }
+            const lkClient = new AvatarLiveKitClient({
+                idToken: auth.user.id_token,
+                onAudioLevel: setAudioLevel,
+                onSpeakingChange: setLiveKitSpeaking,
+                onConnectionState: setConnectionState,
+                onAudioTrack: setAgentAudioTrack,
+                onError: (err) => setError(`LiveKit error: ${err.message}`),
+            });
+            liveKitClientRef.current = lkClient;
+            try {
+                await lkClient.connect();
+                // LiveKit publishes the mic on connect — reflect that in the UI.
+                setIsRecording(true);
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : "Unknown error";
+                console.error(`[AvatarInterface] LiveKit connection failed: ${msg}`);
+                setError(`Failed to establish avatar connection: ${msg}`);
+            }
+            return;
+        }
+
         // AgentCore Runtime WebSocket endpoints only honor SigV4 or
         // OAuth Bearer (in the Authorization header). Browsers cannot
         // set arbitrary WebSocket headers, so SigV4 presigned URL is
@@ -852,10 +894,27 @@ export default function AvatarInterface(): JSX.Element {
             console.error(`[AvatarInterface] SigV4 presigning failed: ${msg}`);
             setError(`Failed to establish avatar connection: ${msg}`);
         }
-    }, [config, auth.user, persona, language, voiceId, kbPipelines, handleWSMessage, clearQueue]);
+    }, [
+        config,
+        auth.user,
+        persona,
+        language,
+        voiceId,
+        kbPipelines,
+        handleWSMessage,
+        clearQueue,
+        liveKitTokenUrl,
+    ]);
 
     // --- Recording ---
     const stopRecording = useCallback((): void => {
+        // LiveKit path: just mute the published mic; the AudioWorklet below
+        // is never set up on this transport.
+        if (liveKitTokenUrl) {
+            void liveKitClientRef.current?.setMicrophoneEnabled(false);
+            setIsRecording(false);
+            return;
+        }
         if (workletNodeRef.current) {
             workletNodeRef.current.disconnect();
             workletNodeRef.current = null;
@@ -869,9 +928,20 @@ export default function AvatarInterface(): JSX.Element {
             mediaStreamRef.current = null;
         }
         setIsRecording(false);
-    }, []);
+    }, [liveKitTokenUrl]);
 
     const disconnect = useCallback((): void => {
+        // LiveKit path: tear down the room + audio analysis and reset UI.
+        if (liveKitTokenUrl) {
+            liveKitClientRef.current?.disconnect();
+            liveKitClientRef.current = null;
+            setIsRecording(false);
+            setLiveKitSpeaking(false);
+            setAgentAudioTrack(null);
+            setAudioLevel(0);
+            setVisemeShape("neutral");
+            return;
+        }
         stopRecording();
         wsClientRef.current?.disconnect();
         wsClientRef.current = null;
@@ -879,9 +949,17 @@ export default function AvatarInterface(): JSX.Element {
         setAudioLevel(0);
         setVisemeShape("neutral");
         resetAnalyzer();
-    }, [clearQueue, stopRecording]);
+    }, [clearQueue, stopRecording, liveKitTokenUrl]);
 
     const startRecording = useCallback(async (): Promise<void> => {
+        // LiveKit path: the mic is published on connect; re-enable it here.
+        if (liveKitTokenUrl) {
+            if (connectionState !== "connected") return;
+            await liveKitClientRef.current?.setMicrophoneEnabled(true);
+            setIsRecording(true);
+            return;
+        }
+
         if (!wsClientRef.current || connectionState !== "connected") return;
 
         try {
@@ -932,7 +1010,7 @@ export default function AvatarInterface(): JSX.Element {
             const msg = err instanceof Error ? err.message : "Microphone access denied";
             setError(`Microphone error: ${msg}`);
         }
-    }, [connectionState]);
+    }, [connectionState, liveKitTokenUrl]);
 
     // --- Persona change ---
     const handlePersonaChange = useCallback((newPersona: PersonaId): void => {
@@ -1100,14 +1178,23 @@ export default function AvatarInterface(): JSX.Element {
                     </div>
 
                     <div className="avatar-page__avatar-canvas">
-                        <Avatar3DReactWrapper
-                            audioLevel={audioLevel}
-                            isSpeaking={isPlaying}
-                            isListening={isRecording}
-                            className="w-full h-full"
-                            variant={avatarVariant}
-                            mouthShape={visemeShape}
-                        />
+                        {avatarVariant === "realistic" ? (
+                            <TalkingHeadAvatar
+                                audioTrack={agentAudioTrack}
+                                audioLevel={audioLevel}
+                                isSpeaking={liveKitTokenUrl ? liveKitSpeaking : isPlaying}
+                                className="w-full h-full"
+                            />
+                        ) : (
+                            <Avatar3DReactWrapper
+                                audioLevel={audioLevel}
+                                isSpeaking={liveKitTokenUrl ? liveKitSpeaking : isPlaying}
+                                isListening={isRecording}
+                                className="w-full h-full"
+                                variant={avatarVariant}
+                                mouthShape={visemeShape}
+                            />
+                        )}
 
                         {/* Draggable website monitor overlay */}
                         {websitePreview && (
@@ -1118,6 +1205,11 @@ export default function AvatarInterface(): JSX.Element {
                         )}
                         <div className="absolute bottom-2 left-2 flex gap-1">
                             {[
+                                {
+                                    name: "realistic" as const,
+                                    icon: <UserRound size={14} />,
+                                    label: "Advisor",
+                                },
                                 { name: "robot" as const, icon: <Bot size={14} />, label: "Robot" },
                                 {
                                     name: "blob" as const,
@@ -1134,7 +1226,7 @@ export default function AvatarInterface(): JSX.Element {
                                     key={name}
                                     onClick={() => {
                                         setAvatarVariant(name);
-                                        localStorage.setItem("avatar-variant", name);
+                                        localStorage.setItem("avatar-variant-v2", name);
                                     }}
                                     className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
                                         avatarVariant === name
@@ -1276,8 +1368,7 @@ export default function AvatarInterface(): JSX.Element {
                                                             <div className="flex items-center gap-2 mb-2">
                                                                 <span className="text-xl">🌐</span>
                                                                 <span className="text-sm font-semibold text-white">
-                                                                    {seg.title ||
-                                                                        "Restaurant Website"}
+                                                                    {seg.title || "Banking Website"}
                                                                 </span>
                                                             </div>
                                                             <a

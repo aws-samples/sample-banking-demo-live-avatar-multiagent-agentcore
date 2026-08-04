@@ -2,6 +2,8 @@ node_modules/
 cdk.out/
 .venv/
 venv/
+# Local experiment sandbox — must never enter a Docker build context.
+.sandbox/
 *.js
 *.d.ts
 test/

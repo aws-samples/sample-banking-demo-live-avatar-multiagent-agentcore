@@ -19,7 +19,6 @@ import {
 } from "aws-cdk-lib/aws-lambda";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
-import * as agentcore from "@aws-cdk/aws-bedrock-agentcore-alpha";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import { CfnWebACLAssociation } from "aws-cdk-lib/aws-wafv2";
 import { NagSuppressions } from "cdk-nag";
@@ -287,11 +286,16 @@ export class Backend extends Stack {
                               tryBundle(outputDir: string): boolean {
                                   try {
                                       const cp = require("child_process");
+                                      // Every interpolated path MUST stay quoted — a checkout
+                                      // directory containing spaces otherwise fragments the
+                                      // arguments, pip fails, and CDK silently falls back to
+                                      // Docker bundling.
+                                      const requirements = path.join(toolDir, "requirements.txt");
                                       // nosemgrep: detect-child-process
                                       // CDK asset bundling: `outputDir` is a CDK-generated temp path,
                                       // `toolDir` is a compile-time constant under gateway/tools/.
                                       cp.execSync(
-                                          `python3 -m pip install -r ${path.join(toolDir, "requirements.txt")} -t "${outputDir}" --quiet --no-cache-dir --platform manylinux2014_aarch64 --only-binary :all: --implementation cp --python-version 3.13`,
+                                          `python3 -m pip install -r "${requirements}" -t "${outputDir}" --quiet --no-cache-dir --platform manylinux2014_aarch64 --only-binary :all: --implementation cp --python-version 3.13`,
                                           { stdio: "pipe" }
                                       );
                                       // nosemgrep: detect-child-process
@@ -301,7 +305,15 @@ export class Backend extends Stack {
                                           shell: "/bin/bash",
                                       });
                                       return true;
-                                  } catch {
+                                  } catch (err) {
+                                      // Surface the reason. Returning false silently sends CDK to
+                                      // Docker, which turns a local tooling problem into a
+                                      // confusing image-pull failure much later in the synth.
+                                      const reason =
+                                          err instanceof Error ? err.message : String(err);
+                                      console.warn(
+                                          `[bundling] local bundle failed for ${def.dir}, falling back to Docker: ${reason}`
+                                      );
                                       return false;
                                   }
                               },
@@ -433,11 +445,17 @@ export class Backend extends Stack {
 
         // ─── AgentCore Runtimes ────────────────────────────────────────
         const jwtDiscoveryUrl = `${cognitoIssuer}/.well-known/openid-configuration`;
-        const authorizerConfig = agentcore.RuntimeAuthorizerConfiguration.usingJWT(
-            jwtDiscoveryUrl,
-            [userPoolClient.userPoolClientId]
-        );
-        const networkConfig = agentcore.RuntimeNetworkConfiguration.usingPublicNetwork();
+
+        // Both runtimes are defined with the stable L1 constructs from
+        // aws-cdk-lib/aws-bedrockagentcore. The alpha L2 (`agentcore.Runtime`)
+        // was dropped so the whole stack sits on the stable CDK channel — the
+        // alpha package still ships breaking changes on minor bumps.
+        const runtimeAuthorizerConfiguration: CfnRuntime.AuthorizerConfigurationProperty = {
+            customJwtAuthorizer: {
+                discoveryUrl: jwtDiscoveryUrl,
+                allowedClients: [userPoolClient.userPoolClientId],
+            },
+        };
 
         const runtimeEnv: Record<string, string> = {
             AWS_REGION: this.region,
@@ -450,20 +468,37 @@ export class Backend extends Stack {
 
         // ─── Orchestrator Runtime ──────────────────────────────────────
         {
-            const orchestratorRuntimeName = `${stackName.replace(/-/g, "_")}_orchestrator`;
+            // NOTE: the `_v2` suffix is a one-time rename. The original
+            // orchestrator runtime was created via the alpha L2 construct;
+            // after migrating to this L1 CfnRuntime, CloudFormation forces a
+            // replacement on any change, and because AgentRuntimeName is a
+            // create-only identifier the create-before-delete collided
+            // ("already exists") with the still-live L2 runtime. Renaming once
+            // lets CFN create the fresh L1-native runtime under a new name and
+            // delete the old one. Subsequent image updates then apply in place
+            // (as the avatar runtime already does). The name is internal
+            // (ARN/logs only) — nothing references the literal string.
+            const orchestratorRuntimeName = `${stackName.replace(/-/g, "_")}_orchestrator_v2`;
             const orchestratorPatternDir = "patterns/orchestrator-agent";
 
-            const orchestratorArtifact = agentcore.AgentRuntimeArtifact.fromAsset(repoRoot, {
-                platform: Platform.LINUX_ARM64,
+            const orchestratorImage = new DockerImageAsset(this, "OrchestratorImage", {
+                directory: repoRoot,
                 file: `${orchestratorPatternDir}/Dockerfile`,
+                platform: Platform.LINUX_ARM64,
             });
 
-            const orchestratorRuntime = new agentcore.Runtime(this, "Runtime_orchestrator", {
-                runtimeName: orchestratorRuntimeName,
-                agentRuntimeArtifact: orchestratorArtifact,
-                executionRole: agentCoreRole,
-                networkConfiguration: networkConfig,
-                protocolConfiguration: agentcore.ProtocolType.HTTP,
+            const orchestratorRuntime = new CfnRuntime(this, "Runtime_orchestrator", {
+                agentRuntimeName: orchestratorRuntimeName,
+                agentRuntimeArtifact: {
+                    containerConfiguration: {
+                        containerUri: orchestratorImage.imageUri,
+                    },
+                },
+                roleArn: agentCoreRole.roleArn,
+                networkConfiguration: {
+                    networkMode: "PUBLIC",
+                },
+                protocolConfiguration: "HTTP",
                 environmentVariables: {
                     ...runtimeEnv,
                     MODEL_ID: models.orchestrator,
@@ -472,23 +507,29 @@ export class Backend extends Stack {
                     // image. See patterns/orchestrator-agent/browser_tools.py.
                     ENABLE_BROWSER_TOOLS: features.browser ? "true" : "false",
                 },
-                authorizerConfiguration: authorizerConfig,
+                authorizerConfiguration: runtimeAuthorizerConfiguration,
+                // L1 spells this `requestHeaderAllowlist`; the alpha L2 called
+                // it `allowlistedHeaders`. The Authorization header must be
+                // forwarded so the runtime can read the caller's JWT `sub`
+                // (see patterns/utils/auth.py::extract_user_id_from_context).
                 requestHeaderConfiguration: {
-                    allowlistedHeaders: ["Authorization"],
+                    requestHeaderAllowlist: ["Authorization"],
                 },
                 description: `In-process orchestrator for ${stackName}`,
             });
 
-            this.orchestratorRuntimeArn = orchestratorRuntime.agentRuntimeArn;
-            runtimeArns["orchestrator"] = orchestratorRuntime.agentRuntimeArn;
+            orchestratorRuntime.node.addDependency(agentCoreRole);
+
+            this.orchestratorRuntimeArn = orchestratorRuntime.attrAgentRuntimeArn;
+            runtimeArns["orchestrator"] = orchestratorRuntime.attrAgentRuntimeArn;
 
             new StringParameter(this, "RuntimeArn_orchestrator", {
                 parameterName: `/${stackName}/runtime_arn_orchestrator`,
-                stringValue: orchestratorRuntime.agentRuntimeArn,
+                stringValue: orchestratorRuntime.attrAgentRuntimeArn,
             });
 
             new CfnOutput(this, "RuntimeArn_orchestrator_Output", {
-                value: orchestratorRuntime.agentRuntimeArn,
+                value: orchestratorRuntime.attrAgentRuntimeArn,
                 description: "Runtime ARN for orchestrator agent",
             });
         }

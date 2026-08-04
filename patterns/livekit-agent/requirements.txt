@@ -1,0 +1,13 @@
+# LiveKit Agents worker for the Nova Sonic 2 voice path.
+# The AWS realtime plugin (>=1.5) defaults RealtimeModel() to
+# amazon.nova-2-sonic-v1:0 with modalities="mixed".
+livekit-agents[mcp]~=1.5
+livekit-plugins-aws[realtime]~=1.5
+
+# Shared utils (utils/auth.py, utils/ssm.py) dependencies.
+# bedrock-agentcore is imported at module load by utils/auth.py
+# (RequestContext) even though the worker only uses get_gateway_access_token.
+bedrock-agentcore>=1.4.1,<2.0.0
+PyJWT[crypto]>=2.10.1
+requests>=2.28.0
+boto3>=1.34.0

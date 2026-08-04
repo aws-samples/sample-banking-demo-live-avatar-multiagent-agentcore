@@ -26,4 +26,10 @@ export interface AvatarVariant {
     dispose(): void;
 }
 
-export type AvatarVariantName = "robot" | "blob" | "crystal";
+/**
+ * `realistic` is not a canvas variant like the others — it renders the
+ * photorealistic TalkingHead GLB (see TalkingHeadAvatar.tsx), which manages its
+ * own scene and lip-sync, so it is branched at the AvatarInterface level rather
+ * than constructed through `createAvatar`.
+ */
+export type AvatarVariantName = "realistic" | "robot" | "blob" | "crystal";

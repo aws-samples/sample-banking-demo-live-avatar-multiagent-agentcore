@@ -6,6 +6,14 @@ export type KbBackend = "s3-vectors" | "opensearch";
 
 export interface FeatureFlags {
     avatar: boolean;
+    /**
+     * LiveKit voice path. When true, deploys the self-hosted LiveKit stack
+     * (VPC + ECS Fargate LiveKit server + Nova Sonic 2 agent worker + token
+     * API) and the frontend connects the Relationship Manager over WebRTC
+     * instead of the AgentCore avatar WebSocket. Independent of `avatar`
+     * during the migration; once proven, `avatar` can be turned off.
+     */
+    livekit: boolean;
     knowledge_base: boolean;
     kb_backend: KbBackend;
     neptune: boolean;
@@ -27,6 +35,7 @@ export interface ModelConfig {
 
 const DEFAULT_FEATURES: FeatureFlags = {
     avatar: true,
+    livekit: false,
     knowledge_base: true,
     kb_backend: "s3-vectors",
     neptune: false,

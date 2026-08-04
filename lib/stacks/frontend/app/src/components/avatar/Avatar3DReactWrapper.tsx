@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Bot } from "lucide-react";
 import { Avatar3DRobot } from "./Avatar3DRobot";
 import { Avatar3DBlob } from "./Avatar3DBlob";
 import { Avatar3DCrystal } from "./Avatar3DCrystal";
@@ -25,6 +26,8 @@ function createAvatar(variant: AvatarVariantName, container: HTMLElement): Avata
             return new Avatar3DBlob(container);
         case "crystal":
             return new Avatar3DCrystal(container);
+        // "realistic" never reaches here — AvatarInterface renders
+        // TalkingHeadAvatar for it instead of this wrapper.
         case "robot":
         default:
             return new Avatar3DRobot(container);
@@ -41,12 +44,28 @@ export default function Avatar3DReactWrapper({
 }: Avatar3DReactWrapperProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const avatarRef = useRef<AvatarVariant | null>(null);
+    // WebGL may be unavailable (hardware acceleration disabled, remote desktop,
+    // sandboxed GPU). The 3D avatar is presentational only — if it can't
+    // initialize we degrade to a static placeholder so the voice conversation
+    // (audio + transcript) keeps working instead of crashing the whole page.
+    const [webglFailed, setWebglFailed] = useState(false);
 
     useEffect(() => {
         const container = containerRef.current;
         if (!container) return;
 
-        const avatar = createAvatar(variant, container);
+        let avatar: AvatarVariant;
+        try {
+            avatar = createAvatar(variant, container);
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn(
+                "[Avatar3D] WebGL unavailable — rendering placeholder; voice remains active.",
+                err
+            );
+            setWebglFailed(true);
+            return;
+        }
         avatarRef.current = avatar;
 
         // Sync current props into the new avatar instance immediately so it
@@ -105,7 +124,32 @@ export default function Avatar3DReactWrapper({
         <div
             ref={containerRef}
             className={`${className ?? ""}${isListening ? " avatar-mic-hot" : ""}`}
-            style={{ width: "100%", height: "100%" }}
-        />
+            style={{ width: "100%", height: "100%", position: "relative" }}
+        >
+            {webglFailed && (
+                <div
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6"
+                    style={{ color: "var(--app-text-secondary)" }}
+                >
+                    <div
+                        className={`flex items-center justify-center rounded-full p-6${isSpeaking ? " animate-pulse" : ""}`}
+                        style={{
+                            background: "var(--glass-bg)",
+                            border: "1px solid var(--glass-border)",
+                        }}
+                    >
+                        <Bot size={48} style={{ color: "var(--brand-accent, #c8a24a)" }} />
+                    </div>
+                    <div className="text-sm font-medium">
+                        {isSpeaking ? "Speaking…" : isListening ? "Listening…" : "Voice ready"}
+                    </div>
+                    <div className="text-xs opacity-70 max-w-xs">
+                        The 3D avatar needs WebGL, which is disabled in this browser. Voice and
+                        transcript are fully active — enable hardware acceleration to see the
+                        avatar.
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

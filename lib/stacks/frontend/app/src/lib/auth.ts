@@ -24,17 +24,23 @@ async function loadAwsConfig(): Promise<AwsExportsConfig | null> {
     }
 
     configPromise = (async () => {
+        // Optional fallback only. The authoritative auth config comes from the
+        // baked VITE_COGNITO_* env vars (see createCognitoAuthConfig). This
+        // file is not deployed, so a miss is expected — fail quietly and let
+        // the env vars take over. (Previously this logged an error and threw,
+        // producing a noisy "Unexpected token '<'" when CloudFront returned
+        // index.html for the missing file.)
         try {
             const response = await fetch("/aws-exports.json");
-            if (!response.ok) {
-                throw new Error(`Failed to load aws-exports.json: ${response.status}`);
+            const contentType = response.headers.get("content-type") ?? "";
+            if (!response.ok || !contentType.includes("application/json")) {
+                return null;
             }
             const config = await response.json();
             configCache = config;
             return config;
-        } catch (error) {
-            console.error("Failed to load aws-exports.json:", error);
-            throw error;
+        } catch {
+            return null;
         }
     })();
 

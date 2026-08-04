@@ -11,6 +11,9 @@ export default [
             "**/.venv/**",
             "**/*.d.ts",
             "**/*.min.js",
+            "**/*.min.mjs",
+            // Local experiment sandbox (gitignored) — not part of the project.
+            ".sandbox/**",
             "lib/stacks/frontend/app/**",
         ],
     },

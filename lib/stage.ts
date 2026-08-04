@@ -5,6 +5,7 @@ import { getFeatureFlags } from "./common/feature-flags";
 import { Auth } from "./stacks/auth";
 import { Backend } from "./stacks/backend";
 import { Frontend, FrontendDeployment } from "./stacks/frontend";
+import { LiveKit } from "./stacks/livekit";
 import { Shared } from "./stacks/shared";
 
 export class ApplicationStage extends Stage {
@@ -27,6 +28,16 @@ export class ApplicationStage extends Stage {
         });
         backend.addDependency(shared);
         backend.addDependency(auth);
+
+        // LiveKit voice path (Option 1 — LiveKit Cloud + Fargate worker).
+        // Gated on the `livekit` flag; depends on backend for the gateway_url
+        // SSM param the worker reads at runtime.
+        let livekit: LiveKit | undefined;
+        if (features.livekit) {
+            livekit = new LiveKit(this, "LiveKit", { auth });
+            livekit.addDependency(auth);
+            livekit.addDependency(backend);
+        }
 
         const environmentVariables: Record<string, string> = {
             // Existing env vars
@@ -55,13 +66,16 @@ export class ApplicationStage extends Stage {
             ...(this.node.getContext("accounts")?.[this.stageName ?? ""]?.midway
                 ? { VITE_COGNITO_IDENTITY_PROVIDER: "AmazonFederate" }
                 : {}),
-            // Backend runtime ARNs
+            // Backend runtime ARNs (cross-stack references).
             VITE_RUNTIME_ARN_ORCHESTRATOR: backend.orchestratorRuntimeArn,
             ...(features.avatar && backend.avatarRuntimeArn
                 ? { VITE_RUNTIME_ARN_AVATAR: backend.avatarRuntimeArn }
                 : {}),
             VITE_FEEDBACK_API_URL: backend.feedbackApiUrl,
             VITE_GATEWAY_URL: backend.gatewayUrl,
+            // LiveKit token endpoint — the browser POSTs here (with its Cognito
+            // JWT) to get a room token + LiveKit Cloud server URL.
+            ...(features.livekit && livekit ? { VITE_LIVEKIT_TOKEN_URL: livekit.tokenApiUrl } : {}),
         };
 
         // this stack must be named FrontendDeployment
