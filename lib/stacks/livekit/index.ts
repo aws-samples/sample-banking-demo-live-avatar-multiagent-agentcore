@@ -48,6 +48,13 @@ interface LiveKitConfig {
     serverMemory: number;
     workerCpu: number;
     workerMemory: number;
+    /**
+     * Nova Sonic voice for the worker. Fixed for the life of the task: rooms are
+     * joined before the client sends any preference and the token endpoint
+     * carries no voice, so the UI voice selector cannot reach this transport.
+     * Must be one of the ids in the frontend's voice-config.ts VOICES.
+     */
+    voiceId: string;
 }
 
 const DEFAULT_LIVEKIT_CONFIG: LiveKitConfig = {
@@ -56,6 +63,7 @@ const DEFAULT_LIVEKIT_CONFIG: LiveKitConfig = {
     serverMemory: 1024,
     workerCpu: 1024,
     workerMemory: 2048,
+    voiceId: "matthew",
 };
 
 /**
@@ -207,6 +215,7 @@ export class LiveKit extends Stack {
                 STACK_NAME: stackName,
                 MODEL_ID: models.avatar_sonic,
                 PERSONA: "friendly",
+                VOICE_ID: cfg.voiceId,
                 LOGLEVEL: "INFO",
             },
             secrets: {

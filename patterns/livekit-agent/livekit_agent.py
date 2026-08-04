@@ -48,6 +48,11 @@ logging.basicConfig(
 REGION = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-2-sonic-v1:0")
 DEFAULT_PERSONA = os.environ.get("PERSONA", "friendly")
+# Nova Sonic voice id. This worker holds one voice for the life of the task:
+# LiveKit rooms are joined before the client sends any preference, and the token
+# endpoint carries no voice, so per-session switching is not available on this
+# transport. Set via VOICE_ID (cdk.json -> context.livekit.voiceId).
+VOICE_ID = os.environ.get("VOICE_ID", "matthew")
 
 # First-turn greeting. Nova Sonic is speech-to-speech; we prompt an opening line
 # so the user hears the Relationship Manager without having to speak first.
@@ -120,7 +125,11 @@ async def entrypoint(ctx: JobContext) -> None:
     system_prompt = get_persona_prompt(persona)
 
     session = AgentSession(
-        llm=aws.realtime.RealtimeModel(),
+        # Without an explicit voice the plugin leaves it NOT_GIVEN and Nova Sonic
+        # picks its own default, which is female. That made the UI voice selector
+        # look broken on this transport: the dropdown only reaches the WebSocket
+        # avatar runtime, never this worker.
+        llm=aws.realtime.RealtimeModel(voice=VOICE_ID),
         tools=[_build_gateway_toolset()],
     )
 

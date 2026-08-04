@@ -263,8 +263,21 @@ export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
     }
 
     setMouthShape(shape: MouthShape): void {
+        // Only a NON-neutral shape proves a real viseme stream exists.
+        //
+        // The LiveKit transport produces no visemes for canvas variants — it
+        // supplies an amplitude via onAudioLevel and leaves visemeShape at
+        // "neutral" — and the React wrapper pushes that "neutral" on mount and
+        // on every change. Latching on any shape therefore disabled the
+        // amplitude fallback permanently and the mouth never opened at all.
+        if (shape !== "neutral") {
+            this.hasViseme = true;
+        } else if (!this.hasViseme) {
+            // No viseme stream on this transport: updateLipSync owns the mouth.
+            return;
+        }
+
         const target = VISEME_TARGETS[shape] ?? VISEME_TARGETS.neutral;
-        this.hasViseme = true;
         // Scale the opening by measured loudness so quiet speech does not gape.
         const gain = this.audioLevel > 0 ? Math.min(0.55 + this.audioLevel * 0.75, 1.25) : 1.0;
         this.targetOpen = target.open * gain;

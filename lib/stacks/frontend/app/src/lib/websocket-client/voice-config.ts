@@ -36,11 +36,30 @@ export const VOICES: VoiceProfile[] = [
     { id: "vitoria", name: "Vitória", language: "pt-BR", gender: "female" },
 ];
 
+/**
+ * Default voice per language, stated explicitly rather than taken as "first
+ * entry in VOICES". The implicit version silently defaulted en-US to Tiffany,
+ * which no longer matches the avatar and made the selector look wrong.
+ *
+ * en-US must stay in step with `context.livekit.voiceId` in cdk.json: the
+ * LiveKit worker holds one voice for the life of the task and cannot be changed
+ * from the UI, so a mismatch here shows the wrong voice as selected.
+ */
+const DEFAULT_VOICE_BY_LANGUAGE: Record<LanguageCode, string> = {
+    "en-US": "matthew",
+    "es-US": "pedro",
+    "fr-FR": "remi",
+    "it-IT": "bianca",
+    "de-DE": "hans",
+    "pt-BR": "vitoria",
+};
+
 export function getVoicesForLanguage(language: LanguageCode): VoiceProfile[] {
     return VOICES.filter((v) => v.language === language);
 }
 
 export function getDefaultVoice(language: LanguageCode): VoiceProfile {
     const voices = getVoicesForLanguage(language);
-    return voices[0] ?? VOICES[0];
+    const preferred = voices.find((v) => v.id === DEFAULT_VOICE_BY_LANGUAGE[language]);
+    return preferred ?? voices[0] ?? VOICES[0];
 }
