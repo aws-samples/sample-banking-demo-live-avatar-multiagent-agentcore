@@ -20,6 +20,8 @@
         "kit": "npx tsx tools/kit.ts",
         "export": "npx tsx tools/export.ts",
         "diagram": "npx tsx tools/diagram.ts",
+        "docs:export": "./.venv/bin/python tools/docs-export/build.py",
+        "docs:script": "./.venv/bin/python tools/demo-script/build_docx.py",
         "stage": "git add -A",
         "commit": "npx cz",
         "build": "tsc",
