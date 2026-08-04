@@ -101,7 +101,7 @@ def _how_to_read(doc, *, bullets, table, meta) -> None:
     doc.add_paragraph(
         "All four applications are built on Amazon Bedrock AgentCore. The platform is the "
         "continuity between sections rather than the storyline: each time a requirement comes "
-        "up, a named capability answers it on screen. Eleven AgentCore capabilities do work "
+        "up, a named capability answers it on screen. Twelve AgentCore capabilities do work "
         "across the hour."
     )
     table(
@@ -110,7 +110,13 @@ def _how_to_read(doc, *, bullets, table, meta) -> None:
         [
             ["Harness", "The research agent declared as configuration, running without orchestration code"],
             ["Runtime", "Production deployment, session isolation, agent-to-agent calls, long-running jobs"],
-            ["Gateway", "Every tool published as MCP, plus first-party web search and human elicitation"],
+            ["Gateway", "Every tool published as MCP, plus human elicitation mid-execution"],
+            [
+                "Web Search",
+                "First-party managed web search as a built-in gateway target — ranked results "
+                "with source URLs and publication dates, governed by domain allow and deny "
+                "lists and date bounds, with no data egress from the AWS environment",
+            ],
             ["Memory", "Analyst preferences, session summaries and recall across runs"],
             ["Identity", "Agents acting as the signed-in user rather than a shared service account"],
             ["Policy", "Deterministic allow and deny in front of every tool call"],
@@ -242,10 +248,28 @@ def _section_1(doc, *, bullets, table, meta) -> None:
             ],
             [
                 "6",
-                "Tools published through one gateway as MCP: existing Lambda functions, an "
-                "OpenAPI service, and first-party web search with domain and date filters",
+                "The bank's existing tools published through one gateway as MCP without "
+                "rewriting them: Lambda functions and an OpenAPI service, discovered by the "
+                "agent and called by name",
                 "Code: gateway/tools/ handlers and the target config, then tool calls in the app",
-                "Tool calling and MCP; web search",
+                "Tool calling and MCP",
+            ],
+            [
+                "6a",
+                "Web search added as a built-in gateway target rather than a bring-your-own "
+                "API key: the research agent gathers current market results, each carrying a "
+                "source URL and publication date that flow through to the report citations",
+                "Code: the connector target config, then live searches in the trace",
+                "Web search APIs",
+            ],
+            [
+                "6b",
+                "The same search governed for a regulated bank — an allow list restricting a "
+                "compliance query to primary regulator domains, a deny list excluding "
+                "low-quality sources, and a published-date bound rejecting stale filings. "
+                "Search runs inside the bank's AWS environment with no data egress",
+                "Code: the domain and date filters, target-level and per request",
+                "Web search; control processes",
             ],
             [
                 "7",
@@ -367,7 +391,13 @@ def _section_1(doc, *, bullets, table, meta) -> None:
             ["AgentCore Harness", "The agent as configuration — the low-code altitude"],
             ["Strands Agents", "The exported code implementation — the high-code altitude"],
             ["AgentCore Runtime", "Multi-agent execution, session isolation, parallel section agents"],
-            ["AgentCore Gateway", "MCP tools, first-party web search, human elicitation"],
+            ["AgentCore Gateway", "Existing Lambda and OpenAPI tools as MCP targets; human elicitation"],
+            [
+                "AgentCore Web Search",
+                "First-party managed search as a built-in gateway target. Supplies the current "
+                "market evidence behind the report, with source URLs and publication dates for "
+                "citations, and domain and date governance on every query",
+            ],
             ["AgentCore Identity", "Tool calls made as the signed-in analyst"],
             ["AgentCore Policy", "Deterministic tool-call control ahead of the model"],
             ["AgentCore Memory", "Preferences and findings across sessions"],
