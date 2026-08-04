@@ -27,9 +27,13 @@ export interface AvatarVariant {
 }
 
 /**
- * `realistic` is not a canvas variant like the others — it renders the
- * photorealistic TalkingHead GLB (see TalkingHeadAvatar.tsx), which manages its
- * own scene and lip-sync, so it is branched at the AvatarInterface level rather
- * than constructed through `createAvatar`.
+ * `realistic` is not a canvas variant like the others — it renders the rigged
+ * TalkingHead GLB (see TalkingHeadAvatar.tsx), which manages its own scene and
+ * lip-sync, so it is branched at the AvatarInterface level rather than
+ * constructed through `createAvatar`. It is labelled "Advisor" in the picker.
+ *
+ * `photo` is the "Realistic" picker entry: a real photograph warped per viseme
+ * (see Avatar3DPhoto.ts). It goes through `createAvatar` like the generated
+ * variants, because it is a normal three.js scene.
  */
-export type AvatarVariantName = "realistic" | "robot" | "blob" | "crystal";
+export type AvatarVariantName = "realistic" | "photo" | "robot" | "blob" | "crystal";

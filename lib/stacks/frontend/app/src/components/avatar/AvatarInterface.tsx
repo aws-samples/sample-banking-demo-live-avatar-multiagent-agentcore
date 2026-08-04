@@ -11,6 +11,7 @@ import {
     ChevronDown,
     Wrench,
     Bot,
+    Camera,
     Circle,
     Diamond,
     UserRound,
@@ -1209,6 +1210,11 @@ export default function AvatarInterface(): JSX.Element {
                                     name: "realistic" as const,
                                     icon: <UserRound size={14} />,
                                     label: "Advisor",
+                                },
+                                {
+                                    name: "photo" as const,
+                                    icon: <Camera size={14} />,
+                                    label: "Realistic",
                                 },
                                 { name: "robot" as const, icon: <Bot size={14} />, label: "Robot" },
                                 {

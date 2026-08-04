@@ -3,6 +3,7 @@ import { Bot } from "lucide-react";
 import { Avatar3DRobot } from "./Avatar3DRobot";
 import { Avatar3DBlob } from "./Avatar3DBlob";
 import { Avatar3DCrystal } from "./Avatar3DCrystal";
+import { Avatar3DPhoto } from "./Avatar3DPhoto";
 import type { AvatarVariant, AvatarVariantName, MouthShape } from "./AvatarVariant";
 
 interface Avatar3DReactWrapperProps {
@@ -22,6 +23,8 @@ const EYE_COLOR = 0x6cc4ff;
 
 function createAvatar(variant: AvatarVariantName, container: HTMLElement): AvatarVariant {
     switch (variant) {
+        case "photo":
+            return new Avatar3DPhoto(container);
         case "blob":
             return new Avatar3DBlob(container);
         case "crystal":
