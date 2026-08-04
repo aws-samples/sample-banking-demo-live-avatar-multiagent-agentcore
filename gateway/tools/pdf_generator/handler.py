@@ -6,7 +6,7 @@ import logging
 import os
 import urllib.request
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from urllib.parse import urlparse
 
@@ -666,6 +666,16 @@ def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "
         ExpiresIn=3600,
     )
 
+    _record_run(
+        user_id=user_id,
+        report_id=report_id,
+        title=topic,
+        s3_key=s3_key,
+        pipeline=pipeline,
+        mode="research",
+        size_bytes=len(pdf_bytes),
+    )
+
     return json.dumps(
         {
             "success": True,
@@ -679,6 +689,58 @@ def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "
 
 
 IMAGES_BUCKET = os.environ.get("IMAGES_BUCKET", "")
+METADATA_TABLE = os.environ.get("METADATA_TABLE", "")
+
+# Run records outlive the S3 lifecycle rule on reports (90 days) by a small
+# margin, so history never lists a report whose object has already expired.
+RUN_RECORD_TTL_DAYS = 89
+
+
+def _record_run(
+    *,
+    user_id: str,
+    report_id: str,
+    title: str,
+    s3_key: str,
+    pipeline: str,
+    mode: str,
+    size_bytes: int,
+) -> None:
+    """Persist a durable pointer to a finished report.
+
+    Only the S3 key is stored, never a presigned URL. URLs expire after an hour,
+    and storing one is what previously made report links from an earlier run fail
+    with AccessDenied. `lambdas/reports-history` signs a fresh URL per request.
+
+    Best-effort: a failure here must not lose a report the user already has, so it
+    is logged rather than raised.
+    """
+    if not METADATA_TABLE or not user_id:
+        logger.info("Skipping run record (table=%s, user=%s)", bool(METADATA_TABLE), bool(user_id))
+        return
+
+    now = datetime.now(timezone.utc)
+    try:
+        boto3.resource("dynamodb").Table(METADATA_TABLE).put_item(
+            Item={
+                # Partitioned per user so history queries cannot cross tenants.
+                "PK": f"user#{user_id}",
+                # Timestamp first so a descending query returns newest first.
+                "SK": f"report#{now.isoformat()}#{report_id}",
+                "report_id": report_id,
+                "title": title,
+                "s3_key": s3_key,
+                "bucket": REPORTS_BUCKET,
+                "pipeline": pipeline,
+                "mode": mode,
+                "size_bytes": size_bytes,
+                "created_at": now.isoformat(),
+                "ttl": int(now.timestamp()) + RUN_RECORD_TTL_DAYS * 86400,
+            }
+        )
+        logger.info("Recorded run %s for history", report_id)
+    except Exception as e:  # noqa: BLE001 - never fail a generated report over history
+        logger.warning("Could not record run %s: %s", report_id, e)
 
 
 def _fetch_image(s3_key: str = "", image_url: str = "") -> BytesIO | None:
@@ -971,6 +1033,16 @@ def _generate_services_pdf(title: str, services_data: dict, user_id: str = "", p
             "ResponseContentType": "application/pdf",
         },
         ExpiresIn=3600,
+    )
+
+    _record_run(
+        user_id=user_id,
+        report_id=report_id,
+        title=services_title,
+        s3_key=s3_key,
+        pipeline=pipeline,
+        mode="menu",
+        size_bytes=len(pdf_bytes),
     )
 
     return json.dumps(

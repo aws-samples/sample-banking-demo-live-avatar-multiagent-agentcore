@@ -53,6 +53,11 @@ interface LiveKitConfig {
      * joined before the client sends any preference and the token endpoint
      * carries no voice, so the UI voice selector cannot reach this transport.
      * Must be one of the ids in the frontend's voice-config.ts VOICES.
+     *
+     * Default is female to match the default avatar, "Advisor", which is a female
+     * GLB. On the LiveKit transport this is the voice regardless of which avatar
+     * is on screen, so if you present the male "Realistic" photo avatar set this
+     * to "matthew" and redeploy — the picker cannot change it at runtime.
      */
     voiceId: string;
 }
@@ -63,7 +68,7 @@ const DEFAULT_LIVEKIT_CONFIG: LiveKitConfig = {
     serverMemory: 1024,
     workerCpu: 1024,
     workerMemory: 2048,
-    voiceId: "matthew",
+    voiceId: "tiffany",
 };
 
 /**

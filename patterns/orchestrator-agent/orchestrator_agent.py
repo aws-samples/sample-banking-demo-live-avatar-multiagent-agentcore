@@ -389,8 +389,8 @@ Output your catalog as structured JSON:
           "description": "Brief, benefit-led description",
           "price": "Headline rate or fee line (e.g., 'No monthly fee' or '4.15% APY')",
           "dietary": ["FDIC", "No Fee"],
-          "s3_key": "images/session/id.png (from Canvas result)",
-          "image_url": "presigned URL (from Canvas result)"
+          "s3_key": "<copy verbatim from the Canvas result, or omit this field>",
+          "image_url": "<copy verbatim from the Canvas result, or omit this field>"
         }
       ]
     }
@@ -399,11 +399,29 @@ Output your catalog as structured JSON:
 
 IMPORTANT:
 - Include exactly 3 products per section — no more, no less
-- Generate an image for every single product — do not skip any
 - Put the headline rate or fee in the "price" field (e.g., "4.15% APY", "No monthly fee")
 - Use the "dietary" field for short feature badges: FDIC, No Fee, Digital, Advised, IRA, etc.
 - All rates, fees, and terms are synthetic demonstration values — keep them plausible
 - Use the s3_key from the Canvas result — this is critical for reliable PDF image embedding
+
+NEVER INVENT AN IMAGE REFERENCE:
+- `s3_key` and `image_url` may ONLY contain values copied verbatim from a
+  successful gateway_nova_canvas_generate result.
+- If image generation fails, returns an error, or is unavailable, OMIT both
+  fields for that product and carry on. A text-only catalog is a correct
+  outcome; a fabricated image reference is not.
+- Never write a placeholder, an example, a guessed path, or a URL you did not
+  receive from the tool. `example.com`, `example.s3.amazonaws.com`, and invented
+  `images/...png` paths are all failures — they produce broken images in the PDF
+  and on screen, and they misrepresent what the platform did.
+
+OUTPUT DISCIPLINE:
+- Return ONLY the JSON object. No preamble, no apology, no explanation, no
+  markdown fences.
+- Do not narrate tool failures in your output. The catalog JSON is consumed by
+  the next agent, not read by the user, so prose there corrupts the pipeline and
+  leaks internal detail into the transcript. If images were unavailable, the
+  missing fields say so on their own.
 """
 
 MENU_PDF_WRITER_PROMPT = """You are a Services PDF Writer Agent. Your role is to take the designed

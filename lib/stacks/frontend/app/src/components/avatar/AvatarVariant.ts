@@ -44,3 +44,20 @@ export interface AvatarVariant {
  * variants, because it is a normal three.js scene.
  */
 export type AvatarVariantName = "realistic" | "photo" | "robot" | "blob" | "crystal";
+
+/**
+ * Apparent gender of each avatar, used to keep the selected voice matching the
+ * face on screen. `null` means the variant has no apparent gender, so the
+ * language default stands.
+ *
+ * "Advisor" (`realistic`) is the rigged female GLB; "Realistic" (`photo`) is the
+ * male photograph. Without this map a female avatar could speak with a male
+ * voice, which reads as a bug rather than a choice.
+ */
+export const VARIANT_VOICE_GENDER: Record<AvatarVariantName, "female" | "male" | null> = {
+    realistic: "female",
+    photo: "male",
+    robot: null,
+    blob: null,
+    crystal: null,
+};

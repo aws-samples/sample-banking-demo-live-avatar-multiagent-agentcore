@@ -14,6 +14,7 @@ const MenuPage = lazy(() => import("@/routes/MenuPage"));
 const AvatarPage = lazy(() => import("@/routes/AvatarPage"));
 const ResearchStudioPage = lazy(() => import("@/routes/ResearchStudioPage"));
 const ArchivePage = lazy(() => import("@/routes/ArchivePage"));
+const HistoryPage = lazy(() => import("@/routes/HistoryPage"));
 
 function LoadingFallback(): JSX.Element {
     return (
@@ -50,6 +51,7 @@ export default function App(): JSX.Element {
                                         element={<ResearchStudioPage />}
                                     />
                                     <Route path="/archive" element={<ArchivePage />} />
+                                    <Route path="/history" element={<HistoryPage />} />
                                 </Route>
                                 <Route path="*" element={<Navigate to="/research" replace />} />
                             </Routes>

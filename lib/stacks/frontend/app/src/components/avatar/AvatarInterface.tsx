@@ -17,6 +17,7 @@ import {
     UserRound,
 } from "lucide-react";
 import type { AvatarVariantName, MouthShape } from "./AvatarVariant";
+import { VARIANT_VOICE_GENDER } from "./AvatarVariant";
 import { analyzeChunk, resetAnalyzer } from "./lipSyncAnalyzer";
 import Button from "@cloudscape-design/components/button";
 import Alert from "@cloudscape-design/components/alert";
@@ -50,6 +51,7 @@ import {
 import {
     type LanguageCode,
     getDefaultVoice,
+    getVoiceForGender,
     getVoicesForLanguage,
     VOICES,
 } from "@/lib/websocket-client/voice-config";
@@ -115,6 +117,8 @@ export default function AvatarInterface(): JSX.Element {
     const [persona, setPersona] = useState<PersonaId>("friendly");
     const [language, setLanguage] = useState<LanguageCode>("en-US");
     const [voiceId, setVoiceId] = useState(() => getDefaultVoice("en-US").id);
+    /** Set once the user picks a voice, after which the avatar stops overriding it. */
+    const [voicePinned, setVoicePinned] = useState(false);
 
     // Avatar KB pipeline multi-select state (persisted via Zustand/localStorage).
     const kbPipelines = useAvatarKbPipelinesStore((s) => s.pipelines);
@@ -324,8 +328,32 @@ export default function AvatarInterface(): JSX.Element {
 
     const handleVoiceChange = useCallback((newVoiceId: string): void => {
         setVoiceId(newVoiceId);
+        // An explicit choice wins from here on: stop matching the voice to the
+        // avatar, or switching avatars would silently discard the user's pick.
+        setVoicePinned(true);
         wsClientRef.current?.updateVoice(newVoiceId);
     }, []);
+
+    // --- Keep the voice matching the avatar on screen ---
+    // "Advisor" is a female GLB and "Realistic" is a male photograph, so the
+    // voice follows the face unless the user has chosen one themselves. Without
+    // this the default female avatar spoke with a male voice, which reads as a
+    // bug rather than a choice.
+    const handleVariantChange = useCallback(
+        (name: AvatarVariantName): void => {
+            setAvatarVariant(name);
+            localStorage.setItem("avatar-variant-v2", name);
+
+            if (voicePinned) return;
+            const gender = VARIANT_VOICE_GENDER[name];
+            if (!gender) return;
+            const next = getVoiceForGender(language, gender).id;
+            if (next === voiceId) return;
+            setVoiceId(next);
+            wsClientRef.current?.updateVoice(next);
+        },
+        [language, voiceId, voicePinned]
+    );
 
     // --- WebSocket message handler ---
     const handleWSMessage = useCallback(
@@ -1231,10 +1259,7 @@ export default function AvatarInterface(): JSX.Element {
                             ].map(({ name, icon, label }) => (
                                 <button
                                     key={name}
-                                    onClick={() => {
-                                        setAvatarVariant(name);
-                                        localStorage.setItem("avatar-variant-v2", name);
-                                    }}
+                                    onClick={() => handleVariantChange(name)}
                                     className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
                                         avatarVariant === name
                                             ? "bg-white/90 text-gray-900 shadow"

@@ -10,6 +10,7 @@
 import {
     BookOpen,
     Boxes,
+    History,
     LineChart,
     Mic,
     MessagesSquare,
@@ -116,6 +117,16 @@ export const EXPERIENCES: readonly Experience[] = [
             "Semantic search across every report and disclosure the platform has produced, scoped to the requesting identity.",
         service: "Amazon S3 Vectors",
         icon: BookOpen,
+        group: "library",
+    },
+    {
+        to: "/history",
+        label: "Run History",
+        subtitle: "Past reports · re-signed links",
+        description:
+            "Every completed run, reopenable. Download links are signed per request from the stored S3 key rather than cached, so older reports keep working.",
+        service: "Amazon DynamoDB · Amazon S3",
+        icon: History,
         group: "library",
     },
 ] as const;

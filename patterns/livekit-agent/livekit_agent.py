@@ -52,7 +52,7 @@ DEFAULT_PERSONA = os.environ.get("PERSONA", "friendly")
 # LiveKit rooms are joined before the client sends any preference, and the token
 # endpoint carries no voice, so per-session switching is not available on this
 # transport. Set via VOICE_ID (cdk.json -> context.livekit.voiceId).
-VOICE_ID = os.environ.get("VOICE_ID", "matthew")
+VOICE_ID = os.environ.get("VOICE_ID", "tiffany")
 
 # First-turn greeting. Nova Sonic is speech-to-speech; we prompt an opening line
 # so the user hears the Relationship Manager without having to speak first.

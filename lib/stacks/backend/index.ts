@@ -793,6 +793,57 @@ export class Backend extends Stack {
                 }
             }
 
+            // ─── Run history API ───────────────────────────────────────
+            // Report links used to break after an hour: pdf_generator returns a
+            // presigned URL, the frontend kept it in client state, and nothing
+            // minted a new one, so reopening any earlier run gave S3
+            // AccessDenied. This endpoint signs a fresh URL per request from the
+            // stored S3 key, which both fixes the expiry and makes a browsable
+            // history possible. No extra dependencies, so no bundling step.
+            const reportsHistoryDir = path.join(
+                __dirname,
+                "..",
+                "..",
+                "lambdas",
+                "reports-history"
+            );
+            if (fs.existsSync(reportsHistoryDir)) {
+                const reportsHistoryLogGroup = new LogGroup(this, "ReportsHistoryLogGroup", {
+                    logGroupName: `/aws/lambda/${stackName}-reports-history`,
+                    retention: RetentionDays.ONE_WEEK,
+                    removalPolicy: RemovalPolicy.DESTROY,
+                });
+
+                const reportsHistoryLambda = new LambdaFunction(this, "ReportsHistoryLambda", {
+                    functionName: `${stackName}-reports-history`,
+                    runtime: LambdaRuntime.PYTHON_3_13,
+                    handler: "handler.handler",
+                    architecture: Architecture.ARM_64,
+                    logGroup: reportsHistoryLogGroup,
+                    code: Code.fromAsset(reportsHistoryDir),
+                    environment: {
+                        METADATA_TABLE: shared.metadataTable.tableName,
+                        REPORTS_BUCKET: shared.reportsBucket.bucketName,
+                    },
+                    timeout: Duration.seconds(30),
+                });
+
+                shared.metadataTable.grantReadData(reportsHistoryLambda);
+                // Read is enough: the function only signs GETs, never writes.
+                shared.reportsBucket.grantRead(reportsHistoryLambda);
+
+                const reportsResource = api.root.addResource("reports");
+                const reportsIntegration = new apigateway.LambdaIntegration(reportsHistoryLambda);
+                reportsResource.addMethod("GET", reportsIntegration, {
+                    authorizer,
+                    authorizationType: apigateway.AuthorizationType.COGNITO,
+                });
+                reportsResource.addResource("{reportId}").addMethod("GET", reportsIntegration, {
+                    authorizer,
+                    authorizationType: apigateway.AuthorizationType.COGNITO,
+                });
+            }
+
             this.feedbackApiUrl = api.url;
 
             new StringParameter(this, "FeedbackApiUrlParam", {

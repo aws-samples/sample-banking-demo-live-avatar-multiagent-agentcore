@@ -38,19 +38,24 @@ export const VOICES: VoiceProfile[] = [
 
 /**
  * Default voice per language, stated explicitly rather than taken as "first
- * entry in VOICES". The implicit version silently defaulted en-US to Tiffany,
- * which no longer matches the avatar and made the selector look wrong.
+ * entry in VOICES", which defaulted silently and made the selector look wrong.
  *
- * en-US must stay in step with `context.livekit.voiceId` in cdk.json: the
+ * Defaults are female because the default avatar — "Advisor", the rigged GLB —
+ * is female. Selecting a different avatar overrides this: see
+ * `getVoiceForGender`, which `AvatarInterface` uses to keep voice and avatar in
+ * step.
+ *
+ * en-US must stay in step with `context.livekit.voiceId` in cdk.json. The
  * LiveKit worker holds one voice for the life of the task and cannot be changed
- * from the UI, so a mismatch here shows the wrong voice as selected.
+ * from the UI, so on that transport this is the voice you get regardless of the
+ * avatar shown.
  */
 const DEFAULT_VOICE_BY_LANGUAGE: Record<LanguageCode, string> = {
-    "en-US": "matthew",
-    "es-US": "pedro",
-    "fr-FR": "remi",
+    "en-US": "tiffany",
+    "es-US": "lupe",
+    "fr-FR": "lea",
     "it-IT": "bianca",
-    "de-DE": "hans",
+    "de-DE": "vicki",
     "pt-BR": "vitoria",
 };
 
@@ -62,4 +67,21 @@ export function getDefaultVoice(language: LanguageCode): VoiceProfile {
     const voices = getVoicesForLanguage(language);
     const preferred = voices.find((v) => v.id === DEFAULT_VOICE_BY_LANGUAGE[language]);
     return preferred ?? voices[0] ?? VOICES[0];
+}
+
+/**
+ * Best voice of a given gender for a language, falling back to that language's
+ * default when it has no voice of that gender (Italian and Portuguese are
+ * female-only in the list above).
+ *
+ * Used to match the voice to the avatar on screen: a female GLB with a male
+ * voice reads as a bug, which is exactly what happened when the default was
+ * changed to Matthew while the default avatar stayed female.
+ */
+export function getVoiceForGender(
+    language: LanguageCode,
+    gender: VoiceProfile["gender"]
+): VoiceProfile {
+    const match = getVoicesForLanguage(language).find((v) => v.gender === gender);
+    return match ?? getDefaultVoice(language);
 }

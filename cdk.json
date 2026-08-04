@@ -54,7 +54,7 @@
             "serverMemory": 1024,
             "workerCpu": 1024,
             "workerMemory": 2048,
-            "voiceId": "matthew"
+            "voiceId": "tiffany"
         },
 
         "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
