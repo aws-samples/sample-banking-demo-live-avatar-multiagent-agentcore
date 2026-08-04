@@ -59,13 +59,35 @@ def _generate_image(
 
     logger.info(f"Generating image with Nova Canvas: {prompt[:100]}...")
 
-    # Invoke the model
-    response = bedrock_runtime.invoke_model(
-        modelId=NOVA_CANVAS_MODEL_ID,
-        body=json.dumps(request_payload),
-        contentType="application/json",
-        accept="application/json",
-    )
+    # Invoke the model.
+    #
+    # Nova Canvas is marked LEGACY by the provider. Bedrock refuses it outright
+    # in an account that has not invoked it for 30 days, with a
+    # ResourceNotFoundException whose message is easy to mistake for a missing
+    # resource or a typo in the model id. There is no drop-in replacement: as of
+    # Aug 2026 this account has no other text-to-image model (Titan Image is
+    # end-of-life, the Stability text-to-image ids are unavailable, and every
+    # active Stability model requires an input image). Re-enabling access is a
+    # console/support action, so the error is translated into something the
+    # operator can act on rather than left opaque.
+    try:
+        response = bedrock_runtime.invoke_model(
+            modelId=NOVA_CANVAS_MODEL_ID,
+            body=json.dumps(request_payload),
+            contentType="application/json",
+            accept="application/json",
+        )
+    except bedrock_runtime.exceptions.ResourceNotFoundException as e:
+        message = str(e)
+        if "Legacy" in message or "legacy" in message:
+            raise RuntimeError(
+                f"Image generation unavailable: Bedrock is refusing {NOVA_CANVAS_MODEL_ID} "
+                "because it is marked LEGACY and this account has not invoked it in the last "
+                "30 days. Re-enable access for the model in the Bedrock console (Model access), "
+                "or set NOVA_CANVAS_MODEL_ID to a text-to-image model this account can invoke. "
+                "Verify with: aws bedrock list-foundation-models --by-output-modality IMAGE"
+            ) from e
+        raise
 
     response_body = json.loads(response["body"].read().decode("utf-8"))
 

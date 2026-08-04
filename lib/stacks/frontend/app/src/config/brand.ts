@@ -50,9 +50,15 @@ export const EXPERIENCES: readonly Experience[] = [
         to: "/research",
         label: "Market Strategy",
         subtitle: "Multi-agent · cited report",
+        // Accuracy note: this copy is user-facing and shows on camera, so it
+        // describes only what the code does. The pipeline is a sequential
+        // planner -> researcher -> synthesizer loop (_run_pipeline in
+        // orchestrator_agent.py), NOT parallel section agents, and no AgentCore
+        // Harness is provisioned anywhere in lib/. Do not reintroduce either
+        // claim without the implementation to back it.
         description:
-            "A supervisor decomposes the mandate into sub-questions, runs section agents in parallel across web and internal sources, then synthesizes a cited strategy report as PDF.",
-        service: "AgentCore Runtime · Harness",
+            "A planner decomposes the mandate into sub-questions, a researcher gathers evidence across web and internal sources, then a synthesizer produces a cited strategy report as PDF.",
+        service: "AgentCore Runtime · Gateway",
         icon: Radar,
         group: "research",
     },
@@ -60,9 +66,15 @@ export const EXPERIENCES: readonly Experience[] = [
         to: "/research-studio",
         label: "Market Intelligence",
         subtitle: "Any topic · jurisdiction-scoped",
+        // Accuracy note: the previous copy promised "an approved domain list and
+        // a published-date window". gateway/tools/web_search/handler.py applies
+        // neither — it is a Nova Web Grounding call with no filters. Domain and
+        // date governance are features of the AgentCore Web Search connector,
+        // which is not wired here. Restore that wording only alongside the
+        // connector target.
         description:
-            "Open research on any subject, with web search governed by an approved domain list and a published-date window so findings stay inside the regulatory perimeter.",
-        service: "AgentCore Gateway · Web Search",
+            "Open research on any subject, routed through the gateway as an MCP tool, with every finding carrying a resolvable source citation.",
+        service: "AgentCore Gateway · Nova Web Grounding",
         icon: LineChart,
         group: "research",
     },

@@ -22,38 +22,50 @@ export default function WebsiteMonitor({ url, onClose }: Props) {
         }
     }, [size.w]);
 
-    const onDragStart = useCallback((e: React.PointerEvent) => {
-        e.preventDefault();
-        setDragging(true);
-        dragStart.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y };
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    }, [pos]);
+    const onDragStart = useCallback(
+        (e: React.PointerEvent) => {
+            e.preventDefault();
+            setDragging(true);
+            dragStart.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y };
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        },
+        [pos]
+    );
 
-    const onDragMove = useCallback((e: React.PointerEvent) => {
-        if (!dragging) return;
-        setPos({
-            x: dragStart.current.px + (e.clientX - dragStart.current.x),
-            y: dragStart.current.py + (e.clientY - dragStart.current.y),
-        });
-    }, [dragging]);
+    const onDragMove = useCallback(
+        (e: React.PointerEvent) => {
+            if (!dragging) return;
+            setPos({
+                x: dragStart.current.px + (e.clientX - dragStart.current.x),
+                y: dragStart.current.py + (e.clientY - dragStart.current.y),
+            });
+        },
+        [dragging]
+    );
 
     const onDragEnd = useCallback(() => setDragging(false), []);
 
-    const onResizeStart = useCallback((e: React.PointerEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setResizing(true);
-        resizeStart.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    }, [size]);
+    const onResizeStart = useCallback(
+        (e: React.PointerEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setResizing(true);
+            resizeStart.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        },
+        [size]
+    );
 
-    const onResizeMove = useCallback((e: React.PointerEvent) => {
-        if (!resizing) return;
-        setSize({
-            w: Math.max(280, resizeStart.current.w + (e.clientX - resizeStart.current.x)),
-            h: Math.max(200, resizeStart.current.h + (e.clientY - resizeStart.current.y)),
-        });
-    }, [resizing]);
+    const onResizeMove = useCallback(
+        (e: React.PointerEvent) => {
+            if (!resizing) return;
+            setSize({
+                w: Math.max(280, resizeStart.current.w + (e.clientX - resizeStart.current.x)),
+                h: Math.max(200, resizeStart.current.h + (e.clientY - resizeStart.current.y)),
+            });
+        },
+        [resizing]
+    );
 
     const onResizeEnd = useCallback(() => setResizing(false), []);
 
@@ -136,9 +148,24 @@ export default function WebsiteMonitor({ url, onClose }: Props) {
                 onPointerCancel={onResizeEnd}
             >
                 <svg width="12" height="12" viewBox="0 0 12 12" className="opacity-50">
-                    <path d="M11 1v10H1" fill="none" stroke="rgba(0,212,255,0.6)" strokeWidth="1.5" />
-                    <path d="M11 5v6H5" fill="none" stroke="rgba(0,212,255,0.4)" strokeWidth="1.5" />
-                    <path d="M11 9v2H9" fill="none" stroke="rgba(0,212,255,0.3)" strokeWidth="1.5" />
+                    <path
+                        d="M11 1v10H1"
+                        fill="none"
+                        stroke="rgba(0,212,255,0.6)"
+                        strokeWidth="1.5"
+                    />
+                    <path
+                        d="M11 5v6H5"
+                        fill="none"
+                        stroke="rgba(0,212,255,0.4)"
+                        strokeWidth="1.5"
+                    />
+                    <path
+                        d="M11 9v2H9"
+                        fill="none"
+                        stroke="rgba(0,212,255,0.3)"
+                        strokeWidth="1.5"
+                    />
                 </svg>
             </div>
         </div>
