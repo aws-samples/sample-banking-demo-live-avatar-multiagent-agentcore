@@ -1194,6 +1194,7 @@ export default function AvatarInterface(): JSX.Element {
                                 className="w-full h-full"
                                 variant={avatarVariant}
                                 mouthShape={visemeShape}
+                                audioTrack={agentAudioTrack}
                             />
                         )}
 

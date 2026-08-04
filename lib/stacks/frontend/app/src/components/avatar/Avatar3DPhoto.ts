@@ -1,77 +1,104 @@
 import * as THREE from "three";
+import { HeadAudio } from "@met4citizen/headaudio/modules/headaudio.mjs";
 import { Avatar3D } from "./Avatar3D";
 import type { AvatarVariant, MouthShape } from "./AvatarVariant";
 
 /**
  * Photo-based talking head — the "Realistic" variant.
  *
- * A photograph rendered on a plane, with the lower face warped per viseme in a
- * fragment shader. This exists because the photorealistic route has no rigged
- * asset: `trinity-advisor.glb` (the "Advisor" variant) is a stylised CC0 mesh,
- * and no AWS service turns a still photo into a rigged, real-time talking head.
- * Warping a real photograph is the self-contained way to get photorealistic skin
- * without a third-party rendering service.
+ * Photorealistic skin without a third-party renderer. The rigged route needs an
+ * asset we do not have: "Advisor" (trinity-advisor.glb) is a stylised CC0 mesh,
+ * and no AWS service turns a still photo into a rigged real-time talking head.
  *
- * Why warp UVs in the fragment shader rather than displace geometry: a UV warp
- * keeps the silhouette rectangular and stretches pixels smoothly, so there are
- * no faceting artifacts from a coarse vertex grid and no per-frame CPU work over
- * thousands of vertices. The plane stays two triangles.
+ * Two problems had to be solved, and both were solved by adding data rather than
+ * by tuning code.
  *
- * What it does NOT do: eye blinks (closing a photographed eyelid convincingly
- * needs a second exposure or an inpainted lid, and a scaled-down eye region
- * reads as a glitch), and head rotation (a single photo has no other angles).
- * Idle motion is limited to a slow sway and breath, which is what a fixed
- * viewpoint can support honestly.
+ * 1. A single closed-mouth photo cannot show an open mouth. Warping only moves
+ *    pixels that exist, and there are no teeth or oral cavity in the source, so
+ *    an "open" mouth rendered as a dark blob. Fixed with three textures — closed,
+ *    part-open, wide-open — the latter two inpainted from the first so identity,
+ *    skin tone and stubble stay consistent. The shader cross-fades between them,
+ *    which is the standard viseme-sprite approach.
  *
- * KNOWN LIMITATION — not yet demo-grade. Verified in a headless browser with a
- * vision model scoring the render: the shader compiles, the warp is correct, and
- * nothing outside the mouth and jaw distorts, but the open mouth reads as a dark
- * blob rather than a mouth. The cause is structural, not a tuning problem: the
- * source photograph has the lips closed, so there are no teeth or oral-cavity
- * pixels anywhere in the texture. Separating the lips and shading between them
- * can only reveal what the image contains, which is nothing.
+ * 2. Amplitude relayed through React was choppy. `onAudioLevel` fires every
+ *    frame from a requestAnimationFrame loop into a React state setter, which
+ *    re-rendered a very large component ~60 times a second and dropped frames.
+ *    Amplitude also carries no phonetic meaning, so the mouth flapped instead of
+ *    articulating. Fixed by consuming the agent's MediaStreamTrack directly and
+ *    running HeadAudio (MIT, already a dependency) in an AudioWorklet: real
+ *    Oculus visemes, computed off the main thread, never touching React.
  *
- * The fix is a second texture rather than more shader tuning. Inpaint an
- * open-mouth version of this same photo (us.stability.stable-image-inpaint-v1:0
- * is available in this account and preserves surrounding identity), then blend
- * closed -> open by uOpen so real teeth and cavity appear. That is the standard
- * viseme-sprite approach and it is what this needs before it goes on camera.
+ * Amplitude remains as a fallback for the WebSocket transport, which supplies a
+ * level but no track.
  *
- * Landmarks below were measured once from advisor-photo.png and are specific to
- * it. Swapping the photo requires re-measuring. Coordinates are in TEXTURE space
- * with y increasing DOWNWARD, matching how the image was measured; the shader
- * converts to UV space (y up) on entry.
+ * Still not done: eye blinks (a photographed eyelid cannot be closed
+ * convincingly without another exposure) and head rotation (one photo has one
+ * angle). Idle motion is a slow sway and breath, which is all a fixed viewpoint
+ * honestly supports.
+ *
+ * Landmarks are measured from advisor-photo.png. Swapping the photo means
+ * re-measuring them and re-running the inpaint.
  */
 
-const PHOTO_URL = "/avatars/advisor-photo.png";
+const TEXTURES = {
+    closed: "/avatars/advisor-photo.png",
+    mid: "/avatars/advisor-photo-mid.png",
+    open: "/avatars/advisor-photo-open.png",
+};
+
+const WORKLET_URL = "/headaudio/headworklet.min.mjs";
+const VISEME_MODEL_URL = "/headaudio/model-en-mixed.bin";
 
 /** Measured from advisor-photo.png. y is from the TOP of the image. */
 const LANDMARKS = {
     mouth: { cx: 0.485, cy: 0.575, halfWidth: 0.065, halfHeight: 0.025 },
     jaw: { cx: 0.49, cy: 0.63, halfWidth: 0.16, halfHeight: 0.12 },
-    chinY: 0.75,
 };
 
 /** Source image aspect (576 x 768). */
 const PHOTO_ASPECT = 576 / 768;
 
 /**
- * Viseme to (jaw open, mouth width) mapping. `open` drives how far the jaw
- * drops and how wide the dark mouth interior grows; `wide` stretches the mouth
- * horizontally for spread vowels and narrows it for rounded ones.
+ * Oculus viseme -> (jaw open, mouth width). `open` selects the blend point
+ * across the three textures; `wide` spreads or rounds the mouth horizontally,
+ * which the textures alone cannot express because they differ only in openness.
+ *
+ * The top of the range is deliberately capped below 1.0. The wide-open texture
+ * is an extreme, and mapping ordinary vowels onto it made the avatar look like
+ * it was shouting. Keeping normal speech in the closed -> part-open segment also
+ * keeps it in the cleanest of the three textures.
  */
-const VISEME_TARGETS: Record<MouthShape, { open: number; wide: number }> = {
+const VISEME_TARGETS: Record<string, { open: number; wide: number }> = {
+    viseme_sil: { open: 0.0, wide: 0.0 },
+    viseme_PP: { open: 0.02, wide: 0.0 },
+    viseme_FF: { open: 0.1, wide: 0.1 },
+    viseme_TH: { open: 0.2, wide: 0.0 },
+    viseme_DD: { open: 0.22, wide: 0.05 },
+    viseme_kk: { open: 0.28, wide: 0.05 },
+    viseme_CH: { open: 0.22, wide: 0.3 },
+    viseme_SS: { open: 0.12, wide: 0.35 },
+    viseme_nn: { open: 0.16, wide: 0.05 },
+    viseme_RR: { open: 0.22, wide: -0.1 },
+    viseme_aa: { open: 0.66, wide: 0.15 },
+    viseme_E: { open: 0.34, wide: 0.4 },
+    viseme_I: { open: 0.3, wide: 0.5 },
+    viseme_O: { open: 0.5, wide: -0.35 },
+    viseme_U: { open: 0.35, wide: -0.55 },
+};
+
+/** Fallback map for the WebSocket transport, which sends coarse shapes. */
+const SHAPE_TARGETS: Record<MouthShape, { open: number; wide: number }> = {
     neutral: { open: 0.0, wide: 0.0 },
     mm: { open: 0.02, wide: 0.0 },
-    ff: { open: 0.08, wide: 0.1 },
-    th: { open: 0.18, wide: 0.0 },
-    ee: { open: 0.15, wide: 0.55 },
-    wide: { open: 0.22, wide: 0.6 },
-    narrow: { open: 0.12, wide: -0.4 },
-    oo: { open: 0.3, wide: -0.55 },
-    oh: { open: 0.42, wide: -0.35 },
-    ah: { open: 0.5, wide: 0.15 },
-    open: { open: 0.6, wide: 0.1 },
+    ff: { open: 0.1, wide: 0.1 },
+    th: { open: 0.2, wide: 0.0 },
+    ee: { open: 0.35, wide: 0.5 },
+    wide: { open: 0.4, wide: 0.6 },
+    narrow: { open: 0.2, wide: -0.4 },
+    oo: { open: 0.35, wide: -0.55 },
+    oh: { open: 0.5, wide: -0.35 },
+    ah: { open: 0.66, wide: 0.15 },
+    open: { open: 0.82, wide: 0.1 },
 };
 
 const VERTEX_SHADER = /* glsl */ `
@@ -82,70 +109,45 @@ const VERTEX_SHADER = /* glsl */ `
     }
 `;
 
+/**
+ * Blends three mouth states and applies only a horizontal shape warp. The jaw
+ * drop and mouth interior now come from the textures themselves, so warping
+ * them again would double-count and smear.
+ */
 const FRAGMENT_SHADER = /* glsl */ `
     precision highp float;
 
-    uniform sampler2D uTexture;
-    uniform float uOpen;        // 0..1 jaw open amount
-    uniform float uWide;        // -1..1 horizontal mouth stretch
-    uniform vec2  uMouth;       // mouth centre, UV space
-    uniform vec2  uMouthR;      // mouth half extents, UV
-    uniform vec2  uJaw;         // jaw centre, UV space
-    uniform vec2  uJawR;        // jaw half extents, UV
-    uniform float uChinY;       // chin line, UV space (lower bound of warp)
+    uniform sampler2D uTexClosed;
+    uniform sampler2D uTexMid;
+    uniform sampler2D uTexOpen;
+    uniform float uOpen;    // 0..1 across closed -> mid -> open
+    uniform float uWide;    // -1..1 horizontal stretch
+    uniform vec2  uMouth;   // mouth centre, UV space
+    uniform vec2  uJawR;    // jaw half extents, UV — falloff for the warp
 
     varying vec2 vUv;
 
-    // Normalised elliptical distance: 0 at centre, 1 at the boundary.
     float ellipse(vec2 p, vec2 c, vec2 r) {
-        vec2 d = (p - c) / r;
-        return length(d);
+        return length((p - c) / r);
     }
 
     void main() {
         vec2 uv = vUv;
 
-        // ---- Jaw drop -------------------------------------------------------
-        // Sampling from ABOVE the current pixel makes content appear to move
-        // DOWN, which is what a dropping jaw looks like. Gated to the region
-        // below the mouth line so the nose and eyes never move, and faded out at
-        // the chin so the warp does not drag the background.
-        float jawFall = 1.0 - smoothstep(0.0, 1.0, ellipse(uv, uJaw, uJawR));
-        float belowMouth = smoothstep(0.03, -0.02, uv.y - uMouth.y);
-        float aboveChin = smoothstep(uChinY - 0.04, uChinY + 0.06, uv.y);
-        float jawMask = jawFall * belowMouth * aboveChin;
-
-        // A photograph has no occluded geometry behind the jaw, so travel is
-        // bounded to avoid smearing the stubble and collar. It still has to be
-        // large enough to read as speech at normal viewing size.
-        uv.y += uOpen * 0.055 * jawMask;
-
-        // ---- Lip separation ------------------------------------------------
-        // Shading between the lips is not enough on its own: the source photo
-        // has a closed-lip smile, and darkening alone reads as a smudge rather
-        // than an opening. Pushing the sample point AWAY from the mouth centre
-        // line moves the upper lip up and the lower lip down, opening a real
-        // gap that the shading below then fills.
-        float lipFall = 1.0 - smoothstep(0.0, 1.0, ellipse(uv, uMouth, uMouthR * vec2(1.6, 3.2)));
-        float side = sign(uv.y - uMouth.y);
-        uv.y -= side * uOpen * 0.026 * lipFall;
-
-        // ---- Horizontal mouth shape ----------------------------------------
-        // Scale about the mouth centre, strongest at the mouth and easing out
-        // across the jaw, so the cheeks follow the lips instead of shearing.
+        // Horizontal mouth shape: scale about the mouth centre, easing out over
+        // the jaw so the cheeks follow the lips instead of shearing.
         float wideMask = 1.0 - smoothstep(0.0, 1.4, ellipse(uv, uMouth, uJawR));
-        uv.x = uMouth.x + (uv.x - uMouth.x) * (1.0 - uWide * 0.16 * wideMask);
+        uv.x = uMouth.x + (uv.x - uMouth.x) * (1.0 - uWide * 0.14 * wideMask);
 
-        vec4 colour = texture2D(uTexture, uv);
+        vec4 a = texture2D(uTexClosed, uv);
+        vec4 b = texture2D(uTexMid, uv);
+        vec4 c = texture2D(uTexOpen, uv);
 
-        // ---- Mouth interior -------------------------------------------------
-        // Darkening a lens-shaped region between the lips is what sells an open
-        // mouth on a still photo. Without it the lips just stretch and the face
-        // reads as rubbery rather than speaking.
-        vec2 innerR = vec2(uMouthR.x * (0.92 + uWide * 0.35), uMouthR.y * (0.30 + uOpen * 4.6));
-        float inner = 1.0 - smoothstep(0.35, 1.0, ellipse(vUv, uMouth + vec2(0.0, -uOpen * 0.012), innerR));
-        float shade = inner * uOpen * 0.92;
-        colour.rgb *= (1.0 - shade);
+        // Two-segment cross-fade. Most speech sits in the lower half, where the
+        // part-open texture is the cleanest of the three.
+        vec4 colour = uOpen < 0.5
+            ? mix(a, b, smoothstep(0.0, 1.0, uOpen * 2.0))
+            : mix(b, c, smoothstep(0.0, 1.0, (uOpen - 0.5) * 2.0));
 
         gl_FragColor = colour;
     }
@@ -158,65 +160,67 @@ function toUvY(yFromTop: number): number {
 
 export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
     private material: THREE.ShaderMaterial;
-    private mesh: THREE.Mesh;
     private group: THREE.Group;
+    private textures: THREE.Texture[] = [];
 
-    /** Smoothed values actually rendered, chased toward the targets each frame. */
+    /** Rendered values, chased toward the targets each frame. */
     private open = 0;
     private wide = 0;
     private targetOpen = 0;
     private targetWide = 0;
 
     private speaking = false;
-    /** Amplitude fallback for the WebSocket path, which has no viseme stream. */
     private audioLevel = 0;
+    /** True once a real viseme has arrived, which outranks amplitude. */
     private hasViseme = false;
+
+    // HeadAudio pipeline (LiveKit transport only).
+    private audioCtx: AudioContext | null = null;
+    private headAudio: HeadAudio | null = null;
+    private sourceNode: MediaStreamAudioSourceNode | null = null;
+    private visemeValues: Record<string, number> = {};
+    private lastFrameMs = 0;
+    private disposed = false;
 
     constructor(container: HTMLElement) {
         super(container);
 
-        const texture = new THREE.TextureLoader().load(PHOTO_URL, () => {
-            // Re-render once decoding finishes; the shared loop handles the rest.
-            texture.needsUpdate = true;
-        });
-        texture.colorSpace = THREE.SRGBColorSpace;
-        // The warp samples slightly outside the mouth region near the edges;
-        // clamping avoids wrapping a stripe of the opposite edge into frame.
-        texture.wrapS = THREE.ClampToEdgeWrapping;
-        texture.wrapT = THREE.ClampToEdgeWrapping;
-        texture.minFilter = THREE.LinearFilter;
+        const loader = new THREE.TextureLoader();
+        const load = (url: string): THREE.Texture => {
+            const t = loader.load(url);
+            t.colorSpace = THREE.SRGBColorSpace;
+            // The warp samples slightly outside the mouth; clamping stops the
+            // opposite edge wrapping into frame.
+            t.wrapS = THREE.ClampToEdgeWrapping;
+            t.wrapT = THREE.ClampToEdgeWrapping;
+            t.minFilter = THREE.LinearFilter;
+            this.textures.push(t);
+            return t;
+        };
 
         this.material = new THREE.ShaderMaterial({
             uniforms: {
-                uTexture: { value: texture },
+                uTexClosed: { value: load(TEXTURES.closed) },
+                uTexMid: { value: load(TEXTURES.mid) },
+                uTexOpen: { value: load(TEXTURES.open) },
                 uOpen: { value: 0 },
                 uWide: { value: 0 },
                 uMouth: {
                     value: new THREE.Vector2(LANDMARKS.mouth.cx, toUvY(LANDMARKS.mouth.cy)),
                 },
-                uMouthR: {
-                    value: new THREE.Vector2(LANDMARKS.mouth.halfWidth, LANDMARKS.mouth.halfHeight),
-                },
-                uJaw: { value: new THREE.Vector2(LANDMARKS.jaw.cx, toUvY(LANDMARKS.jaw.cy)) },
                 uJawR: {
                     value: new THREE.Vector2(LANDMARKS.jaw.halfWidth, LANDMARKS.jaw.halfHeight),
                 },
-                uChinY: { value: toUvY(LANDMARKS.chinY) },
             },
             vertexShader: VERTEX_SHADER,
             fragmentShader: FRAGMENT_SHADER,
             transparent: false,
         });
 
-        // Plane sized so the head reads at a comfortable scale in the panel.
         const planeHeight = 3.0;
         const geometry = new THREE.PlaneGeometry(planeHeight * PHOTO_ASPECT, planeHeight);
-        this.mesh = new THREE.Mesh(geometry, this.material);
-
-        // Grouped so idle sway can move the photo without touching the camera,
-        // which the user can also orbit.
         this.group = new THREE.Group();
-        this.group.add(this.mesh);
+        this.group.add(new THREE.Mesh(geometry, this.material));
         this.group.position.set(0, 0.55, 0);
         this.scene.add(this.group);
 
@@ -231,20 +235,109 @@ export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
         this.reframe(this.camera, 2.6, 0.75, aspect);
     }
 
+    /**
+     * Attach the agent's audio track and derive visemes from it directly.
+     *
+     * The node is deliberately NOT connected to the destination: HeadAudio has
+     * an input and no output, and LiveKit already plays the track through its
+     * own <audio> element. Connecting it would double the voice.
+     */
+    async setAudioTrack(track: MediaStreamTrack | null): Promise<void> {
+        this.teardownAudio();
+        if (!track || this.disposed) return;
+
+        try {
+            const ctx = new AudioContext();
+            await ctx.audioWorklet.addModule(WORKLET_URL);
+            const node = new HeadAudio(ctx, {
+                parameterData: { vadGateActiveDb: -45, vadGateInactiveDb: -65 },
+            });
+            await node.loadModel(VISEME_MODEL_URL);
+            // Autoplay policy: safe here because a track only exists after the
+            // user has clicked Connect.
+            await ctx.resume();
+
+            node.onvalue = (key: string, value: number): void => {
+                this.visemeValues[key] = value;
+                if (value > 0.05 && key !== "viseme_sil") this.hasViseme = true;
+            };
+
+            const source = ctx.createMediaStreamSource(new MediaStream([track]));
+            source.connect(node);
+
+            if (this.disposed) {
+                ctx.close();
+                return;
+            }
+            this.audioCtx = ctx;
+            this.headAudio = node;
+            this.sourceNode = source;
+        } catch (err) {
+            // Fall back to amplitude rather than losing the avatar entirely.
+            // eslint-disable-next-line no-console
+            console.warn("[Avatar3DPhoto] HeadAudio unavailable, using amplitude:", err);
+            this.teardownAudio();
+        }
+    }
+
+    private teardownAudio(): void {
+        this.sourceNode?.disconnect();
+        this.sourceNode = null;
+        if (this.headAudio) {
+            this.headAudio.onvalue = null;
+            this.headAudio.disconnect();
+            this.headAudio = null;
+        }
+        this.audioCtx?.close().catch(() => undefined);
+        this.audioCtx = null;
+        this.visemeValues = {};
+        this.hasViseme = false;
+    }
+
+    /** Weighted blend of the active visemes into a single open/wide pair. */
+    private resolveVisemes(): void {
+        let weight = 0;
+        let open = 0;
+        let wide = 0;
+        for (const [key, value] of Object.entries(this.visemeValues)) {
+            const target = VISEME_TARGETS[key];
+            if (!target || value <= 0.02) continue;
+            weight += value;
+            open += target.open * value;
+            wide += target.wide * value;
+        }
+        if (weight > 0) {
+            this.targetOpen = open / weight;
+            this.targetWide = wide / weight;
+        } else {
+            this.targetOpen = 0;
+            this.targetWide = 0;
+        }
+    }
+
     private tick = (time: number): void => {
-        // Chase the targets rather than snapping. Opening faster than closing
-        // matches how speech actually looks and stops the mouth flickering
-        // between adjacent visemes.
+        const dt = this.lastFrameMs ? time - this.lastFrameMs : 16;
+        this.lastFrameMs = time;
+
+        if (this.headAudio) {
+            // Advances HeadAudio's own easing, which is what removes the jitter
+            // that raw per-frame values would otherwise carry.
+            this.headAudio.update(dt);
+            this.resolveVisemes();
+        }
+
+        // Opening faster than closing matches how speech looks and stops the
+        // mouth flickering between adjacent visemes.
         const target = this.speaking ? this.targetOpen : 0;
-        const rate = target > this.open ? 0.45 : 0.22;
+        const rate = target > this.open ? 0.4 : 0.2;
         this.open += (target - this.open) * rate;
-        this.wide += ((this.speaking ? this.targetWide : 0) - this.wide) * 0.2;
+        this.wide += ((this.speaking ? this.targetWide : 0) - this.wide) * 0.18;
 
         this.material.uniforms.uOpen.value = this.open;
         this.material.uniforms.uWide.value = this.wide;
 
-        // Idle sway and breath. Small on purpose: a photograph cannot rotate, so
-        // large motion reveals that it is a flat plane.
+        // Small on purpose: a photograph cannot rotate, so large motion reveals
+        // that it is a flat plane.
         const t = time * 0.001;
         this.group.position.x = Math.sin(t * 0.31) * 0.012;
         this.group.position.y = 0.55 + Math.sin(t * 0.47) * 0.008;
@@ -253,34 +346,28 @@ export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
 
     updateLipSync(audioLevel: number): void {
         this.audioLevel = audioLevel;
-        // Only drive the mouth from amplitude when no viseme has arrived. The
-        // LiveKit path supplies real visemes and should win; the WebSocket path
-        // supplies only a level.
+        // Amplitude only drives the mouth when no viseme stream exists.
         if (!this.hasViseme) {
-            this.targetOpen = Math.min(Math.max(audioLevel, 0), 1) * 0.55;
+            this.targetOpen = Math.min(Math.max(audioLevel, 0), 1) * 0.7;
             this.targetWide = 0;
         }
     }
 
     setMouthShape(shape: MouthShape): void {
-        // Only a NON-neutral shape proves a real viseme stream exists.
-        //
-        // The LiveKit transport produces no visemes for canvas variants — it
-        // supplies an amplitude via onAudioLevel and leaves visemeShape at
-        // "neutral" — and the React wrapper pushes that "neutral" on mount and
-        // on every change. Latching on any shape therefore disabled the
-        // amplitude fallback permanently and the mouth never opened at all.
+        // HeadAudio outranks the coarse shape stream. Beyond that, only a
+        // non-neutral shape proves a viseme stream exists — the LiveKit path
+        // pushes "neutral" on mount, which previously latched the flag and
+        // disabled the amplitude fallback, freezing the mouth shut.
+        if (this.headAudio) return;
         if (shape !== "neutral") {
             this.hasViseme = true;
         } else if (!this.hasViseme) {
-            // No viseme stream on this transport: updateLipSync owns the mouth.
             return;
         }
 
-        const target = VISEME_TARGETS[shape] ?? VISEME_TARGETS.neutral;
-        // Scale the opening by measured loudness so quiet speech does not gape.
+        const target = SHAPE_TARGETS[shape] ?? SHAPE_TARGETS.neutral;
         const gain = this.audioLevel > 0 ? Math.min(0.55 + this.audioLevel * 0.75, 1.25) : 1.0;
-        this.targetOpen = target.open * gain;
+        this.targetOpen = Math.min(target.open * gain, 1);
         this.targetWide = target.wide;
     }
 
@@ -294,11 +381,14 @@ export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
 
     setEyeColor(): void {
         // No-op: the eyes are photographic pixels, not emissive material. Part of
-        // the AvatarVariant contract, which the generated variants use.
+        // the AvatarVariant contract the generated variants use.
     }
 
     dispose(): void {
-        this.material.uniforms.uTexture.value?.dispose();
+        this.disposed = true;
+        this.teardownAudio();
+        this.textures.forEach((t) => t.dispose());
+        this.textures = [];
         super.dispose();
     }
 }

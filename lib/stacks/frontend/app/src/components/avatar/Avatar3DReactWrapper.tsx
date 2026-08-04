@@ -13,6 +13,12 @@ interface Avatar3DReactWrapperProps {
     className?: string;
     variant?: AvatarVariantName;
     mouthShape?: MouthShape;
+    /**
+     * Raw agent audio. Variants implementing `setAudioTrack` derive their own
+     * visemes from it, which avoids relaying a per-frame amplitude through React
+     * state. Only present on the LiveKit transport.
+     */
+    audioTrack?: MediaStreamTrack | null;
 }
 
 // Single friendly cyan — the previous idle/speaking split (blue → lime-green)
@@ -44,6 +50,7 @@ export default function Avatar3DReactWrapper({
     className,
     variant = "robot",
     mouthShape = "neutral",
+    audioTrack = null,
 }: Avatar3DReactWrapperProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const avatarRef = useRef<AvatarVariant | null>(null);
@@ -77,6 +84,9 @@ export default function Avatar3DReactWrapper({
         avatar.setEyeColor(EYE_COLOR);
         avatar.updateLipSync(isSpeaking ? audioLevel : 0);
         avatar.setMouthShape?.(mouthShape);
+        // Hand over the track immediately after a variant switch so the new
+        // instance does not wait for the next track change to start analysing.
+        void avatar.setAudioTrack?.(audioTrack);
 
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
@@ -122,6 +132,12 @@ export default function Avatar3DReactWrapper({
     useEffect(() => {
         avatarRef.current?.setMouthShape?.(mouthShape);
     }, [mouthShape]);
+
+    // Track identity changes rarely (connect / disconnect), so this effect is
+    // cheap — unlike audioLevel, which changes every frame.
+    useEffect(() => {
+        void avatarRef.current?.setAudioTrack?.(audioTrack);
+    }, [audioTrack]);
 
     return (
         <div

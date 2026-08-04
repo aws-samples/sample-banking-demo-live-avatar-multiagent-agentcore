@@ -23,6 +23,13 @@ export interface AvatarVariant {
     setEyeColor(hexColor: number): void;
     /** Optional: variants that map visemes to blend-shapes / physical deforms implement this. */
     setMouthShape?(shape: MouthShape): void;
+    /**
+     * Optional: variants that can derive their own visemes from the raw agent
+     * audio implement this. Preferred over `updateLipSync` where available,
+     * because it bypasses React state and yields real visemes rather than a
+     * loudness value. Only the LiveKit transport supplies a track.
+     */
+    setAudioTrack?(track: MediaStreamTrack | null): void | Promise<void>;
     dispose(): void;
 }
 
