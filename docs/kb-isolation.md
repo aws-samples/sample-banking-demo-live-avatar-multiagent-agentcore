@@ -1,7 +1,7 @@
 # Knowledge Base Isolation — Invariants, Threat Model, and Runbook
 
-The demo advertises three logical Knowledge Base views (`bistro_research`,
-`open_research`, `menu`) sharing a single physical S3-Vectors-backed Bedrock
+The demo advertises three logical Knowledge Base views (`strategy_research`,
+`market_research`, `services`) sharing a single physical S3-Vectors-backed Bedrock
 Knowledge Base, with per-user tenant isolation layered on top. That
 guarantee is only as strong as the enforcement points below — this doc is
 the single source of truth for them.
@@ -16,8 +16,9 @@ the single source of truth for them.
     - `_resolve_pipeline()` raises `PipelineResolutionError` if the source
       key doesn't match a recognized prefix (`reports/` or `menus/`) AND
       the source metadata's `pipeline` value isn't one of
-      `{bistro_research, open_research, menu}` (legacy `research` is
-      aliased to `bistro_research`).
+      `{strategy_research, market_research, services}` (legacy `research` is
+      aliased to `strategy_research`). The `menus/` prefix resolves to the
+      `services` pipeline.
 
 2. **Every kb_search call must be scoped.** Enforced at read time by
    `gateway/tools/kb_search/handler.py`. The handler entrypoint refuses any
@@ -40,7 +41,7 @@ the single source of truth for them.
       `mode="archive_chat"`.
 
 Together these three invariants mean: even if the LLM is prompt-injected
-to call `gateway_kb_search(user_id="root", pipelines=["menu"])`, the hook
+to call `gateway_kb_search(user_id="root", pipelines=["services"])`, the hook
 overwrites both values before the tool runs.
 
 ## Threat Model
@@ -84,14 +85,14 @@ every tenant.
 
 ## Mode → pipeline map
 
-| Mode                                            | Writes            | Reads                                               | Archive |
-| ----------------------------------------------- | ----------------- | --------------------------------------------------- | ------- |
-| `research` / `research_execute`                 | `bistro_research` | `bistro_research`                                   | no      |
-| `generic_research` / `generic_research_execute` | `open_research`   | `open_research`                                     | no      |
-| `menu`                                          | `menu`            | `bistro_research`, `open_research`                  | no      |
-| `chatbot` (AI Concierge)                        | —                 | `menu`                                              | no      |
-| `archive_chat` (Report Archive)                 | —                 | _(all, scoped to user_id)_                          | YES     |
-| Voice Avatar                                    | —                 | user's multi-select, expanded to all three on empty | no      |
+| Mode                                            | Writes              | Reads                                               | Archive |
+| ----------------------------------------------- | ------------------- | --------------------------------------------------- | ------- |
+| `research` / `research_execute`                 | `strategy_research` | `strategy_research`                                 | no      |
+| `generic_research` / `generic_research_execute` | `market_research`   | `market_research`                                   | no      |
+| `menu` (Services Catalog)                       | `services`          | `strategy_research`, `market_research`              | no      |
+| `chatbot` (Client Advisor)                      | —                   | `services`                                          | no      |
+| `archive_chat` (Report Archive)                 | —                   | _(all, scoped to user_id)_                          | YES     |
+| Voice Avatar                                    | —                   | user's multi-select, expanded to all three on empty | no      |
 
 Any mode that falls through to the default (unknown mode string) becomes
 `{write: None, read_filter: None, archive: False}`, which forces kb_search

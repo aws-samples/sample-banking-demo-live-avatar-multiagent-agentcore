@@ -13,8 +13,8 @@ Fail-closed contract (see docs/kb-isolation.md):
   * Every ingested record MUST carry a `user_id` metadata value from the source
     object. Missing user_id → hard reject (no copy, no sidecar, no ingestion job).
   * Every ingested record MUST resolve to a known pipeline tag
-    ({bistro_research, open_research, menu}). Unknown keys or prefixes → hard
-    reject. The legacy `research` alias is preserved (maps to bistro_research).
+    ({strategy_research, market_research, menu}). Unknown keys or prefixes → hard
+    reject. The legacy `research` alias is preserved (maps to strategy_research).
 
 The goal is that every document in the KB has both sidecar attributes set,
 closing the historical leak where S3 Vectors treats missing-metadata docs as
@@ -41,12 +41,12 @@ DATA_SOURCE_ID = os.environ["DATA_SOURCE_ID"]
 
 
 # Allowed logical pipelines — must stay in sync with pdf_generator / kb_search / orchestrator.
-VALID_PIPELINES = {"bistro_research", "open_research", "menu"}
+VALID_PIPELINES = {"strategy_research", "market_research", "services"}
 
 # Legacy alias: the previous iteration tagged everything in reports/ as "research".
-# Migrate those to "bistro_research" since the original flow (the Bistro Deep Dive
+# Migrate those to "strategy_research" since the original flow (the Bistro Deep Dive
 # pipeline) was the only research writer at the time.
-LEGACY_PIPELINE_ALIASES = {"research": "bistro_research"}
+LEGACY_PIPELINE_ALIASES = {"research": "strategy_research"}
 
 
 class PipelineResolutionError(ValueError):
@@ -60,9 +60,9 @@ def _resolve_pipeline(src_key: str, source_metadata: dict | None) -> str:
 
     Resolution order (fail-closed):
       1. Source object's `pipeline` S3 metadata (set by pdf_generator).
-         Legacy value `research` is mapped to `bistro_research`.
-      2. Prefix-based inference: `reports/` -> `bistro_research`,
-         `menus/` -> `menu`.
+         Legacy value `research` is mapped to `strategy_research`.
+      2. Prefix-based inference: `reports/` -> `strategy_research`,
+         `menus/` -> `services`.
       3. Otherwise: raise PipelineResolutionError. Callers MUST handle.
 
     The previous iteration had an "unknown" fallback that silently tagged
@@ -78,9 +78,9 @@ def _resolve_pipeline(src_key: str, source_metadata: dict | None) -> str:
 
     key_lower = src_key.lower()
     if key_lower.startswith("reports/"):
-        return "bistro_research"
+        return "strategy_research"
     if key_lower.startswith("menus/"):
-        return "menu"
+        return "services"
 
     raise PipelineResolutionError(
         f"Cannot resolve pipeline for key={src_key!r} metadata_pipeline={meta.get('pipeline')!r}. "
@@ -219,15 +219,15 @@ def handler(event, context):
 if __name__ == "__main__":
     cases = [
         # (src_key, metadata, expected_pipeline_or_exc)
-        ("reports/foo.pdf", {"pipeline": "bistro_research"}, "bistro_research"),
-        ("reports/foo.pdf", {"pipeline": "open_research"}, "open_research"),
-        ("menus/foo.pdf", {"pipeline": "menu"}, "menu"),
-        ("reports/foo.pdf", {"pipeline": "research"}, "bistro_research"),  # legacy alias
-        ("reports/foo.pdf", {}, "bistro_research"),  # fallback to prefix
-        ("menus/foo.pdf", {}, "menu"),  # fallback to prefix
+        ("reports/foo.pdf", {"pipeline": "strategy_research"}, "strategy_research"),
+        ("reports/foo.pdf", {"pipeline": "market_research"}, "market_research"),
+        ("menus/foo.pdf", {"pipeline": "services"}, "services"),
+        ("reports/foo.pdf", {"pipeline": "research"}, "strategy_research"),  # legacy alias
+        ("reports/foo.pdf", {}, "strategy_research"),  # fallback to prefix
+        ("menus/foo.pdf", {}, "services"),  # fallback to prefix
         ("other/foo.pdf", {}, PipelineResolutionError),
-        ("reports/foo.pdf", {"pipeline": "bogus"}, "bistro_research"),  # bad value -> prefix fallback
-        ("reports/foo.pdf", None, "bistro_research"),
+        ("reports/foo.pdf", {"pipeline": "bogus"}, "strategy_research"),  # bad value -> prefix fallback
+        ("reports/foo.pdf", None, "strategy_research"),
         ("elsewhere/foo.pdf", {"pipeline": "bogus"}, PipelineResolutionError),
     ]
     for src_key, meta, expected in cases:

@@ -16,13 +16,13 @@ import type { LanguageCode } from "./voice-config";
 
 export type PersonaId = "friendly" | "professional" | "educational" | "creative" | "technical";
 
-/** Logical KB pipeline views — must match the backend taxonomy. */
-export type KbPipeline = "bistro_research" | "open_research" | "menu";
+/** Logical KB pipeline views — must match the backend taxonomy (VALID_PIPELINES). */
+export type KbPipeline = "strategy_research" | "market_research" | "services";
 
 export const ALL_KB_PIPELINES: readonly KbPipeline[] = [
-    "bistro_research",
-    "open_research",
-    "menu",
+    "strategy_research",
+    "market_research",
+    "services",
 ] as const;
 
 export interface AvatarWSConfig {

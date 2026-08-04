@@ -1,19 +1,11 @@
-import { PropsWithChildren, useState, useRef, useEffect } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import {
-    MessageSquare,
-    Mic,
-    MessageCircle,
-    UtensilsCrossed,
-    Sun,
-    Moon,
-    FlaskConical,
-    ChevronDown,
-} from "lucide-react";
+import { PropsWithChildren, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { Sun, Moon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { useModelSelector, AVAILABLE_MODELS } from "@/hooks/useModelSelector";
 import { resetKnowledgeBase } from "@/services/kbResetService";
+import { BRAND, NAV_GROUPS, experiencesIn } from "@/config/brand";
 import TopNavigation from "@cloudscape-design/components/top-navigation";
 import Modal from "@cloudscape-design/components/modal";
 import Button from "@cloudscape-design/components/button";
@@ -22,38 +14,90 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Alert from "@cloudscape-design/components/alert";
 import Spinner from "@cloudscape-design/components/spinner";
 
-const researchDropdownItems = [
-    {
-        to: "/research",
-        label: "Bistro Deep Dive",
-        subtitle: "4-agent pipeline · bistro",
-        icon: MessageSquare,
-    },
-    {
-        to: "/research-studio",
-        label: "Open Research",
-        subtitle: "Any topic · PDF output",
-        icon: FlaskConical,
-    },
-] as const;
+/**
+ * Vertical navigation rail.
+ *
+ * Replaces the previous horizontal tab bar. Grouping the six experiences under
+ * Research / Advisory / Library communicates the platform's shape at a glance,
+ * which a flat row of tabs could not, and leaves the full width of the viewport
+ * for the dense agent output.
+ */
+function NavRail(): JSX.Element {
+    const location = useLocation();
 
-const researchPaths = researchDropdownItems.map((i) => i.to) as unknown as string[];
+    return (
+        <nav
+            aria-label="Primary"
+            className="flex w-[232px] shrink-0 flex-col gap-6 overflow-y-auto px-3 py-5"
+            style={{
+                background: "var(--app-nav-bg)",
+                borderRight: "1px solid var(--app-border)",
+            }}
+        >
+            {NAV_GROUPS.map(({ id, label }) => (
+                <div key={id} className="flex flex-col gap-1">
+                    <p
+                        className="numeric px-3 pb-1 text-[9.5px] tracking-[0.16em] uppercase"
+                        style={{ color: "var(--app-text-muted)" }}
+                    >
+                        {label}
+                    </p>
 
-const tabs = [
-    {
-        to: "/menu",
-        label: "Menu Builder",
-        subtitle: "Nova Canvas · dish photos",
-        icon: UtensilsCrossed,
-    },
-    {
-        to: "/chat",
-        label: "AI Concierge",
-        subtitle: "Reservations · chat · orders",
-        icon: MessageCircle,
-    },
-    { to: "/avatar", label: "Voice Avatar", subtitle: "Nova Sonic · speak naturally", icon: Mic },
-] as const;
+                    {experiencesIn(id).map(({ to, label: itemLabel, subtitle, icon: Icon }) => {
+                        const active = location.pathname === to;
+                        return (
+                            <NavLink
+                                key={to}
+                                to={to}
+                                aria-current={active ? "page" : undefined}
+                                className="group relative flex items-start gap-2.5 rounded-[4px] px-3 py-2 no-underline transition-colors"
+                                style={{
+                                    background: active
+                                        ? "var(--app-nav-item-active-bg)"
+                                        : "transparent",
+                                    color: active
+                                        ? "var(--app-nav-item-active-text)"
+                                        : "var(--app-nav-item-text)",
+                                }}
+                            >
+                                {/* Brass indicator on the active item. */}
+                                <span
+                                    aria-hidden
+                                    className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full transition-opacity"
+                                    style={{
+                                        background: "var(--brand-accent)",
+                                        opacity: active ? 1 : 0,
+                                    }}
+                                />
+                                <Icon
+                                    size={15}
+                                    className="mt-0.5 shrink-0"
+                                    style={{ color: active ? "var(--brand-accent)" : undefined }}
+                                />
+                                <span className="flex min-w-0 flex-col leading-tight">
+                                    <span className="text-[13px] font-medium">{itemLabel}</span>
+                                    <span
+                                        className="truncate text-[10.5px]"
+                                        style={{ color: "var(--app-text-muted)" }}
+                                    >
+                                        {subtitle}
+                                    </span>
+                                </span>
+                            </NavLink>
+                        );
+                    })}
+                </div>
+            ))}
+
+            <div className="mt-auto px-3">
+                <div className="rule mb-3" />
+                <p className="text-[10px]" style={{ color: "var(--app-text-muted)" }}>
+                    {BRAND.disclosure}
+                </p>
+            </div>
+        </nav>
+    );
+}
 
 export function AppShell({ children }: PropsWithChildren): JSX.Element {
     const { isAuthenticated, signOut, token } = useAuth();
@@ -66,31 +110,12 @@ export function AppShell({ children }: PropsWithChildren): JSX.Element {
         type: "success" | "error";
         message: string;
     } | null>(null);
-    const [researchOpen, setResearchOpen] = useState(false);
-    const researchRef = useRef<HTMLDivElement>(null);
-    const location = useLocation();
-    const navigate = useNavigate();
-
-    const isResearchActive = researchPaths.includes(location.pathname);
-    const activeResearchItem =
-        researchDropdownItems.find((i) => i.to === location.pathname) ?? researchDropdownItems[0];
-
-    // Close dropdown on outside click
-    useEffect(() => {
-        function handleClick(e: MouseEvent) {
-            if (researchRef.current && !researchRef.current.contains(e.target as Node)) {
-                setResearchOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", handleClick);
-        return () => document.removeEventListener("mousedown", handleClick);
-    }, []);
 
     return (
-        <div className="flex flex-col h-screen">
+        <div className="flex h-screen flex-col">
             <TopNavigation
                 identity={{
-                    title: "Gartner AppDev 2026",
+                    title: BRAND.legalName,
                     href: "/",
                     logo: { src: "/agent-icons/AgentCore.svg", alt: "AgentCore" },
                 }}
@@ -130,7 +155,7 @@ export function AppShell({ children }: PropsWithChildren): JSX.Element {
                         ? [
                               {
                                   type: "button" as const,
-                                  text: "Logout",
+                                  text: "Sign out",
                                   onClick: () => setLogoutVisible(true),
                               },
                           ]
@@ -138,122 +163,11 @@ export function AppShell({ children }: PropsWithChildren): JSX.Element {
                 ]}
             />
 
-            {/* Tab navigation */}
-            <nav
-                className="flex items-center gap-1 px-6 py-2"
-                style={{
-                    background: "var(--glass-bg-strong)",
-                    backdropFilter: "var(--glass-blur)",
-                    WebkitBackdropFilter: "var(--glass-blur)",
-                    borderBottom: "1px solid var(--glass-border)",
-                    boxShadow: "var(--glass-shadow)",
-                }}
-            >
-                {/* Research dropdown tab */}
-                <div className="relative" ref={researchRef}>
-                    <button
-                        onClick={() => {
-                            if (!isResearchActive) navigate(activeResearchItem.to);
-                            setResearchOpen((o) => !o);
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                        style={{
-                            background: isResearchActive
-                                ? "var(--app-tab-active-bg)"
-                                : "transparent",
-                            color: isResearchActive
-                                ? "var(--app-tab-active-text)"
-                                : "var(--app-tab-inactive-text)",
-                        }}
-                    >
-                        <activeResearchItem.icon size={16} />
-                        <div className="flex flex-col leading-tight text-left">
-                            <span>{activeResearchItem.label}</span>
-                            <span className="text-[10px] opacity-60 font-normal">
-                                {activeResearchItem.subtitle}
-                            </span>
-                        </div>
-                        <ChevronDown
-                            size={14}
-                            className="ml-1 transition-transform"
-                            style={{
-                                transform: researchOpen ? "rotate(180deg)" : "rotate(0deg)",
-                            }}
-                        />
-                    </button>
-
-                    {researchOpen && (
-                        <div
-                            className="absolute left-0 top-full mt-1 z-50 min-w-[220px] rounded-lg py-1"
-                            style={{
-                                background: "var(--glass-bg-strong)",
-                                border: "1px solid var(--glass-border)",
-                                boxShadow: "var(--card-shadow, 0 4px 12px rgba(0,0,0,0.15))",
-                                backdropFilter: "var(--glass-blur)",
-                                WebkitBackdropFilter: "var(--glass-blur)",
-                            }}
-                        >
-                            {researchDropdownItems.map(({ to, label, subtitle, icon: Icon }) => (
-                                <NavLink
-                                    key={to}
-                                    to={to}
-                                    onClick={() => setResearchOpen(false)}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm transition-colors no-underline hover:opacity-80"
-                                    style={{
-                                        background:
-                                            location.pathname === to
-                                                ? "var(--app-tab-active-bg)"
-                                                : "transparent",
-                                        color:
-                                            location.pathname === to
-                                                ? "var(--app-tab-active-text)"
-                                                : "var(--app-tab-inactive-text)",
-                                    }}
-                                >
-                                    <Icon size={16} />
-                                    <div className="flex flex-col leading-tight">
-                                        <span className="font-medium">{label}</span>
-                                        <span className="text-[10px] opacity-60 font-normal">
-                                            {subtitle}
-                                        </span>
-                                    </div>
-                                </NavLink>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Remaining flat tabs */}
-                {tabs.map(({ to, label, subtitle, icon: Icon }) => (
-                    <NavLink
-                        key={to}
-                        to={to}
-                        className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors no-underline"
-                        style={{
-                            background:
-                                location.pathname === to
-                                    ? "var(--app-tab-active-bg)"
-                                    : "transparent",
-                            color:
-                                location.pathname === to
-                                    ? "var(--app-tab-active-text)"
-                                    : "var(--app-tab-inactive-text)",
-                        }}
-                    >
-                        <Icon size={16} />
-                        <div className="flex flex-col leading-tight">
-                            <span>{label}</span>
-                            <span className="text-[10px] opacity-60 font-normal">{subtitle}</span>
-                        </div>
-                    </NavLink>
-                ))}
-            </nav>
-
             {/* Logout confirmation modal */}
             <Modal
                 visible={logoutVisible}
                 onDismiss={() => setLogoutVisible(false)}
-                header="Confirm Logout"
+                header="Confirm sign out"
                 footer={
                     <Box float="right">
                         <SpaceBetween direction="horizontal" size="xs">
@@ -273,7 +187,7 @@ export function AppShell({ children }: PropsWithChildren): JSX.Element {
                     </Box>
                 }
             >
-                Are you sure you want to log out?
+                Are you sure you want to sign out?
             </Modal>
 
             {/* KB Reset confirmation modal */}
@@ -330,8 +244,9 @@ export function AppShell({ children }: PropsWithChildren): JSX.Element {
             >
                 <SpaceBetween size="s">
                     <Box>
-                        This will delete all generated documents (research reports, menus) from the
-                        Knowledge Base and start a fresh re-index from base documents only.
+                        This will delete all generated documents (research reports and disclosure
+                        documents) from the Knowledge Base and start a fresh re-index from base
+                        documents only.
                     </Box>
                     {kbResetResult && (
                         <Alert type={kbResetResult.type}>{kbResetResult.message}</Alert>
@@ -339,8 +254,11 @@ export function AppShell({ children }: PropsWithChildren): JSX.Element {
                 </SpaceBetween>
             </Modal>
 
-            {/* Main content */}
-            <main className="flex-1 overflow-hidden">{children}</main>
+            {/* Rail + content */}
+            <div className="flex flex-1 overflow-hidden">
+                <NavRail />
+                <main className="flex-1 overflow-hidden">{children}</main>
+            </div>
         </div>
     );
 }

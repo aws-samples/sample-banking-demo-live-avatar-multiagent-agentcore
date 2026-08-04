@@ -31,7 +31,23 @@ function getAccountDetail(scope: Construct, detail: string) {
 }
 
 export class FederateUserPool extends UserPool {
+    /**
+     * Midway/Federate registers its OIDC callback against a predictable
+     * `{stage}-{projectId}` hosted-UI domain, so that prefix is forced when
+     * `midway` is enabled.
+     *
+     * When `midway` is false we must NOT force it. Cognito hosted-UI domain
+     * prefixes are globally unique per Region, so a shared prefix like
+     * "dev-gartner-appdev" is already owned by whichever account deployed it
+     * first — every other account then fails with the misleading
+     * "domain does not exist in this account" / AlreadyExists pair. Honour the
+     * caller's prefix instead; `auth.ts` supplies an account- and
+     * Region-qualified one precisely to stay unique.
+     */
     public addDomain(id: string, options?: UserPoolDomainOptions): UserPoolDomain {
+        if (!getAccountDetail(this, "midway")) {
+            return super.addDomain(id, options as UserPoolDomainOptions);
+        }
         return super.addDomain(id, {
             ...options,
             cognitoDomain: { domainPrefix: getProfile(this) },

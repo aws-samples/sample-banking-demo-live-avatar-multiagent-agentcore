@@ -294,8 +294,10 @@ const configureCredentials = async (stage: string, method?: string) => {
                 if (match) {
                     const key = match[1].toLowerCase();
                     const value = match[2].trim();
+                    // Quote the value: session tokens are base64-ish and can contain
+                    // characters the shell would otherwise interpret.
                     await executeCommand(
-                        `aws configure set ${key} ${value} --profile ${profile}`,
+                        `aws configure set ${key} "${value}" --profile ${profile}`,
                         true
                     );
                 }
@@ -306,6 +308,18 @@ const configureCredentials = async (stage: string, method?: string) => {
                 `ada credentials update --profile=${profile} --account=${getAccountDetail(stage, "id")} --provider=isengard --role=Admin --once`
             );
         }
+
+        // Always pin the region on the profile, whichever method was used.
+        // Isengard/ada emit only AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
+        // AWS_SESSION_TOKEN, so without this the profile has no region. The SDK
+        // then tries to discover one from EC2 instance metadata, which on a
+        // laptop hangs until it fails with a misleading
+        // "socket did not establish a connection within 10000 ms" timeout.
+        await executeCommand(
+            `aws configure set region ${getAccountDetail(stage, "region")} --profile ${profile}`,
+            true
+        );
+
         printSuccess(`Configured ${stage} credentials profile "${profile}"!`);
     } catch (error) {
         throw new Error(`Failed to configure ${stage} credentials profile "${profile}".`, {

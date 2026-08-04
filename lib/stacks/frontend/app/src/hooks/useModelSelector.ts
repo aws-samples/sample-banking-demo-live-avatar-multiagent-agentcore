@@ -7,23 +7,55 @@ export interface ModelOption {
     description: string;
 }
 
+/**
+ * Models offered in the UI selector.
+ *
+ * Every `value` below was verified invocable via `bedrock-runtime:Converse` in
+ * us-east-1 on 4 Aug 2026. Two previously-shipped IDs were rejected with
+ * "The provided model identifier is invalid" because they omitted the version
+ * suffix — `claude-opus-4-6` (needs `-v1`) and `claude-haiku-4-5-20251001`
+ * (needs `-v1:0`). Cross-Region inference profile IDs (`us.` prefix) are used
+ * for Anthropic models; plain model IDs for Amazon Nova.
+ *
+ * Before adding an entry, confirm it with Converse — `ListInferenceProfiles`
+ * returning an ID does NOT guarantee InvokeModel accepts it. Also avoid models
+ * marked LEGACY: Bedrock refuses them once an account has not used them for 30
+ * days, which is how `amazon.nova-canvas-v1:0` became unusable here.
+ *
+ * Deliberately excluded: `claude-fable-5` (requires a non-default data
+ * retention mode) and all LEGACY Nova Premier / Canvas / Reel variants.
+ */
 export const AVAILABLE_MODELS: ModelOption[] = [
+    {
+        label: "Claude Sonnet 5",
+        value: "us.anthropic.claude-sonnet-5",
+        description: "Balanced flagship — default",
+    },
+    {
+        label: "Claude Opus 5",
+        value: "us.anthropic.claude-opus-5",
+        description: "Most capable · extended reasoning",
+    },
+    {
+        label: "Claude Opus 4.7",
+        value: "us.anthropic.claude-opus-4-7",
+        description: "High-resolution vision, long-horizon tasks",
+    },
     {
         label: "Claude Sonnet 4.6",
         value: "us.anthropic.claude-sonnet-4-6",
-        description: "Fast, intelligent",
-    },
-    {
-        label: "Claude Opus 4.6",
-        value: "us.anthropic.claude-opus-4-6",
-        description: "Most capable",
+        description: "Previous flagship — cost/latency baseline",
     },
     {
         label: "Claude Haiku 4.5",
-        value: "us.anthropic.claude-haiku-4-5-20251001",
-        description: "Fastest, lightweight",
+        value: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        description: "Fastest, lightweight drafting",
     },
-    { label: "Nova 2 Lite", value: "us.amazon.nova-2-lite-v1:0", description: "Low cost, fast" },
+    {
+        label: "Nova 2 Lite",
+        value: "us.amazon.nova-2-lite-v1:0",
+        description: "Lowest cost · 1M context · Amazon first-party",
+    },
 ];
 
 const DEFAULT_MODEL = AVAILABLE_MODELS[0].value;

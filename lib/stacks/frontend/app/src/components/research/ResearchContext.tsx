@@ -54,12 +54,16 @@ const HEARTBEAT_MESSAGES: Partial<Record<AgentId, string[]>> = {
         "Generating PDF report...",
     ],
     menu_designer: [
-        "Searching for matching dishes...",
-        "Generating dish photos...",
-        "Organizing menu sections...",
-        "Compiling menu layout...",
+        "Selecting matching products...",
+        "Generating product imagery...",
+        "Organizing catalog sections...",
+        "Compiling catalog layout...",
     ],
-    menu_pdf_writer: ["Formatting menu PDF...", "Embedding dish photos...", "Finalizing layout..."],
+    menu_pdf_writer: [
+        "Formatting catalog PDF...",
+        "Embedding product imagery...",
+        "Finalizing layout...",
+    ],
 };
 
 const initialState: ResearchState = {

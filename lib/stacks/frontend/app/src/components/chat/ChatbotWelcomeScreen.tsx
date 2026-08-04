@@ -17,27 +17,27 @@ interface QuestionGroup {
 
 const QUESTION_GROUPS: QuestionGroup[] = [
     {
-        title: "Menu & Food",
+        title: "Products & Rates",
         icon: UtensilsCrossed,
         questions: [
-            { label: "Seafood", question: "What seafood dishes do you recommend?" },
-            { label: "Vegetarian", question: "What vegetarian options are available?" },
+            { label: "Savings", question: "What savings accounts do you offer?" },
+            { label: "Checking", question: "Compare Everyday Checking and Premier Checking" },
         ],
     },
     {
-        title: "Reservations",
+        title: "Account Applications",
         icon: Clock,
         questions: [
-            { label: "Book a Table", question: "Can I book a table for 4 tonight?" },
-            { label: "Hours", question: "What are your operating hours?" },
+            { label: "Open an Account", question: "How do I open a High-Yield Savings account?" },
+            { label: "What I Need", question: "What do I need to open an account?" },
         ],
     },
     {
-        title: "Orders",
+        title: "Investing",
         icon: ShoppingBag,
         questions: [
-            { label: "Place Order", question: "I'd like to order the grilled salmon" },
-            { label: "Wine Pairing", question: "What wine pairs well with seafood?" },
+            { label: "Open an IRA", question: "How do I open a Roth IRA?" },
+            { label: "Managed Portfolios", question: "Tell me about Trinity Managed Portfolios" },
         ],
     },
 ];
@@ -48,10 +48,10 @@ export function ChatbotWelcomeScreen({ onExampleClick }: ChatbotWelcomeScreenPro
             <SpaceBetween size="xl" direction="vertical" alignItems="center">
                 <div className="text-center">
                     <Box variant="h1" fontSize="heading-xl" fontWeight="bold">
-                        Ocean View Bistro — AI Concierge
+                        Trinity Reserve Bank — Client Advisor
                     </Box>
                     <Box variant="p" color="text-body-secondary" fontSize="heading-s">
-                        Your personal dining assistant
+                        Your personal banking assistant
                     </Box>
                 </div>
 

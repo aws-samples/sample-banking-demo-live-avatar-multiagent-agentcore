@@ -149,7 +149,7 @@ def create_avatar_agent(
             to every user-scoped gateway tool call by UserScopeHook — the
             LLM cannot spoof another user's identity.
         kb_pipelines_holder: Optional single-element mutable list whose value is
-            the current kb pipelines multi-select (e.g. ["bistro_research", "menu"]).
+            the current kb pipelines multi-select (e.g. ["strategy_research", "menu"]).
             When None or empty, the avatar searches every pipeline view.
             The holder is referenced by the PipelineScopeHook on every tool call,
             so mid-session changes (via kbPipelinesChange WebSocket messages)

@@ -46,8 +46,8 @@ export const AGENT_PIPELINE: PipelineAgent[] = [
     { id: "synthesizer", name: "Synthesizer & Report", color: "#539d43" },
 ];
 
-/** Menu agent pipeline colors for visualization */
+/** Catalog agent pipeline colors for visualization */
 export const MENU_PIPELINE: PipelineAgent[] = [
-    { id: "menu_designer", name: "Menu Designer", color: "#FF9900" },
+    { id: "menu_designer", name: "Catalog Designer", color: "#FF9900" },
     { id: "menu_pdf_writer", name: "PDF Writer", color: "#d91e18" },
 ];

@@ -1,14 +1,19 @@
 """Force-inject per-mode KB read filters and pdf_generator pipeline writes into MCP tool calls.
 
 Each orchestrator mode maps to a logical pipeline taxonomy:
-- Bistro Deep Dive (mode=research / research_execute) writes `bistro_research`
-- Open Research / Research Studio (mode=generic_research / generic_research_execute)
-  writes `open_research`
-- Menu Builder (mode=menu) writes `menu` and reads from {bistro_research, open_research}
-- AI Concierge (mode=chatbot) reads only `menu`
-- Report Archive (mode=archive_chat) reads everything (no pipeline filter). This is
+- Market Strategy (mode=research / research_execute) writes `strategy_research`
+- Market Intelligence (mode=generic_research / generic_research_execute)
+  writes `market_research`
+- Services Catalog (mode=menu) writes `services` and reads from
+  {strategy_research, market_research}
+- Client Advisor (mode=chatbot) reads only `services`
+- Compliance Archive (mode=archive_chat) reads everything (no pipeline filter). This is
   the only intentional fail-open path — and it is signalled explicitly by setting
   `tool_input["archive_mode"] = True` so kb_search has a positive flag to check.
+
+Mode identifiers are deliberately unchanged. They are an internal contract between
+the frontend chat engine and the orchestrator's dispatch, not user- or model-facing
+text, so renaming them would add churn without changing what the demo shows.
 
 The hook lets the runtime (not the LLM) control these scopes — mirroring UserScopeHook.
 
@@ -34,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 # Valid pipeline tags — must stay in sync with gateway tools kb_search, pdf_generator, kb_ingest.
-VALID_PIPELINES: frozenset[str] = frozenset({"bistro_research", "open_research", "menu"})
+VALID_PIPELINES: frozenset[str] = frozenset({"strategy_research", "market_research", "services"})
 
 
 # Mode → { "write": <pipeline or None>, "read_filter": <list[str] or None>, "archive": bool }.
@@ -47,12 +52,27 @@ VALID_PIPELINES: frozenset[str] = frozenset({"bistro_research", "open_research",
 #   on tool inputs (kb_search requires this positive signal to return
 #   unfiltered results).
 MODE_PIPELINE_CONFIG: dict[str, dict[str, Any]] = {
-    "research": {"write": "bistro_research", "read_filter": ["bistro_research"], "archive": False},
-    "research_execute": {"write": "bistro_research", "read_filter": ["bistro_research"], "archive": False},
-    "generic_research": {"write": "open_research", "read_filter": ["open_research"], "archive": False},
-    "generic_research_execute": {"write": "open_research", "read_filter": ["open_research"], "archive": False},
-    "menu": {"write": "menu", "read_filter": ["bistro_research", "open_research"], "archive": False},
-    "chatbot": {"write": None, "read_filter": ["menu"], "archive": False},
+    "research": {"write": "strategy_research", "read_filter": ["strategy_research"], "archive": False},
+    "research_execute": {
+        "write": "strategy_research",
+        "read_filter": ["strategy_research"],
+        "archive": False,
+    },
+    "generic_research": {"write": "market_research", "read_filter": ["market_research"], "archive": False},
+    "generic_research_execute": {
+        "write": "market_research",
+        "read_filter": ["market_research"],
+        "archive": False,
+    },
+    # Services Catalog reads the two research corpora for market and regulatory
+    # context but never reads `services`, so a generated catalog cannot feed
+    # itself back in as evidence.
+    "menu": {
+        "write": "services",
+        "read_filter": ["strategy_research", "market_research"],
+        "archive": False,
+    },
+    "chatbot": {"write": None, "read_filter": ["services"], "archive": False},
     "archive_chat": {"write": None, "read_filter": None, "archive": True},
 }
 

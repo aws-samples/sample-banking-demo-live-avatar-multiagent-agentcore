@@ -1,15 +1,15 @@
 [
     {
         "name": "pdf_generator",
-        "description": "Generate a formatted PDF document and upload it to S3. Returns a presigned URL for downloading. Supports two formats: 'research' (default) for comprehensive research reports with cover page, TOC, executive summary, methodology, themed findings with confidence ratings, data analysis, recommendations with priority levels, appendices, and full references; 'menu' for restaurant menus with dish photos, descriptions, prices, and dietary tags.",
+        "description": "Generate a formatted PDF document and upload it to S3. Returns a presigned URL for downloading. Supports two formats: 'research' (default) for comprehensive research reports with cover page, TOC, executive summary, methodology, themed findings with confidence ratings, data analysis, recommendations with priority levels, appendices, and full references; 'services' for a client-facing services catalog with product imagery, descriptions, headline rates/fees, and feature badges.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "format": {
                     "type": "string",
-                    "enum": ["research", "menu"],
+                    "enum": ["research", "services"],
                     "default": "research",
-                    "description": "Output format: 'research' for a research report, 'menu' for a restaurant menu with photos"
+                    "description": "Output format: 'research' for a research report, 'services' for a services catalog with product imagery"
                 },
                 "topic": {
                     "type": "string",
@@ -171,7 +171,7 @@
                 },
                 "title": {
                     "type": "string",
-                    "description": "Menu title (used when format=menu)"
+                    "description": "Catalog title (used when format=services)"
                 },
                 "user_id": {
                     "type": "string",
@@ -179,20 +179,20 @@
                 },
                 "pipeline": {
                     "type": "string",
-                    "enum": ["bistro_research", "open_research", "menu"],
-                    "description": "Logical pipeline tag stored in S3 object metadata so downstream KB ingestion can categorize this document. Defaults: 'menu' when format=menu, 'bistro_research' when format=research. Pass 'open_research' explicitly for the Open Research / Research Studio pipeline."
+                    "enum": ["strategy_research", "market_research", "services"],
+                    "description": "Logical pipeline tag stored in S3 object metadata so downstream KB ingestion can categorize this document. Defaults: 'services' when format=services, 'strategy_research' when format=research. Pass 'market_research' explicitly for the Market Intelligence / Research Studio pipeline."
                 },
-                "menu": {
+                "services": {
                     "type": "object",
-                    "description": "Menu content with sections and items (required when format=menu)",
+                    "description": "Services catalog content with sections and items (required when format=services)",
                     "properties": {
                         "title": {
                             "type": "string",
-                            "description": "Restaurant or menu title"
+                            "description": "Services catalog title"
                         },
                         "sections": {
                             "type": "array",
-                            "description": "Menu sections (e.g., Appetizers, Entrees, Desserts)",
+                            "description": "Catalog sections (e.g., Everyday Banking, Savings & Growth, Retirement)",
                             "items": {
                                 "type": "object",
                                 "properties": {
@@ -202,36 +202,36 @@
                                     },
                                     "items": {
                                         "type": "array",
-                                        "description": "Dishes in this section",
+                                        "description": "Products in this section",
                                         "items": {
                                             "type": "object",
                                             "properties": {
                                                 "name": {
                                                     "type": "string",
-                                                    "description": "Dish name"
+                                                    "description": "Product name"
                                                 },
                                                 "description": {
                                                     "type": "string",
-                                                    "description": "Dish description"
+                                                    "description": "Product description"
                                                 },
                                                 "price": {
                                                     "type": "string",
-                                                    "description": "Price (e.g., $24.00)"
+                                                    "description": "Headline rate or fee line (e.g., '4.15% APY', 'No monthly fee')"
                                                 },
                                                 "dietary": {
                                                     "type": "array",
                                                     "items": {
                                                         "type": "string"
                                                     },
-                                                    "description": "Dietary tags (GF, V, VG, DF)"
+                                                    "description": "Short feature badges (e.g., FDIC, No Fee, Digital, Advised, IRA)"
                                                 },
                                                 "s3_key": {
                                                     "type": "string",
-                                                    "description": "S3 key for the dish photo (preferred for reliable embedding)"
+                                                    "description": "S3 key for the product image (preferred for reliable embedding)"
                                                 },
                                                 "image_url": {
                                                     "type": "string",
-                                                    "description": "Presigned URL for the dish photo (fallback)"
+                                                    "description": "Presigned URL for the product image (fallback)"
                                                 }
                                             },
                                             "required": ["name"]

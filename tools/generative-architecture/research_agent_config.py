@@ -13,7 +13,7 @@ Design rules:
       3. Data & Model Plane — DynamoDB, S3, Knowledge Base (S3 Vectors),
                           Neptune (optional), Bedrock FMs
   - Orchestrator Runtime is a nested cluster inside AgentCore containing
-    Planner / Researcher / Synthesizer / PDF Writer / Menu Designer /
+    Planner / Researcher / Synthesizer / PDF Writer / Catalog Designer /
     Chatbot sub-agents, plus an in-process Browser Tools sub-cluster.
   - 18 Gateway tools collapse to 5 logical Lambda groups. `kb_ingest` is
     edge-triggered by S3 events. `research_orchestrator` is a ghost node
@@ -303,7 +303,7 @@ _BASE_LABELS: dict[str, str] = {
     R_RESEARCHER: "Researcher",
     R_SYNTH: "Synthesizer",
     R_PDF: "PDF Writer",
-    R_MENU: "Menu Designer",
+    R_MENU: "Catalog Designer",
     R_CHATBOT: "Chatbot",
     R_PERSONA: "Persona Router",
     R_BROWSER_INPROC: "Browser Tools\\n(Strands @tool)",
@@ -314,7 +314,7 @@ _BASE_LABELS: dict[str, str] = {
     G_KNOWSEARCH: "Knowledge & Search\\n(kb_search . web_search)",
     G_CONTENTGEN: "Content Generation\\n(pdf . canvas . reel . website)",
     G_MEMORY: "Memory & Profile\\n(save . recall . analyze . profile)",
-    G_COMMERCE: "Commerce & Data\\n(place_order . data_sources . sample)",
+    G_COMMERCE: "Applications & Data\\n(place_order . data_sources . sample)",
     G_DURABLE: "Durable Functions\\n(research_orchestrator)",
     M_AGENTCORE: "AgentCore Memory\\n(Episodic . Semantic . Preferences)",
     GR_POLICY: "Bedrock Guardrails",
@@ -365,7 +365,7 @@ _BASE_LEGEND_BLURBS: dict[str, str] = {
     R_RESEARCHER: "KB + web search + citations",
     R_SYNTH: "Cross-references, summarizes",
     R_PDF: "12-section PDF report",
-    R_MENU: "Menu designer + dish images",
+    R_MENU: "Catalog designer + product images",
     R_CHATBOT: "Conversational agent (guarded)",
     R_BROWSER_INPROC: "Strands browser @tool helpers",
     V_RUNTIME: "AgentCore Runtime (WebSocket)",
@@ -1064,7 +1064,7 @@ def _build_extra_prompt(flags: FeatureFlags) -> str:
           - Every genuine `strands.Agent()` / `BidiAgent` / built-in tool-
             selector instance uses Strands_Agent.png (the black-square
             twin-strand mark). This applies to: Planner, Researcher,
-            Synthesizer, PDF Writer, Menu Designer, Chatbot, BidiAgent,
+            Synthesizer, PDF Writer, Catalog Designer, Chatbot, BidiAgent,
             Tool Selector.
           - In-process Browser Tools uses Browser_Tool.png (it is a
             bundle of `@tool` helpers, not a strands.Agent).

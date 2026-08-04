@@ -56,16 +56,16 @@ class TestParseKbPipelines:
     """The helper that normalizes kbPipelines from query string / JSON."""
 
     def test_comma_separated_string(self, avatar_module):
-        result = avatar_module._parse_kb_pipelines("bistro_research,menu")
-        assert result == ["bistro_research", "menu"]
+        result = avatar_module._parse_kb_pipelines("strategy_research,services")
+        assert result == ["strategy_research", "services"]
 
     def test_comma_separated_with_whitespace(self, avatar_module):
-        result = avatar_module._parse_kb_pipelines("bistro_research , menu")
-        assert result == ["bistro_research", "menu"]
+        result = avatar_module._parse_kb_pipelines("strategy_research , services")
+        assert result == ["strategy_research", "services"]
 
     def test_list_input(self, avatar_module):
-        result = avatar_module._parse_kb_pipelines(["bistro_research", "menu"])
-        assert result == ["bistro_research", "menu"]
+        result = avatar_module._parse_kb_pipelines(["strategy_research", "services"])
+        assert result == ["strategy_research", "services"]
 
     def test_empty_returns_none(self, avatar_module):
         assert avatar_module._parse_kb_pipelines("") is None
@@ -73,8 +73,8 @@ class TestParseKbPipelines:
         assert avatar_module._parse_kb_pipelines(None) is None
 
     def test_unknown_values_dropped(self, avatar_module):
-        result = avatar_module._parse_kb_pipelines("bistro_research,bogus")
-        assert result == ["bistro_research"]
+        result = avatar_module._parse_kb_pipelines("strategy_research,bogus")
+        assert result == ["strategy_research"]
 
     def test_all_unknown_returns_none(self, avatar_module):
         assert avatar_module._parse_kb_pipelines("bogus1,bogus2") is None
@@ -89,7 +89,7 @@ class TestHolderBackedPipelineScopeHook:
     def test_initial_value_flows_through(self, avatar_module, make_event):
         from pipeline_scope import PipelineScopeHook
 
-        holder: list[list[str] | None] = [["bistro_research"]]
+        holder: list[list[str] | None] = [["strategy_research"]]
 
         def _provider():
             raw = holder[0] if holder else None
@@ -100,12 +100,12 @@ class TestHolderBackedPipelineScopeHook:
         hook = PipelineScopeHook(read_filter=_provider)
         event = make_event("gateway_kb_search")
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipelines"] == ["bistro_research"]
+        assert event.tool_use["input"]["pipelines"] == ["strategy_research"]
 
     def test_mutation_picked_up_on_next_event(self, avatar_module, make_event):
         from pipeline_scope import PipelineScopeHook
 
-        holder: list[list[str] | None] = [["bistro_research"]]
+        holder: list[list[str] | None] = [["strategy_research"]]
 
         def _provider():
             raw = holder[0] if holder else None
@@ -118,13 +118,13 @@ class TestHolderBackedPipelineScopeHook:
         # First call: bistro scope.
         e1 = make_event("gateway_kb_search")
         hook._inject_pipeline(e1)
-        assert e1.tool_use["input"]["pipelines"] == ["bistro_research"]
+        assert e1.tool_use["input"]["pipelines"] == ["strategy_research"]
 
         # Simulate kbPipelinesChange → holder[0] mutated in place.
-        holder[0] = avatar_module._parse_kb_pipelines("menu")
+        holder[0] = avatar_module._parse_kb_pipelines("services")
         e2 = make_event("gateway_kb_search")
         hook._inject_pipeline(e2)
-        assert e2.tool_use["input"]["pipelines"] == ["menu"]
+        assert e2.tool_use["input"]["pipelines"] == ["services"]
 
         # Simulate "All" toggle → frontend sends empty list → holder becomes None.
         holder[0] = None

@@ -50,7 +50,7 @@ export default function MenuSidePanel(): JSX.Element {
                 >
                     <span className="inline-flex items-center gap-2">
                         <UtensilsCrossed size={18} />
-                        Menu Builder
+                        Services Catalog
                     </span>
                 </Header>
             </div>
@@ -65,7 +65,7 @@ export default function MenuSidePanel(): JSX.Element {
                                 style={{ color: "var(--app-text-secondary)" }}
                             />
                             <Box variant="h3" color="text-body-secondary">
-                                No menu items yet
+                                No products yet
                             </Box>
                             <Box
                                 variant="p"
@@ -73,7 +73,7 @@ export default function MenuSidePanel(): JSX.Element {
                                 fontSize="body-s"
                                 margin={{ top: "xs" }}
                             >
-                                Start building your menu by chatting with the AI concierge
+                                Start building your catalog by chatting with the AI advisor
                             </Box>
                         </div>
                     </Container>
@@ -108,14 +108,14 @@ export default function MenuSidePanel(): JSX.Element {
                             <Container>
                                 <Box textAlign="center" padding="l">
                                     <StatusIndicator type="loading">
-                                        Generating menu...
+                                        Generating catalog...
                                     </StatusIndicator>
                                 </Box>
                             </Container>
                         )}
 
                         {state.pdfUrl && (
-                            <Container header={<Header variant="h3">Menu PDF</Header>}>
+                            <Container header={<Header variant="h3">Catalog PDF</Header>}>
                                 <Button
                                     variant="primary"
                                     href={state.pdfUrl}

@@ -13,11 +13,11 @@
  */
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// This package is CommonJS (no "type": "module" in the root package.json), so
+// `__dirname` is available directly under tsx. Deriving it from
+// `import.meta.url` instead fails `tsc` with TS1343 under "module": "CommonJS".
 
 const { values } = parseArgs({
     allowPositionals: false,

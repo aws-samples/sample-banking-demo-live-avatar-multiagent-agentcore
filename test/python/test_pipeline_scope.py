@@ -59,42 +59,44 @@ class TestModeConfig:
 class TestPipelineScopeHookReadFilter:
     """Verifies the read-filter injection on gateway_kb_search."""
 
-    def test_bistro_research_mode_injects_bistro_filter(self, make_event):
+    def test_strategy_research_mode_injects_bistro_filter(self, make_event):
         hook = _hook_for_mode("research")
         event = make_event("gateway_kb_search")
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipelines"] == ["bistro_research"]
+        assert event.tool_use["input"]["pipelines"] == ["strategy_research"]
 
-    def test_open_research_mode_injects_open_filter(self, make_event):
+    def test_market_research_mode_injects_open_filter(self, make_event):
         hook = _hook_for_mode("generic_research")
         event = make_event("gateway_kb_search")
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipelines"] == ["open_research"]
+        assert event.tool_use["input"]["pipelines"] == ["market_research"]
 
     def test_menu_mode_allows_reads_from_both_research_pipelines(self, make_event):
+        # Mode identifier stays "menu" (internal frontend↔orchestrator contract);
+        # only the pipeline *tag* it writes changed to "services".
         hook = _hook_for_mode("menu")
         event = make_event("gateway_kb_search")
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipelines"] == ["bistro_research", "open_research"]
+        assert event.tool_use["input"]["pipelines"] == ["strategy_research", "market_research"]
 
-    def test_chatbot_mode_scopes_to_menu_only(self, make_event):
+    def test_chatbot_mode_scopes_to_services_only(self, make_event):
         hook = _hook_for_mode("chatbot")
         event = make_event("gateway_kb_search")
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipelines"] == ["menu"]
+        assert event.tool_use["input"]["pipelines"] == ["services"]
 
     def test_hook_overrides_llm_supplied_pipelines(self, make_event):
         hook = _hook_for_mode("research")
-        event = make_event("gateway_kb_search", pipelines=["menu"])
+        event = make_event("gateway_kb_search", pipelines=["services"])
         hook._inject_pipeline(event)
-        # LLM-supplied "menu" is overridden with the runtime's bistro scope
-        assert event.tool_use["input"]["pipelines"] == ["bistro_research"]
+        # LLM-supplied "services" is overridden with the runtime's strategy_research scope
+        assert event.tool_use["input"]["pipelines"] == ["strategy_research"]
 
     def test_unknown_pipeline_values_in_config_are_dropped(self, make_event):
-        hook = PipelineScopeHook(read_filter=["bistro_research", "not_real"])
+        hook = PipelineScopeHook(read_filter=["strategy_research", "not_real"])
         event = make_event("gateway_kb_search")
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipelines"] == ["bistro_research"]
+        assert event.tool_use["input"]["pipelines"] == ["strategy_research"]
 
 
 class TestPipelineScopeHookArchiveMode:
@@ -118,7 +120,7 @@ class TestPipelineScopeHookArchiveMode:
     def test_archive_chat_strips_llm_supplied_pipelines(self, make_event):
         # The LLM cannot narrow the archive scope by supplying its own filter.
         hook = _hook_for_mode("archive_chat")
-        event = make_event("gateway_kb_search", pipelines=["bistro_research"])
+        event = make_event("gateway_kb_search", pipelines=["strategy_research"])
         hook._inject_pipeline(event)
         assert "pipelines" not in event.tool_use["input"]
         assert event.tool_use["input"].get("archive_mode") is True
@@ -131,19 +133,20 @@ class TestPipelineScopeHookWrite:
         hook = _hook_for_mode("research")
         event = make_event("gateway_pdf_generator")
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipeline"] == "bistro_research"
+        assert event.tool_use["input"]["pipeline"] == "strategy_research"
 
     def test_generic_research_mode_tags_writes_as_open(self, make_event):
         hook = _hook_for_mode("generic_research")
         event = make_event("gateway_pdf_generator")
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipeline"] == "open_research"
+        assert event.tool_use["input"]["pipeline"] == "market_research"
 
-    def test_menu_mode_tags_writes_as_menu(self, make_event):
+    def test_menu_mode_tags_writes_as_services(self, make_event):
+        # mode="menu" (unchanged internal contract) → write tag "services".
         hook = _hook_for_mode("menu")
         event = make_event("gateway_pdf_generator")
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipeline"] == "menu"
+        assert event.tool_use["input"]["pipeline"] == "services"
 
     def test_chatbot_mode_does_not_inject_write_tag(self, make_event):
         # Chatbot shouldn't write to the KB at all; the hook has no write scope.
@@ -159,18 +162,18 @@ class TestPipelineScopeHookCallableProviders:
     contract is solid."""
 
     def test_callable_provider_is_invoked_per_event(self, make_event):
-        holder: list[list[str] | None] = [["menu"]]
+        holder: list[list[str] | None] = [["services"]]
         hook = PipelineScopeHook(read_filter=lambda: holder[0])
 
         event1 = make_event("gateway_kb_search")
         hook._inject_pipeline(event1)
-        assert event1.tool_use["input"]["pipelines"] == ["menu"]
+        assert event1.tool_use["input"]["pipelines"] == ["services"]
 
         # Mutate the holder; next event should see the new value.
-        holder[0] = ["bistro_research", "open_research"]
+        holder[0] = ["strategy_research", "market_research"]
         event2 = make_event("gateway_kb_search")
         hook._inject_pipeline(event2)
-        assert event2.tool_use["input"]["pipelines"] == ["bistro_research", "open_research"]
+        assert event2.tool_use["input"]["pipelines"] == ["strategy_research", "market_research"]
 
 
 class TestPipelineScopeHookFailClosed:
@@ -205,7 +208,7 @@ class TestPipelineScopeHookFailClosed:
 def test_valid_pipelines_matches_backend_tools():
     """Guard against the frozenset drifting from the gateway handlers.
 
-    kb_search/kb_ingest/pdf_generator all hard-code `{"bistro_research",
-    "open_research", "menu"}`. The hook's VALID_PIPELINES must match.
+    kb_search/kb_ingest/pdf_generator all hard-code `{"strategy_research",
+    "market_research", "services"}`. The hook's VALID_PIPELINES must match.
     """
-    assert VALID_PIPELINES == frozenset({"bistro_research", "open_research", "menu"})
+    assert VALID_PIPELINES == frozenset({"strategy_research", "market_research", "services"})

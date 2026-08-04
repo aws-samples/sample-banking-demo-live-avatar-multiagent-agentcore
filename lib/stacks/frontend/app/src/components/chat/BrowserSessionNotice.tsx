@@ -8,10 +8,10 @@ interface BrowserSessionNoticeProps {
 }
 
 /**
- * One-shot notice rendered inline in the chat when the concierge first
+ * One-shot notice rendered inline in the chat when the advisor first
  * spins up a browser microVM. Explains the per-turn session lifecycle —
  * each chat turn gets a fresh microVM that terminates when the turn ends,
- * so multi-step flows (like a reservation booking) need to be completed
+ * so multi-step flows (like an account application) need to be completed
  * in a single user message.
  *
  * Dismissal is persisted to localStorage so returning users don't see it

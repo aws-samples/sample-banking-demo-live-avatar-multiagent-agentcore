@@ -15,15 +15,15 @@ class TestSanitizePipelines:
 
     def test_known_values_pass_through(self, load_tool):
         mod = load_tool("kb_search")
-        assert mod._sanitize_pipelines(["menu"]) == ["menu"]
+        assert mod._sanitize_pipelines(["services"]) == ["services"]
 
     def test_unknown_values_are_dropped(self, load_tool):
         mod = load_tool("kb_search")
-        assert mod._sanitize_pipelines(["bistro_research", "bogus"]) == ["bistro_research"]
+        assert mod._sanitize_pipelines(["strategy_research", "bogus"]) == ["strategy_research"]
 
     def test_duplicates_are_deduped(self, load_tool):
         mod = load_tool("kb_search")
-        assert mod._sanitize_pipelines(["menu", "menu", "open_research"]) == ["menu", "open_research"]
+        assert mod._sanitize_pipelines(["services", "services", "market_research"]) == ["services", "market_research"]
 
     def test_non_list_input_returns_empty(self, load_tool):
         mod = load_tool("kb_search")
@@ -51,12 +51,12 @@ class TestBuildFilter:
 
     def test_single_pipeline_uses_equals(self, load_tool):
         mod = load_tool("kb_search")
-        assert mod._build_filter("", ["menu"]) == {"equals": {"key": "pipeline", "value": "menu"}}
+        assert mod._build_filter("", ["services"]) == {"equals": {"key": "pipeline", "value": "services"}}
 
     def test_multi_pipeline_uses_in(self, load_tool):
         mod = load_tool("kb_search")
-        assert mod._build_filter("", ["bistro_research", "open_research"]) == {
-            "in": {"key": "pipeline", "value": ["bistro_research", "open_research"]}
+        assert mod._build_filter("", ["strategy_research", "market_research"]) == {
+            "in": {"key": "pipeline", "value": ["strategy_research", "market_research"]}
         }
 
     def test_user_plus_single_pipeline_uses_andAll(self, load_tool):
@@ -64,20 +64,20 @@ class TestBuildFilter:
         expected = {
             "andAll": [
                 {"equals": {"key": "user_id", "value": "alice"}},
-                {"equals": {"key": "pipeline", "value": "menu"}},
+                {"equals": {"key": "pipeline", "value": "services"}},
             ]
         }
-        assert mod._build_filter("alice", ["menu"]) == expected
+        assert mod._build_filter("alice", ["services"]) == expected
 
     def test_user_plus_multi_pipeline_uses_andAll_with_in(self, load_tool):
         mod = load_tool("kb_search")
         expected = {
             "andAll": [
                 {"equals": {"key": "user_id", "value": "alice"}},
-                {"in": {"key": "pipeline", "value": ["bistro_research", "menu"]}},
+                {"in": {"key": "pipeline", "value": ["strategy_research", "services"]}},
             ]
         }
-        assert mod._build_filter("alice", ["bistro_research", "menu"]) == expected
+        assert mod._build_filter("alice", ["strategy_research", "services"]) == expected
 
 
 class TestFailClosedScopeCheck:
@@ -112,7 +112,7 @@ class TestFailClosedScopeCheck:
         mod = load_tool("kb_search")
         monkeypatch.setenv("KNOWLEDGE_BASE_ID", "stub-kb-id")
         resp = mod.handler(
-            {"query": "test", "pipelines": ["menu"]},
+            {"query": "test", "pipelines": ["services"]},
             self._ctx(lambda_context),
         )
         body = json.loads(resp["content"][0]["text"])

@@ -80,7 +80,7 @@ function ConciergeFlowInner() {
             data: {
                 id: "user",
                 label: "User",
-                sublabel: "Concierge request",
+                sublabel: "Client request",
                 category: "user",
                 activity: anyActivity ? "completed" : "idle",
             },

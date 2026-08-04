@@ -313,7 +313,7 @@ gateway/tools/
 | Layer                  | Technology                                    | Version                                    |
 | ---------------------- | --------------------------------------------- | ------------------------------------------ |
 | **Infrastructure**     | AWS CDK                                       | 2.1121.0 (pinned)                          |
-| **CDK Constructs**     | `@aws-cdk/aws-bedrock-agentcore-alpha`        | 2.253.1-alpha.0+                           |
+| **CDK Constructs**     | `aws-cdk-lib/aws-bedrockagentcore` (stable)   | bundled with `aws-cdk-lib`                 |
 | **Agent Framework**    | Strands Agents SDK (Python)                   | `>=1.33.0,<2.0.0`                          |
 | **Orchestrator Model** | Claude Sonnet 4.6                             | `us.anthropic.claude-sonnet-4-6`           |
 | **Voice Model**        | Nova 2 Sonic                                  | `amazon.nova-2-sonic-v1:0`                 |
@@ -329,7 +329,18 @@ gateway/tools/
 | **Lambda Runtime**     | Python 3.13, ARM64                            |                                            |
 | **Node.js**            | 22.8.0 (Volta-managed)                        |                                            |
 
-> **Alpha-channel note:** Amazon Bedrock AgentCore is GA as a service, but the CDK L2 construct (`@aws-cdk/aws-bedrock-agentcore-alpha`) is still shipped in the `-alpha.0` channel as of `2.253.1-alpha.0`. Minor-version bumps can still include breaking API changes — review the construct release notes when upgrading.
+> **Stable CDK channel:** all AgentCore resources are defined with the stable
+> constructs in `aws-cdk-lib/aws-bedrockagentcore` — `CfnRuntime`, `CfnGateway`,
+> `CfnGatewayTarget`, `CfnMemory`, `CfnPolicyEngine`, `CfnPolicy`, `CfnEvaluator`
+> and `CfnOnlineEvaluationConfig`. The `@aws-cdk/aws-bedrock-agentcore-alpha`
+> package is no longer a dependency, so minor CDK bumps can no longer introduce
+> breaking construct API changes here.
+>
+> One gap to be aware of: **AgentCore Harness has no CloudFormation resource
+> type.** There is no `CfnHarness`, so harnesses are provisioned through a
+> CDK-managed custom resource that calls `CreateHarness`/`UpdateHarness`/
+> `DeleteHarness`, keeping them inside the same `cdk deploy` path as everything
+> else rather than requiring a console or CLI step.
 
 ---
 

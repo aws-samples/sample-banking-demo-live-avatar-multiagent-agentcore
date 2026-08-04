@@ -1,5 +1,7 @@
 """
-Place order tool -- writes a restaurant order to DynamoDB metadata table.
+Place order tool -- writes an account application / service enrollment to the
+DynamoDB metadata table. (Tool name kept as `place_order` for gateway/CDK
+compatibility; the semantics are a synthetic banking application intake.)
 """
 
 import json
@@ -18,11 +20,11 @@ METADATA_TABLE = os.environ.get("METADATA_TABLE", "")
 
 
 def handler(event, context):
-    """Place a restaurant order.
+    """Submit a synthetic account application / service enrollment.
 
     Requires `user_id` in the event (injected by UserScopeHook at the
     runtime layer). The DynamoDB item is keyed by order_id but also carries
-    `customerId` so order lookups can be scoped per-user by future readers.
+    `customerId` so application lookups can be scoped per-user by future readers.
     """
     try:
         logger.info("Received event: %s", json.dumps(event))

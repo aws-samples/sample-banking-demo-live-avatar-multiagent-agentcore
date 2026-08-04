@@ -6,7 +6,7 @@
  *
  * Each group maps to a backend capability the Nova Sonic agent can actually
  * execute with the Gateway tools it has access to:
- *   - Menu & Dining   → gateway_kb_search (pipeline=menu) + baked-in facts
+ *   - Products & Rates → gateway_kb_search (pipeline=menu) + baked-in facts
  *   - Multilingual    → Nova Sonic native multilingual voice
  *   - Create          → gateway_nova_canvas_generate + gateway_website_generator
  *   - Research Recall → gateway_kb_search across the user-selected pipelines
@@ -31,16 +31,16 @@ interface PromptGroup {
 
 const GROUPS: PromptGroup[] = [
     {
-        title: "Menu & Dining",
+        title: "Products & Rates",
         icon: UtensilsCrossed,
         prompts: [
             {
-                label: "Tonight's specials",
-                prompt: "What's on the dinner menu tonight?",
+                label: "Current rates",
+                prompt: "What is the High-Yield Savings APY?",
             },
             {
-                label: "Vegetarian options",
-                prompt: "Do you have gluten-free or vegetarian mains?",
+                label: "Compare checking",
+                prompt: "Compare Everyday Checking and Premier Checking",
             },
         ],
     },
@@ -50,11 +50,11 @@ const GROUPS: PromptGroup[] = [
         prompts: [
             {
                 label: "Español",
-                prompt: "¿Qué mariscos me recomiendas esta noche?",
+                prompt: "¿Qué cuentas de ahorro ofrecen?",
             },
             {
-                label: "Wine pairing",
-                prompt: "What wine would pair with the halibut?",
+                label: "Open an IRA",
+                prompt: "How do I open a Roth IRA?",
             },
         ],
     },
@@ -64,11 +64,11 @@ const GROUPS: PromptGroup[] = [
         prompts: [
             {
                 label: "Generate an image",
-                prompt: "Create a photo of a cedar-plank salmon dish on a slate plate",
+                prompt: "Create an image representing a premium savings account",
             },
             {
                 label: "Build a website",
-                prompt: "Build a one-page landing site for a seasonal seafood tasting menu",
+                prompt: "Build a one-page landing site for our High-Yield Savings account",
             },
         ],
     },

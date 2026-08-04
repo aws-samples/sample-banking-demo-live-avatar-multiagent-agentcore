@@ -10,21 +10,24 @@ interface MenuWelcomeScreenProps {
 
 const EXAMPLE_PROMPTS = [
     {
-        title: "Seasonal Seafood",
-        question: "Generate a seasonal seafood menu with 4 courses and a photo for each dish",
-    },
-    {
-        title: "Upscale Dinner",
+        title: "Everyday Banking",
         question:
-            "Create an upscale 4-course dinner menu with wine pairings and generate a photo for each dish",
+            "Build a services catalog for everyday checking and savings accounts with imagery for each product",
     },
     {
-        title: "Brunch Menu",
-        question: "Design a brunch menu with vegetarian options and generate a photo for each dish",
+        title: "High-Yield Savings",
+        question:
+            "Create a services catalog highlighting our High-Yield Savings account at 4.15% APY with an image for each product",
     },
     {
-        title: "Prix Fixe Tasting",
-        question: "Build a prix fixe tasting menu for 5 courses and generate a photo for each dish",
+        title: "Retirement Accounts",
+        question:
+            "Design a services catalog for Traditional and Roth IRAs with imagery for each product",
+    },
+    {
+        title: "Wealth Management",
+        question:
+            "Build a services catalog for Trinity Managed Portfolios and Private Client wealth management with an image for each product",
     },
 ];
 
@@ -36,11 +39,11 @@ export default function MenuWelcomeScreen({ onExampleClick }: MenuWelcomeScreenP
                     <div className="flex items-center justify-center gap-3 mb-2">
                         <UtensilsCrossed size={32} className="text-blue-600" />
                         <Box variant="h1" fontSize="heading-xl" fontWeight="bold">
-                            Menu Builder
+                            Services Catalog
                         </Box>
                     </div>
                     <Box variant="p" color="text-body-secondary" fontSize="heading-s">
-                        Design your restaurant menu with AI
+                        Design your services catalog with AI
                     </Box>
                 </div>
 

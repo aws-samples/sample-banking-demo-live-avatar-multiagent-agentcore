@@ -1,6 +1,7 @@
-import { ReactNode, useEffect, useState, useMemo, PropsWithChildren, FormEvent } from "react";
+import { ReactNode, useEffect, useState, PropsWithChildren, FormEvent } from "react";
 import { useAuth } from "react-oidc-context";
-import { Sparkles, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { BRAND, SIGN_IN_HIGHLIGHTS } from "@/config/brand";
 import {
     CognitoIdentityProviderClient,
     InitiateAuthCommand,
@@ -92,86 +93,77 @@ function storeOidcUser(tokens: AuthTokens): void {
     localStorage.setItem(storageKey, JSON.stringify(user));
 }
 
-/* ── Particle config ──────────────────────────────────────────── */
+/* ── Market tape ──────────────────────────────────────────────────
+   Replaces the previous floating-particle field. Synthetic index values
+   drifting in a slow ticker: on-theme for the scenario, keeps the screen
+   alive during the recording, and costs one CSS animation rather than
+   twelve independently animated nodes. Values are decorative only.
+   ─────────────────────────────────────────────────────────────── */
 
-function randomBetween(a: number, b: number): number {
-    return Math.random() * (b - a) + a;
+const TAPE = [
+    { symbol: "TXSE", value: "4,182.60", delta: "+0.84%", up: true },
+    { symbol: "SPX", value: "5,974.12", delta: "+0.31%", up: true },
+    { symbol: "NDX", value: "21,486.90", delta: "-0.12%", up: false },
+    { symbol: "FTSE", value: "8,412.55", delta: "+0.47%", up: true },
+    { symbol: "DAX", value: "19,238.04", delta: "-0.28%", up: false },
+    { symbol: "UST10Y", value: "4.118", delta: "+2bp", up: true },
+] as const;
+
+function MarketTape(): JSX.Element {
+    // Duplicated so the marquee wraps without a visible seam.
+    const cells = [...TAPE, ...TAPE];
+    return (
+        <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 overflow-hidden border-t"
+            style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(6,9,13,0.55)" }}
+        >
+            <div className="flex w-max animate-[tape_38s_linear_infinite] gap-10 px-6 py-2.5">
+                {cells.map((c, i) => (
+                    <span key={i} className="numeric flex items-baseline gap-2 text-[11px]">
+                        <span style={{ color: "rgba(255,255,255,0.55)" }}>{c.symbol}</span>
+                        <span style={{ color: "rgba(255,255,255,0.85)" }}>{c.value}</span>
+                        <span style={{ color: c.up ? "#34d399" : "#fb7185" }}>{c.delta}</span>
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
 }
-
-interface Particle {
-    id: number;
-    left: string;
-    top: string;
-    size: number;
-    delay: string;
-    duration: string;
-    opacity: number;
-}
-
-function makeParticles(n: number): Particle[] {
-    return Array.from({ length: n }, (_, i) => ({
-        id: i,
-        left: `${randomBetween(5, 95)}%`,
-        top: `${randomBetween(5, 95)}%`,
-        size: randomBetween(3, 7),
-        delay: `${randomBetween(0, 8).toFixed(1)}s`,
-        duration: `${randomBetween(6, 14).toFixed(1)}s`,
-        opacity: randomBetween(0.25, 0.6),
-    }));
-}
-
-const FEATURES = ["Deep Research", "Voice Avatar", "Menu AI", "Concierge Chat"] as const;
 
 /* ── Shared backdrop ──────────────────────────────────────────── */
 
 function Backdrop({ children }: PropsWithChildren): JSX.Element {
-    const particles = useMemo(() => makeParticles(12), []);
-
     return (
-        <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
+        <div
+            className="relative flex min-h-screen items-center justify-center overflow-hidden"
+            style={{ background: "#06090d" }}
+        >
             <style>{`
-        @keyframes float-particle {
-          0%, 100% { transform: translateY(0) translateX(0); opacity: var(--p-opacity); }
-          25%      { transform: translateY(-18px) translateX(8px); opacity: calc(var(--p-opacity) * 1.2); }
-          50%      { transform: translateY(-6px) translateX(-10px); opacity: var(--p-opacity); }
-          75%      { transform: translateY(-22px) translateX(5px); opacity: calc(var(--p-opacity) * 0.8); }
-        }
-        @keyframes glow-btn {
-          0%, 100% { box-shadow: 0 0 12px 2px rgba(232, 140, 46, 0.35); }
-          50%      { box-shadow: 0 0 28px 6px rgba(232, 140, 46, 0.55); }
+        @keyframes tape { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-\\[tape_38s_linear_infinite\\] { animation: none !important; }
         }
       `}</style>
 
             <img
-                src="/signin-bg.png"
+                src="/signin-bg.jpg"
                 alt=""
                 aria-hidden
-                className="absolute inset-0 h-full w-full object-cover"
+                className="absolute inset-0 h-full w-full object-cover opacity-70"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
-
-            {particles.map((p) => (
-                <div
-                    key={p.id}
-                    className="pointer-events-none absolute rounded-full bg-amber-200/70"
-                    style={
-                        {
-                            left: p.left,
-                            top: p.top,
-                            width: p.size,
-                            height: p.size,
-                            "--p-opacity": p.opacity,
-                            animationName: "float-particle",
-                            animationDuration: p.duration,
-                            animationDelay: p.delay,
-                            animationTimingFunction: "ease-in-out",
-                            animationIterationCount: "infinite",
-                        } as React.CSSProperties
-                    }
-                />
-            ))}
+            {/* Deep scrim: pushes the photograph back so the card and the
+                brass accent are the only bright elements. */}
+            <div
+                className="absolute inset-0"
+                style={{
+                    background:
+                        "radial-gradient(120% 90% at 50% 35%, rgba(6,9,13,0.35) 0%, rgba(6,9,13,0.82) 55%, rgba(6,9,13,0.96) 100%)",
+                }}
+            />
 
             {children}
+            <MarketTape />
         </div>
     );
 }
@@ -181,17 +173,23 @@ function Backdrop({ children }: PropsWithChildren): JSX.Element {
 function LoadingState(): JSX.Element {
     return (
         <Backdrop>
-            <div className="relative z-10 flex flex-col items-center gap-4 animate-in fade-in duration-700">
+            <div className="animate-fade-in-up relative z-10 flex flex-col items-center gap-5">
                 <div className="relative">
-                    <div className="animate-pulse-ring absolute inset-0 rounded-full bg-amber-400/30" />
+                    <div
+                        className="animate-pulse-ring absolute inset-0 rounded-full"
+                        style={{ background: "rgba(200,162,74,0.25)" }}
+                    />
                     <img
                         src="/agent-icons/AgentCore.svg"
                         alt="AgentCore"
-                        className="relative h-16 w-16 drop-shadow-lg"
+                        className="relative h-14 w-14"
                     />
                 </div>
-                <p className="text-lg font-medium tracking-wide text-white/80">
-                    Initializing&hellip;
+                <p
+                    className="numeric text-[11px] tracking-[0.18em] uppercase"
+                    style={{ color: "rgba(255,255,255,0.5)" }}
+                >
+                    Establishing secure session
                 </p>
             </div>
         </Backdrop>
@@ -254,37 +252,56 @@ function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX
     }
 
     const inputClass =
-        "w-full rounded-xl border border-amber-400/30 bg-white/10 px-4 py-3 text-white placeholder-white/50 outline-none backdrop-blur-sm transition-colors focus:border-amber-400/60 focus:bg-white/15";
+        "w-full rounded-[4px] border px-4 py-3 text-[15px] text-white placeholder-white/35 outline-none transition-colors";
+    const inputStyle: React.CSSProperties = {
+        background: "rgba(255,255,255,0.04)",
+        borderColor: "rgba(255,255,255,0.14)",
+    };
 
     return (
         <Backdrop>
             <div
-                className="relative z-10 mx-4 flex w-full max-w-md flex-col items-center gap-5 rounded-2xl px-8 py-10 animate-in fade-in slide-in-from-bottom-4 duration-700"
+                className="animate-fade-in-up relative z-10 mx-4 flex w-full max-w-[400px] flex-col gap-6 px-9 py-10"
                 style={{
-                    background: "var(--glass-bg)",
-                    backdropFilter: "var(--glass-blur)",
-                    WebkitBackdropFilter: "var(--glass-blur)",
-                    border: "1px solid var(--glass-border)",
-                    boxShadow: "var(--glass-shadow-lg)",
+                    background: "rgba(18,23,31,0.92)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "8px",
+                    boxShadow: "0 30px 90px rgba(0,0,0,0.6)",
                 }}
             >
-                {/* Heading */}
-                <div className="flex flex-col items-center gap-1">
-                    <h1 className="text-3xl font-bold tracking-tight text-white drop-shadow-md">
-                        Ocean View Bistro
-                    </h1>
-                    <p className="flex items-center gap-1.5 text-sm font-medium tracking-wide text-amber-200/90">
-                        <Sparkles className="h-3.5 w-3.5" />
-                        AI Concierge
-                    </p>
+                {/* Wordmark. Hairline above the name reads as a letterhead rule. */}
+                <div className="flex flex-col gap-3">
+                    <div
+                        className="h-[2px] w-10"
+                        style={{ background: "var(--brand-accent, #c8a24a)" }}
+                    />
+                    <div>
+                        <h1
+                            className="font-display text-[34px] leading-none text-white"
+                            style={{ fontFamily: "var(--font-serif, Georgia, serif)" }}
+                        >
+                            {BRAND.legalName}
+                        </h1>
+                        <p
+                            className="numeric mt-2 text-[10.5px] tracking-[0.16em] uppercase"
+                            style={{ color: "rgba(200,162,74,0.9)" }}
+                        >
+                            {BRAND.descriptor}
+                        </p>
+                    </div>
                 </div>
 
-                {/* Feature pills */}
-                <div className="flex flex-wrap justify-center gap-2">
-                    {FEATURES.map((f) => (
+                {/* Capability chips */}
+                <div className="flex flex-wrap gap-1.5">
+                    {SIGN_IN_HIGHLIGHTS.map((f) => (
                         <span
                             key={f}
-                            className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-medium tracking-wide text-amber-100/90"
+                            className="rounded-[3px] px-2 py-1 text-[10.5px] font-medium tracking-wide"
+                            style={{
+                                background: "rgba(255,255,255,0.05)",
+                                border: "1px solid rgba(255,255,255,0.09)",
+                                color: "rgba(255,255,255,0.66)",
+                            }}
                         >
                             {f}
                         </span>
@@ -293,7 +310,15 @@ function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX
 
                 {/* Error message */}
                 {error && (
-                    <div className="w-full rounded-lg border border-red-400/40 bg-red-500/15 px-4 py-2.5 text-sm text-red-200">
+                    <div
+                        role="alert"
+                        className="w-full rounded-[4px] px-4 py-2.5 text-sm"
+                        style={{
+                            background: "rgba(180,41,63,0.14)",
+                            border: "1px solid rgba(251,113,133,0.4)",
+                            color: "#fda4af",
+                        }}
+                    >
                         {error}
                     </div>
                 )}
@@ -312,6 +337,7 @@ function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className={inputClass}
+                            style={inputStyle}
                         />
 
                         <label className="sr-only" htmlFor="password">
@@ -327,17 +353,18 @@ function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className={inputClass}
+                                style={inputStyle}
                             />
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/45 transition-colors hover:text-white/80"
                                 aria-label={showPassword ? "Hide password" : "Show password"}
                             >
                                 {showPassword ? (
-                                    <EyeOff className="h-4.5 w-4.5" />
+                                    <EyeOff className="h-4 w-4" />
                                 ) : (
-                                    <Eye className="h-4.5 w-4.5" />
+                                    <Eye className="h-4 w-4" />
                                 )}
                             </button>
                         </div>
@@ -345,12 +372,8 @@ function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX
                         <button
                             type="submit"
                             disabled={loading}
-                            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-3 text-base font-semibold text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:hover:scale-100"
-                            style={
-                                loading
-                                    ? undefined
-                                    : { animation: "glow-btn 2.5s ease-in-out infinite" }
-                            }
+                            className="mt-1 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[4px] px-6 py-3 text-[15px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-55"
+                            style={{ background: "#c8a24a", color: "#0a0d12" }}
                         >
                             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                             Sign In
@@ -358,8 +381,8 @@ function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX
                     </form>
                 ) : (
                     <form onSubmit={handleNewPassword} className="flex w-full flex-col gap-3">
-                        <p className="text-center text-sm text-amber-200/80">
-                            Please set a new password to continue.
+                        <p className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>
+                            Set a new password to continue.
                         </p>
 
                         <label className="sr-only" htmlFor="newPassword">
@@ -376,17 +399,18 @@ function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 className={inputClass}
+                                style={inputStyle}
                             />
                             <button
                                 type="button"
                                 onClick={() => setShowNewPassword(!showNewPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/45 transition-colors hover:text-white/80"
                                 aria-label={showNewPassword ? "Hide password" : "Show password"}
                             >
                                 {showNewPassword ? (
-                                    <EyeOff className="h-4.5 w-4.5" />
+                                    <EyeOff className="h-4 w-4" />
                                 ) : (
-                                    <Eye className="h-4.5 w-4.5" />
+                                    <Eye className="h-4 w-4" />
                                 )}
                             </button>
                         </div>
@@ -394,36 +418,46 @@ function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX
                         <button
                             type="submit"
                             disabled={loading}
-                            className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-3 text-base font-semibold text-white shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:hover:scale-100"
+                            className="mt-1 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[4px] px-6 py-3 text-[15px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-55"
+                            style={{ background: "#c8a24a", color: "#0a0d12" }}
                         >
                             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Set Password & Continue
+                            Set Password &amp; Continue
                         </button>
                     </form>
                 )}
 
-                {/* Federate sign-in option */}
+                {/* Federated sign-in */}
                 <button
                     type="button"
                     onClick={onFederateSignIn}
-                    className="w-full cursor-pointer rounded-xl border border-amber-400/30 bg-white/5 px-6 py-2.5 text-sm font-medium text-amber-100/80 transition-colors hover:bg-white/10"
+                    className="w-full cursor-pointer rounded-[4px] px-6 py-2.5 text-sm font-medium transition-colors"
+                    style={{
+                        border: "1px solid rgba(255,255,255,0.14)",
+                        color: "rgba(255,255,255,0.72)",
+                        background: "transparent",
+                    }}
                 >
-                    Sign in with SSO
+                    Continue with SSO
                 </button>
 
-                {/* Powered-by footer */}
-                <div className="flex flex-col items-center gap-2">
-                    <div className="flex items-center gap-2 text-xs text-white/60">
-                        <span>Powered by</span>
+                <div className="rule" style={{ background: "rgba(255,255,255,0.08)" }} />
+
+                {/* Footer: platform attribution + synthetic-data disclosure */}
+                <div className="flex flex-col gap-2">
+                    <div
+                        className="flex items-center gap-2 text-[11px]"
+                        style={{ color: "rgba(255,255,255,0.5)" }}
+                    >
                         <img
                             src="/agent-icons/AgentCore.svg"
                             alt=""
-                            className="h-4 w-4 opacity-70"
+                            className="h-3.5 w-3.5 opacity-70"
                         />
-                        <span className="font-medium">Amazon Bedrock AgentCore</span>
+                        <span>Built on Amazon Bedrock AgentCore</span>
                     </div>
-                    <p className="text-[10px] italic text-white/40">
-                        Background generated with Amazon Nova Canvas
+                    <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.32)" }}>
+                        {BRAND.disclosure} · imagery generated with Amazon Nova Canvas
                     </p>
                 </div>
             </div>

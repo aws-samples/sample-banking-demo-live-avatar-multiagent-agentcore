@@ -1,7 +1,7 @@
 [
     {
         "name": "website_generator",
-        "description": "Generate or update a static website on S3 for ANY topic. Returns a presigned URL to view the site. Layouts: 'article' (research reports, long-form content), 'landing' (product/topic pages with hero + sections), 'menu' (restaurant menus only — do NOT use for non-restaurant content). Three modes: 'create' builds from structured content. 'update' with 'html' uploads agent-generated HTML. 'update' with 'edit_instructions' fetches the current site and applies changes via AI.",
+        "description": "Generate or update a static website on S3 for ANY topic. Returns a presigned URL to view the site. Layouts: 'article' (research reports, long-form content), 'landing' (product/topic pages with hero + sections), 'menu' (a card-grid catalog layout with prices and badges, used by the Services Catalog pipeline). For ad-hoc content prefer 'article' or 'landing'. Three modes: 'create' builds from structured content. 'update' with 'html' uploads agent-generated HTML. 'update' with 'edit_instructions' fetches the current site and applies changes via AI.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -15,7 +15,7 @@
                     "type": "string",
                     "enum": ["article", "landing", "menu"],
                     "default": "article",
-                    "description": "Output layout. 'article' = research report / long-form (default for research topics). 'landing' = hero + feature sections. 'menu' = restaurant menu (ONLY for food/restaurant content). Pick 'article' or 'landing' for any non-restaurant topic."
+                    "description": "Output layout. 'article' = research report / long-form (default for research topics). 'landing' = hero + feature sections (use for bank product overviews). 'menu' = card-grid catalog with prices/badges (used by the Services Catalog pipeline). For ad-hoc content prefer 'article' or 'landing'."
                 },
                 "title": {
                     "type": "string",
@@ -23,7 +23,7 @@
                 },
                 "content": {
                     "type": "object",
-                    "description": "Generic content for 'article' or 'landing' layouts. Use this for any non-restaurant topic.",
+                    "description": "Generic content for 'article' or 'landing' layouts. Use this for reports, product overviews, and topic pages.",
                     "properties": {
                         "subtitle": {
                             "type": "string",
@@ -61,7 +61,7 @@
                 },
                 "menu": {
                     "type": "object",
-                    "description": "RESTAURANT-ONLY menu content with sections and items. Use only when layout='menu'.",
+                    "description": "Card-grid catalog content with sections and items (name, description, price, badges). Use only when layout='menu'. Used by the Services Catalog pipeline to render product cards.",
                     "properties": {
                         "title": { "type": "string" },
                         "sections": {
@@ -108,13 +108,13 @@
                 },
                 "images": {
                     "type": "array",
-                    "description": "Array of dish images to add to the website (for add_images mode). Each item has 'name' (dish name to match) and 's3_key' or 'image_url'.",
+                    "description": "Array of images to add to the website (for add_images mode). Each item has 'name' (item/section name to match) and 's3_key' or 'image_url'.",
                     "items": {
                         "type": "object",
                         "properties": {
                             "name": {
                                 "type": "string",
-                                "description": "Dish name to match in the website"
+                                "description": "Item or section name to match in the website"
                             },
                             "s3_key": { "type": "string", "description": "S3 key of the image" },
                             "image_url": {

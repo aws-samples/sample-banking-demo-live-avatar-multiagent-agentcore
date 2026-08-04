@@ -37,24 +37,23 @@ const STEPS = [
 
 const EXAMPLE_QUESTIONS = [
     {
-        title: "San Francisco Dining",
+        title: "High-Yield Savings",
         question:
-            "What are the top farm-to-table restaurant trends in San Francisco's Mission District?",
+            "What are the top high-yield savings account trends among newly chartered US banks?",
     },
     {
-        title: "LA Food Scene",
+        title: "Wealth Management",
         question:
-            "Analyze the competitive landscape for upscale seafood restaurants in Los Angeles",
+            "Analyze the competitive landscape for private client wealth management in Dallas, Texas",
     },
     {
-        title: "NYC Restaurant Tech",
+        title: "Deposit Strategy",
         question:
-            "What technology solutions are NYC restaurants using to improve operations and reduce waste?",
+            "What technology solutions are retail banks using to grow deposits and improve client onboarding?",
     },
     {
-        title: "Seattle & Austin",
-        question:
-            "Compare sustainable sourcing practices between Seattle and Austin restaurant markets",
+        title: "Rates & Markets",
+        question: "Compare certificate of deposit rate strategies across regional US banks",
     },
 ];
 
@@ -64,10 +63,10 @@ export function WelcomeScreen({ onExampleClick }: WelcomeScreenProps) {
             <SpaceBetween size="xl" direction="vertical" alignItems="center">
                 <div className="text-center">
                     <Box variant="h1" fontSize="heading-xl" fontWeight="bold">
-                        Ocean View Bistro
+                        Trinity Reserve Bank
                     </Box>
                     <Box variant="p" color="text-body-secondary" fontSize="heading-s">
-                        Where Coastal Cuisine Meets Innovation
+                        Retail · Wealth · Markets
                     </Box>
                 </div>
 

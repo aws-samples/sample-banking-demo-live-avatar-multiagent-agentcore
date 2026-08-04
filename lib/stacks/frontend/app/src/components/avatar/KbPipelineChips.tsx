@@ -10,19 +10,19 @@ interface ChipDef {
 
 const CHIPS: readonly ChipDef[] = [
     {
-        id: "bistro_research",
-        label: "Bistro Research",
-        hint: "Bistro Deep Dive reports",
+        id: "strategy_research",
+        label: "Market Strategy",
+        hint: "Market Strategy reports",
     },
     {
-        id: "open_research",
-        label: "Open Research",
-        hint: "Open Research / Research Studio reports",
+        id: "market_research",
+        label: "Market Intelligence",
+        hint: "Market Intelligence / Research Studio reports",
     },
     {
-        id: "menu",
-        label: "Menu",
-        hint: "Menu Builder menus",
+        id: "services",
+        label: "Services",
+        hint: "Services Catalog documents",
     },
 ];
 
@@ -58,7 +58,7 @@ export default function KbPipelineChips({
             return;
         }
         selectAll();
-        onChange?.(["bistro_research", "open_research", "menu"]);
+        onChange?.(["strategy_research", "market_research", "services"]);
     };
 
     const handleChipClick = (chipId: KbPipeline): void => {

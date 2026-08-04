@@ -3,7 +3,7 @@ import Header from "@cloudscape-design/components/header";
 import Box from "@cloudscape-design/components/box";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Button from "@cloudscape-design/components/button";
-import { RESTAURANT } from "./restaurant-theme";
+import { BRAND } from "@/config/brand";
 
 interface MenuRecommendationCardProps {
     name: string;
@@ -52,7 +52,7 @@ export default function MenuRecommendationCard({
                         </SpaceBetween>
                     }
                 >
-                    <span style={{ color: RESTAURANT.primaryColor }}>{name}</span>
+                    <span style={{ color: "var(--brand-accent)" }}>{name}</span>
                 </Header>
             }
         >
@@ -87,7 +87,7 @@ export default function MenuRecommendationCard({
                     </div>
                 )}
                 <Box variant="p" color="text-body-secondary" fontSize="body-s">
-                    {RESTAURANT.name}
+                    {BRAND.legalName}
                 </Box>
             </SpaceBetween>
         </Container>

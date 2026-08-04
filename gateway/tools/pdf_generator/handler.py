@@ -53,7 +53,7 @@ def _add_paragraphs(story, text, style):
         story.append(Paragraph(_safe_text(p), style))
 
 
-def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "bistro_research") -> str:
+def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "strategy_research") -> str:
     """Generate a comprehensive PDF report and upload to S3, returning a presigned URL."""
     from reportlab.lib.enums import TA_CENTER
     from reportlab.platypus import PageBreak
@@ -709,8 +709,8 @@ def _fetch_image(s3_key: str = "", image_url: str = "") -> BytesIO | None:
     return None
 
 
-def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "", pipeline: str = "menu") -> str:
-    """Generate a polished restaurant menu PDF with dish photos and upload to S3."""
+def _generate_services_pdf(title: str, services_data: dict, user_id: str = "", pipeline: str = "services") -> str:
+    """Generate a polished services catalog PDF with product imagery and upload to S3."""
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT
     from reportlab.platypus import HRFlowable
 
@@ -737,7 +737,7 @@ def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "", pipeline:
     )
 
     styles = getSampleStyleSheet()
-    menu_title_style = ParagraphStyle(
+    services_title_style = ParagraphStyle(
         "MenuTitle",
         parent=styles["Title"],
         fontName="Helvetica-Bold",
@@ -810,8 +810,8 @@ def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "", pipeline:
     story = []
 
     # ── Decorative header ──
-    menu_title = menu_data.get("title", title)
-    story.append(Paragraph(menu_title, menu_title_style))
+    services_title = services_data.get("title", title)
+    story.append(Paragraph(services_title, services_title_style))
     story.append(
         HRFlowable(
             width="40%",
@@ -826,7 +826,7 @@ def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "", pipeline:
     story.append(Spacer(1, 16))
 
     # ── Sections ──
-    sections = menu_data.get("sections", [])
+    sections = services_data.get("sections", [])
     for section in sections:
         section_name = section.get("name", "")
         if section_name:
@@ -854,7 +854,7 @@ def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "", pipeline:
 
         items = section.get("items", [])
         for item in items:
-            item_name = item.get("name", "Unknown Dish")
+            item_name = item.get("name", "Unnamed Product")
             description = item.get("description", "")
             price = item.get("price", "")
             dietary = item.get("dietary", [])
@@ -935,7 +935,7 @@ def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "", pipeline:
     )
     story.append(
         Paragraph(
-            "Ocean View Bistro — Where Coastal Cuisine Meets Innovation",
+            "Trinity Reserve Bank — Retail · Wealth · Markets",
             footer_style,
         )
     )
@@ -947,7 +947,7 @@ def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "", pipeline:
 
     # Upload to S3
     report_id = str(uuid.uuid4())[:8]
-    safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in menu_title)[:50].strip().replace(" ", "-")
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in services_title)[:50].strip().replace(" ", "-")
     s3_key = f"menus/{safe_title}-{report_id}.pdf"
 
     s3_client.put_object(
@@ -979,8 +979,8 @@ def _generate_menu_pdf(title: str, menu_data: dict, user_id: str = "", pipeline:
             "url": presigned_url,
             "s3_key": s3_key,
             "bucket": REPORTS_BUCKET,
-            "title": menu_title,
-            "format": "menu",
+            "title": services_title,
+            "format": "services",
         }
     )
 
@@ -1010,21 +1010,21 @@ def handler(event, context):
 
             # Validate pipeline. Defaults:
             #   fmt=menu     -> "menu"
-            #   fmt=research -> "bistro_research" (backward compatible: legacy callers
+            #   fmt=research -> "strategy_research" (backward compatible: legacy callers
             #                   for the Bistro Deep Dive pipeline need no changes).
-            # Callers on the Open Research pipeline must pass pipeline="open_research".
-            allowed_pipelines = {"bistro_research", "open_research", "menu"}
+            # Callers on the Open Research pipeline must pass pipeline="market_research".
+            allowed_pipelines = {"strategy_research", "market_research", "services"}
             pipeline = event.get("pipeline")
             if pipeline not in allowed_pipelines:
                 if pipeline:
                     logger.warning("pdf_generator: unknown pipeline %r, falling back to default", pipeline)
-                pipeline = "menu" if fmt == "menu" else "bistro_research"
+                pipeline = "services" if fmt == "services" else "strategy_research"
             logger.info(f"pdf_generator: fmt={fmt} pipeline={pipeline} user_id={'yes' if user_id else 'no'}")
 
-            if fmt == "menu":
-                menu_title = event.get("title", "Menu")
-                menu_data = event.get("menu", {})
-                result = _generate_menu_pdf(menu_title, menu_data, user_id=user_id, pipeline=pipeline)
+            if fmt == "services":
+                services_title = event.get("title", "Menu")
+                services_data = event.get("services", {})
+                result = _generate_services_pdf(services_title, services_data, user_id=user_id, pipeline=pipeline)
             else:
                 topic = event.get("topic", "Report")
                 report = event.get("report", {})

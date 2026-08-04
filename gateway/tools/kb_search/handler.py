@@ -50,7 +50,7 @@ def _presign_s3_uri(s3_uri: str, page: int | None = None) -> str | None:
 
 
 # Valid pipeline tags — must stay in sync with kb_ingest / pdf_generator / orchestrator.
-VALID_PIPELINES = {"bistro_research", "open_research", "menu"}
+VALID_PIPELINES = {"strategy_research", "market_research", "services"}
 MAX_PIPELINES = 10
 
 
@@ -136,8 +136,8 @@ def _retrieve_and_generate(
 
     When user_id is provided, applies server-side Bedrock filtering to scope
     results to that user's generated research. When pipelines is provided,
-    further scopes results to the given logical pipeline(s) (bistro_research,
-    open_research, menu). Untagged shared documents are returned regardless
+    further scopes results to the given logical pipeline(s) (strategy_research,
+    market_research, menu). Untagged shared documents are returned regardless
     because S3 Vectors only filters on documents that actually have the
     metadata key present.
     """
@@ -335,13 +335,13 @@ if __name__ == "__main__":
     test_cases = [
         ("no filter", "", []),
         ("user only", "user-abc", []),
-        ("single pipeline", "", ["menu"]),
-        ("multi pipeline", "", ["bistro_research", "open_research"]),
-        ("both user + single pipeline", "user-abc", ["menu"]),
-        ("both user + multi pipeline", "user-abc", ["bistro_research", "menu"]),
-        ("unknown pipeline dropped", "user-abc", ["bistro_research", "bogus"]),
+        ("single pipeline", "", ["services"]),
+        ("multi pipeline", "", ["strategy_research", "market_research"]),
+        ("both user + single pipeline", "user-abc", ["services"]),
+        ("both user + multi pipeline", "user-abc", ["strategy_research", "services"]),
+        ("unknown pipeline dropped", "user-abc", ["strategy_research", "bogus"]),
         ("bogus pipelines type", "user-abc", "not-a-list"),
-        ("duplicate pipelines deduped", "", ["menu", "menu", "open_research"]),
+        ("duplicate pipelines deduped", "", ["services", "services", "market_research"]),
     ]
     for label, uid, pipes in test_cases:
         cleaned = _sanitize_pipelines(pipes) if isinstance(pipes, list) or pipes is None else _sanitize_pipelines(pipes)

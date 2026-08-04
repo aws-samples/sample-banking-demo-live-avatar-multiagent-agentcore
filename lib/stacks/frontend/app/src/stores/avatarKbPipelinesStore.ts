@@ -26,7 +26,7 @@ interface AvatarKbPipelinesState {
  * Avatar KB pipeline multi-select store.
  *
  * The backend treats empty/unspecified as "search every view", so `pipelines=[]`
- * and `pipelines=[bistro_research, open_research, menu]` produce the same search
+ * and `pipelines=[strategy_research, market_research, services]` produce the same search
  * scope. The store preserves whichever one the user chose explicitly so the UI
  * can show the correct chip state.
  */

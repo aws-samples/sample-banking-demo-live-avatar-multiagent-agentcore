@@ -6,12 +6,12 @@ export function WebsiteWriterResultCard({ data }: { data: WebsiteWriterResult })
             <div className="flex items-center gap-3 mb-3">
                 <span className="text-2xl">🌐</span>
                 <h3 className="text-lg font-semibold text-white">
-                    {data.title || "Restaurant Website"}
+                    {data.title || "Banking Website"}
                 </h3>
             </div>
             {data.sections && data.sections.length > 0 && (
                 <p className="text-sm text-gray-400 mb-4">
-                    {data.sections.length} sections · {data.item_count ?? "—"} dishes
+                    {data.sections.length} sections · {data.item_count ?? "—"} products
                 </p>
             )}
             <div className="flex flex-wrap gap-3">

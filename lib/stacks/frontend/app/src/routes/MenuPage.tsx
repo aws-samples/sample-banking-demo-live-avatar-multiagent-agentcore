@@ -27,8 +27,8 @@ const MENU_AGENT_TO_PHASE: Record<string, PipelinePhase> = {
 };
 
 const MENU_DESCRIPTIONS: Record<string, string> = {
-    user: "Menu request",
-    menu_designer: "Design menu",
+    user: "Catalog request",
+    menu_designer: "Design catalog",
     menu_pdf_writer: "Generate PDF",
 };
 
@@ -41,7 +41,7 @@ const MENU_FLOW_CONFIG: FlowConfig = {
 
 const MENU_PROGRESS_CONFIG: ProgressBarConfig = {
     phases: [
-        { phase: "design", label: "Design", description: "Designing menu" },
+        { phase: "design", label: "Design", description: "Designing catalog" },
         { phase: "export", label: "Export", description: "Generating PDF" },
     ],
     pipeline: MENU_PIPELINE,
@@ -81,7 +81,7 @@ function MenuPipelineSidebar({
                 style={{ borderBottom: "1px solid var(--glass-border)" }}
             >
                 <span className="text-sm font-medium" style={{ color: "var(--app-text)" }}>
-                    Menu Pipeline
+                    Catalog Pipeline
                 </span>
                 <Button
                     variant="icon"
@@ -142,7 +142,7 @@ export default function MenuPage(): JSX.Element {
             <div className="h-full w-full min-w-0">
                 <ChatInterface
                     mode="menu"
-                    title="Menu Builder"
+                    title="Services Catalog"
                     renderWelcome={(onExampleClick) => (
                         <MenuWelcomeScreen onExampleClick={onExampleClick} />
                     )}

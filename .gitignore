@@ -1,6 +1,9 @@
 .DS_STORE
 .vscode
 
+# Word/Office lock files
+~$*
+
 .venv
 node_modules
 
@@ -22,3 +25,12 @@ tools/generative-architecture/gartner_appdev_2026_architecture.png
 /architecture.*
 /architecture-diagram.*
 /export.zip
+
+# Gartner-RESTRICTED reference material — never commit.
+# This repo is built for external export (see tools/export.ts), so these stay local.
+docs/Welcome Packet for Magic Quadrant.pdf
+docs/Magic-Quadrant-and-Critical-Capabilities.xlsx
+docs/Vendor Demonstration Guidelines*.pdf
+
+# Local experiment sandbox (TalkingHead avatar spike) — never committed.
+.sandbox/

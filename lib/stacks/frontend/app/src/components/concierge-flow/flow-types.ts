@@ -33,7 +33,7 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
     kb_search: {
         label: "KB Search",
         description:
-            "Hybrid semantic + keyword search over the Bedrock Knowledge Base (S3 Vectors, Nova Multimodal Embeddings) to retrieve grounded context from prior research reports and menus.",
+            "Hybrid semantic + keyword search over the Bedrock Knowledge Base (S3 Vectors, Nova Multimodal Embeddings) to retrieve grounded context from prior research reports and product catalogs.",
     },
     web_search: {
         label: "Web Search",
@@ -48,7 +48,7 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
     nova_canvas_generate: {
         label: "Canvas Generate",
         description:
-            "Generates dish or design imagery via Amazon Nova Canvas. Images are stored in S3 with session-scoped history.",
+            "Generates product or design imagery via Amazon Nova Canvas. Images are stored in S3 with session-scoped history.",
     },
     nova_canvas_edit: {
         label: "Canvas Edit",
@@ -89,12 +89,12 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
     retrieve_user_profile: {
         label: "User Profile",
         description:
-            "Looks up the authenticated customer profile from DynamoDB to personalize the response (preferences, past orders).",
+            "Looks up the authenticated customer profile from DynamoDB to personalize the response (preferences, account history).",
     },
     place_order: {
-        label: "Place Order",
+        label: "Open Account",
         description:
-            "Places a restaurant order on behalf of the customer and records it in DynamoDB.",
+            "Opens a bank account on behalf of the customer after KYC verification and records it in DynamoDB.",
     },
     data_sources: {
         label: "Data Sources",
@@ -105,18 +105,18 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
         label: "Extract PDF Images",
         icon: "/icons/agentcore/code-interpreter.png",
         description:
-            "Extracts embedded dish images from a menu PDF using an AgentCore Code Interpreter sandboxed Python session. Uploads images to S3 for reuse on the generated website.",
+            "Extracts embedded product images from a catalog PDF using an AgentCore Code Interpreter sandboxed Python session. Uploads images to S3 for reuse on the generated website.",
     },
     website_generator: {
         label: "Website Generator",
         description:
-            "Generates or updates a live menu website (HTML/CSS) from the structured menu JSON and extracted dish images, hosted in S3 with a presigned URL.",
+            "Generates or updates a live product website (HTML/CSS) from the structured catalog JSON and extracted product images, hosted in S3 with a presigned URL.",
     },
     browser_start: {
         label: "Browser",
         icon: "/icons/agentcore/browser-tool.png",
         description:
-            "Starts an AgentCore cloud browser session (sandboxed Chrome in a Firecracker microVM) and streams a live DCV view into the chat so the user watches the agent work. Followed by browser_navigate / click / type / get_text to drive interactions like booking a reservation.",
+            "Starts an AgentCore cloud browser session (sandboxed Chrome in a Firecracker microVM) and streams a live DCV view into the chat so the user watches the agent work. Followed by browser_navigate / click / type / get_text to drive interactions like submitting an account application.",
     },
     browser_navigate: {
         label: "Browser Navigate",
@@ -206,7 +206,7 @@ export const CORE_NODE_META: Record<
     },
     user: {
         label: "User",
-        rawName: "concierge request",
+        rawName: "client request",
         description: "The end user's message that initiates an orchestration turn.",
     },
 };

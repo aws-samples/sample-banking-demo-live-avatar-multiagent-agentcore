@@ -69,7 +69,7 @@ export default function ResearchPage(): JSX.Element {
     return (
         <div className="flex h-full">
             <div className="flex-1 min-w-0">
-                <ChatInterface title="Bistro Deep Dive" />
+                <ChatInterface title="Market Strategy" />
             </div>
             {showSidebar && (
                 <ResearchSidebar

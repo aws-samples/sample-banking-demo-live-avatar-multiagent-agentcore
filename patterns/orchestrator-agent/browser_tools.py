@@ -178,7 +178,7 @@ def browser_start() -> str:
         {
             "message": (
                 "A new browser microVM starts for each chat turn. "
-                "Complete multi-step flows (like booking a reservation) in a single message — "
+                "Complete multi-step flows (like an account application) in a single message — "
                 "the session terminates when this turn ends."
             ),
         },

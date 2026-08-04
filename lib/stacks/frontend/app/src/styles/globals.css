@@ -2,107 +2,221 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-:root {
-    --app-bg: #ffffff;
-    --app-bg-alt: #fafafa;
-    --app-border: rgba(0, 0, 0, 0.08);
-    --app-text: #1a1a1a;
-    --app-text-secondary: #545b64;
-    --app-user-bubble: #1f2937;
-    --app-user-bubble-text: #ffffff;
-    --app-input-bg: rgba(255, 255, 255, 0.8);
-    --app-tab-active-bg: #1f2937;
-    --app-tab-active-text: #ffffff;
-    --app-tab-inactive-text: #4b5563;
-    --app-tab-hover-bg: #f3f4f6;
+/* Self-hosted variable fonts. Bundled through Vite — no external CDN, so the
+   demo stays self-contained per the project guidelines. */
+@import "@fontsource-variable/inter-tight/index.css";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
 
-    /* Glassmorphic tokens */
-    --glass-bg: rgba(255, 255, 255, 0.65);
-    --glass-bg-strong: rgba(255, 255, 255, 0.85);
-    --glass-blur: blur(16px);
-    --glass-border: rgba(255, 255, 255, 0.4);
-    --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
-    --glass-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
-    --glass-shadow-input: 0 2px 12px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
-    --card-shadow: 0 2px 16px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.03);
-    --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.05);
+/* ─────────────────────────────────────────────────────────────────
+   Trinity Reserve — institutional palette.
+
+   Dark-first: the demo is presented on a projector and recorded, where a
+   dark ground reads better and keeps generated imagery and market data as
+   the brightest things on screen. Light mode is a supported inversion, not
+   the primary target.
+
+   Accent is a single burnished brass. Semantic up/down are reserved
+   exclusively for market movement so they never compete with the accent.
+   ───────────────────────────────────────────────────────────────── */
+
+:root {
+    /* Surfaces — light mode */
+    --app-bg: #f7f7f5;
+    --app-bg-alt: #ffffff;
+    --app-surface: #ffffff;
+    --app-surface-raised: #ffffff;
+    --app-border: rgba(16, 22, 30, 0.1);
+    --app-border-strong: rgba(16, 22, 30, 0.18);
+
+    /* Type */
+    --app-text: #10161e;
+    --app-text-secondary: #55606e;
+    --app-text-muted: #8b95a3;
+
+    /* Brand */
+    --brand-accent: #9a7524;
+    --brand-accent-hover: #7e5f1c;
+    --brand-accent-contrast: #ffffff;
+    --brand-accent-soft: rgba(154, 117, 36, 0.1);
+    --brand-accent-ring: rgba(154, 117, 36, 0.3);
+
+    /* Market semantics — never used for non-financial UI */
+    --market-up: #0f7a52;
+    --market-down: #b4293f;
+
+    /* Navigation */
+    --app-nav-bg: #ffffff;
+    --app-nav-item-text: #55606e;
+    --app-nav-item-hover-bg: rgba(16, 22, 30, 0.04);
+    --app-nav-item-active-bg: var(--brand-accent-soft);
+    --app-nav-item-active-text: #10161e;
+
+    /* Chat bubbles */
+    --app-user-bubble: #10161e;
+    --app-user-bubble-text: #ffffff;
+    --app-input-bg: #ffffff;
+
+    /* Elevation — flat and restrained; institutional, not playful */
+    --card-shadow: 0 1px 2px rgba(16, 22, 30, 0.06), 0 1px 1px rgba(16, 22, 30, 0.04);
+    --card-shadow-hover: 0 4px 16px rgba(16, 22, 30, 0.1);
+    --card-radius: 6px;
+
+    /* Retained for components that still reference the previous tokens.
+       Deliberately no longer blurred — kept as flat surfaces. */
+    --glass-bg: var(--app-surface);
+    --glass-bg-strong: var(--app-surface-raised);
+    --glass-blur: none;
+    --glass-border: var(--app-border);
+    --glass-shadow: var(--card-shadow);
+    --glass-shadow-lg: var(--card-shadow-hover);
+    --glass-shadow-input: 0 0 0 1px var(--app-border);
+    --app-tab-active-bg: var(--app-nav-item-active-bg);
+    --app-tab-active-text: var(--app-nav-item-active-text);
+    --app-tab-inactive-text: var(--app-nav-item-text);
+    --app-tab-hover-bg: var(--app-nav-item-hover-bg);
 }
 
 .awsui-dark-mode {
-    --app-bg: #0f1b2d;
-    --app-bg-alt: #192534;
+    /* Surfaces — dark mode (primary) */
+    --app-bg: #0a0d12;
+    --app-bg-alt: #0f1319;
+    --app-surface: #12171f;
+    --app-surface-raised: #171d26;
     --app-border: rgba(255, 255, 255, 0.08);
-    --app-text: #d1d5db;
-    --app-text-secondary: #9ca3af;
-    --app-user-bubble: #354150;
-    --app-user-bubble-text: #e5e7eb;
-    --app-input-bg: rgba(25, 37, 52, 0.8);
-    --app-tab-active-bg: #01a88d;
-    --app-tab-active-text: #ffffff;
-    --app-tab-inactive-text: #9ca3af;
-    --app-tab-hover-bg: #232f3e;
+    --app-border-strong: rgba(255, 255, 255, 0.16);
 
-    /* Glassmorphic tokens (dark) */
-    --glass-bg: rgba(15, 27, 45, 0.7);
-    --glass-bg-strong: rgba(25, 37, 52, 0.85);
-    --glass-blur: blur(16px);
-    --glass-border: rgba(255, 255, 255, 0.06);
-    --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), 0 1px 4px rgba(0, 0, 0, 0.15);
-    --glass-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
-    --glass-shadow-input: 0 2px 12px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.04);
-    --card-shadow: 0 2px 16px rgba(0, 0, 0, 0.2), 0 1px 4px rgba(0, 0, 0, 0.12);
-    --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.18);
+    --app-text: #e8eaed;
+    --app-text-secondary: #9aa4b2;
+    --app-text-muted: #6b7480;
+
+    --brand-accent: #c8a24a;
+    --brand-accent-hover: #dcb75f;
+    --brand-accent-contrast: #0a0d12;
+    --brand-accent-soft: rgba(200, 162, 74, 0.12);
+    --brand-accent-ring: rgba(200, 162, 74, 0.35);
+
+    --market-up: #34d399;
+    --market-down: #fb7185;
+
+    --app-nav-bg: #0f1319;
+    --app-nav-item-text: #9aa4b2;
+    --app-nav-item-hover-bg: rgba(255, 255, 255, 0.04);
+    --app-nav-item-active-bg: var(--brand-accent-soft);
+    --app-nav-item-active-text: #f3f0e8;
+
+    --app-user-bubble: #1e2732;
+    --app-user-bubble-text: #e8eaed;
+    --app-input-bg: #12171f;
+
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --card-shadow-hover: 0 8px 28px rgba(0, 0, 0, 0.5);
+
+    --glass-bg: var(--app-surface);
+    --glass-bg-strong: var(--app-surface-raised);
+    --glass-blur: none;
+    --glass-border: var(--app-border);
+    --glass-shadow: var(--card-shadow);
+    --glass-shadow-lg: var(--card-shadow-hover);
+    --glass-shadow-input: 0 0 0 1px var(--app-border);
 }
 
 @theme inline {
-    --color-brand-dark: hsl(197, 37%, 24%);
-    --color-brand-teal: hsl(173, 58%, 39%);
-    --color-brand-lime: hsl(43, 74%, 66%);
-    --color-brand-yellow: hsl(27, 87%, 67%);
-    --color-brand-orange: hsl(12, 76%, 61%);
+    --font-sans: "Inter Tight Variable", ui-sans-serif, system-ui, sans-serif;
+    --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+    --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, monospace;
+
+    --color-surface: var(--app-surface);
+    --color-surface-raised: var(--app-surface-raised);
+    --color-ink: var(--app-text);
+    --color-ink-muted: var(--app-text-secondary);
+    --color-accent: var(--brand-accent);
+    --color-market-up: var(--market-up);
+    --color-market-down: var(--market-down);
 }
 
-@keyframes fade-in-up {
-    0% {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
+/* ── Base typography ──────────────────────────────────────────── */
+
+html,
+body {
+    background: var(--app-bg);
+    color: var(--app-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
-.animate-fade-in-up {
-    animation: fade-in-up 2s ease-out;
+/* Editorial serif for display headings only. Body copy stays sans. */
+.font-display {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.015em;
 }
 
-@keyframes pulse-ring {
-    0% {
-        transform: scale(0.8);
-        opacity: 1;
-    }
-    100% {
-        transform: scale(1.6);
-        opacity: 0;
-    }
+/* Tabular figures so currency and percentages don't jitter as they stream in. */
+.numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
 }
 
-.animate-pulse-ring {
-    animation: pulse-ring 1.2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+.text-market-up {
+    color: var(--market-up);
+}
+.text-market-down {
+    color: var(--market-down);
 }
 
-/* ── Glassmorphic Cloudscape overrides ─────────────────────────── */
+/* ── Surfaces ─────────────────────────────────────────────────── */
 
-/* Elevate all Cloudscape Containers with floating shadow */
+.panel {
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.panel-raised {
+    background: var(--app-surface-raised);
+    border: 1px solid var(--app-border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow-hover);
+}
+
+/* Retained utility names so existing components keep working after the
+   restyle. They now resolve to flat surfaces rather than blurred glass. */
+.glass-panel {
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    box-shadow: var(--card-shadow);
+}
+
+.glass-panel-strong {
+    background: var(--app-surface-raised);
+    border: 1px solid var(--app-border);
+    box-shadow: var(--card-shadow-hover);
+}
+
+/* Hairline rule used to separate dense data sections. */
+.rule {
+    height: 1px;
+    background: var(--app-border);
+}
+
+/* ── Cloudscape reconciliation ────────────────────────────────────
+   Cloudscape ships its own radii and shadows. These overrides align its
+   containers with the flatter institutional treatment above. Scoped to
+   Cloudscape's generated class prefixes, which is the only hook it exposes.
+   ─────────────────────────────────────────────────────────────── */
+
 [class*="awsui_root_"][class*="awsui_variant-default_"],
-[class*="awsui_root_"][class*="awsui_variant-stacked_"] {
+[class*="awsui_root_"][class*="awsui_variant-stacked_"],
+[class*="awsui_root_"][class*="awsui_variant-container_"] {
+    border-radius: var(--card-radius) !important;
+    border: 1px solid var(--app-border) !important;
     box-shadow: var(--card-shadow) !important;
-    border: 1px solid var(--glass-border) !important;
-    border-radius: 12px !important;
-    transition:
-        box-shadow 0.2s ease,
-        transform 0.2s ease;
+    transition: box-shadow 0.15s ease;
 }
 
 [class*="awsui_root_"][class*="awsui_variant-default_"]:hover,
@@ -110,37 +224,72 @@
     box-shadow: var(--card-shadow-hover) !important;
 }
 
-/* Expandable sections inside containers keep softer edges */
-[class*="awsui_root_"][class*="awsui_variant-container_"] {
-    box-shadow: var(--card-shadow) !important;
-    border-radius: 12px !important;
-}
-
-/* Glass panel utility */
-.glass-panel {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--glass-shadow);
-}
-
-.glass-panel-strong {
-    background: var(--glass-bg-strong);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--glass-shadow-lg);
-}
-
-/* Vibrant header gradient (AWS dark navy → teal) */
+/* Flat navy header — replaces the previous navy → teal gradient. */
 [class*="awsui_header_"][class*="awsui_visual-context_top-navigation"] {
-    background: linear-gradient(135deg, #232f3e 0%, #1a4b6e 50%, #01a88d 100%) !important;
+    background: var(--app-nav-bg) !important;
+    border-bottom: 1px solid var(--app-border) !important;
 }
 
-/* Concierge flow — animated dashed edge */
+/* ── Motion ───────────────────────────────────────────────────────
+   Restrained on purpose: entrances only, no looping ambient animation.
+   Long-running agent work is the one exception, where a pulse communicates
+   that the system is still working.
+   ─────────────────────────────────────────────────────────────── */
+
+@keyframes fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in-up {
+    animation: fade-in-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.9);
+        opacity: 0.7;
+    }
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+.animate-pulse-ring {
+    animation: pulse-ring 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+/* Live-activity shimmer for streaming agent phases. */
+@keyframes ticker-sweep {
+    from {
+        background-position: -160% 0;
+    }
+    to {
+        background-position: 260% 0;
+    }
+}
+
+.animate-ticker {
+    background-image: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--brand-accent-soft) 45%,
+        transparent 90%
+    );
+    background-size: 200% 100%;
+    animation: ticker-sweep 2.2s linear infinite;
+}
+
+/* Concierge flow — animated dashed edge (unchanged behaviour, retimed). */
 .concierge-edge-flow {
-    animation: concierge-dash-flow 0.8s linear infinite;
+    animation: concierge-dash-flow 0.9s linear infinite;
 }
 @keyframes concierge-dash-flow {
     to {
@@ -150,14 +299,25 @@
 
 .concierge-flow-toggle-pulse button,
 .concierge-flow-toggle-pulse [class*="awsui_button"] {
-    animation: concierge-toggle-pulse 1.6s ease-in-out infinite;
+    animation: concierge-toggle-pulse 1.8s ease-in-out infinite;
 }
 @keyframes concierge-toggle-pulse {
     0%,
     100% {
-        box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
+        box-shadow: 0 0 0 0 var(--brand-accent-ring);
     }
     50% {
-        box-shadow: 0 0 0 6px rgba(251, 191, 36, 0);
+        box-shadow: 0 0 0 6px transparent;
+    }
+}
+
+/* Respect reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
     }
 }

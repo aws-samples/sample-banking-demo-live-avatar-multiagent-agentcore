@@ -1,7 +1,7 @@
 [
     {
         "name": "extract_pdf_images",
-        "description": "Extract dish images from a menu PDF using AgentCore Code Interpreter. Takes the PDF's S3 key and the menu JSON (for dish name mapping). Returns an array of {name, s3_key} for each extracted image, ready to pass to website_generator add_images mode.",
+        "description": "Extract embedded images from a generated PDF using AgentCore Code Interpreter. Takes the PDF's S3 key and the document JSON (for item name mapping). Returns an array of {name, s3_key} for each extracted image, ready to pass to website_generator add_images mode.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -11,7 +11,7 @@
                 },
                 "menu": {
                     "type": "object",
-                    "description": "Menu JSON with sections and items — used to map extracted images to dish names by order",
+                    "description": "Document JSON with sections and items — used to map extracted images to item names by order",
                     "properties": {
                         "sections": {
                             "type": "array",
