@@ -22,6 +22,7 @@ from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 from utils.auth import extract_user_id_from_context, get_gateway_access_token
 from utils.heartbeat import with_heartbeat
+from utils.model_limits import clamp_max_tokens
 from utils.ssm import get_ssm_parameter
 
 app = BedrockAgentCoreApp()
@@ -150,7 +151,10 @@ def create_synthesizer_agent(user_id: str, session_id: str) -> Agent:
     guardrail_config = _load_guardrail_config()
     model_kwargs = {
         "model_id": model_id,
-        "max_tokens": 65536,
+        # 65536 is above every current ceiling, so this always resolves to the
+        # selected model's own limit (64000 for Haiku 4.5 / Sonnet 4.6, 65535
+        # for Nova 2 Lite, 128000 for Sonnet 5 / Opus 5 / Opus 4.7).
+        "max_tokens": clamp_max_tokens(model_id, 65536),
         "boto_client_config": BotocoreConfig(
             read_timeout=1800,
             connect_timeout=60,

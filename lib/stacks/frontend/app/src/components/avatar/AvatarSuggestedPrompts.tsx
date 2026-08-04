@@ -6,10 +6,15 @@
  *
  * Each group maps to a backend capability the Nova Sonic agent can actually
  * execute with the Gateway tools it has access to:
- *   - Products & Rates → gateway_kb_search (pipeline=menu) + baked-in facts
+ *   - Products & Rates → gateway_kb_search (pipeline=services) + baked-in facts
  *   - Multilingual    → Nova Sonic native multilingual voice
  *   - Create          → gateway_nova_canvas_generate + gateway_website_generator
  *   - Research Recall → gateway_kb_search across the user-selected pipelines
+ *
+ * Every product named in a prompt must exist in BANK_FACTS
+ * (patterns/avatar-agent/persona_prompts.py). The persona prompt forbids
+ * inventing products, so a card naming one that isn't there forces the agent to
+ * either contradict itself or tell the user the product doesn't exist.
  */
 
 import Header from "@cloudscape-design/components/header";
@@ -39,8 +44,8 @@ const GROUPS: PromptGroup[] = [
                 prompt: "What is the High-Yield Savings APY?",
             },
             {
-                label: "Compare checking",
-                prompt: "Compare Everyday Checking and Premier Checking",
+                label: "Compare accounts",
+                prompt: "Compare Everyday Checking and High-Yield Savings",
             },
         ],
     },

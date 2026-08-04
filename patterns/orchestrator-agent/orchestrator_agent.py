@@ -35,6 +35,7 @@ from strands import Agent
 from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 from utils.auth import extract_user_id_from_context, get_gateway_access_token
+from utils.model_limits import clamp_max_tokens
 from utils.pipeline_scope import PipelineScopeHook, mode_config
 from utils.ssm import get_ssm_parameter
 from utils.tool_guard import UserScopeHook
@@ -1172,7 +1173,10 @@ def _build_model(
     well over 15 minutes before the first streaming token arrives.
 
     max_tokens controls the output budget (thinking + response). Default 65535 —
-    the maximum supported by Nova 2 Lite (Bedrock rejects 65536).
+    the maximum supported by Nova 2 Lite (Bedrock rejects 65536). It is clamped
+    to the selected model's own ceiling, because the depth table and the model
+    are chosen independently: Claude Haiku 4.5 and Sonnet 4.6 cap output at
+    64000 and reject anything higher with a ValidationException.
 
     Args:
         thinking_budget: Requested depth of Claude reasoning, expressed as a token
@@ -1186,7 +1190,7 @@ def _build_model(
 
     kwargs = dict(extra_kwargs)
     kwargs["model_id"] = model_id
-    kwargs["max_tokens"] = max_tokens
+    kwargs["max_tokens"] = clamp_max_tokens(model_id, max_tokens)
     kwargs["boto_client_config"] = BotocoreConfig(
         read_timeout=1800,
         connect_timeout=60,
