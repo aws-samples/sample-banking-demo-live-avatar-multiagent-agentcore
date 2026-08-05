@@ -18,16 +18,18 @@ Credentials: the Fargate task role supplies AWS creds via the boto3 default
 chain (used by the AWS realtime plugin for Bedrock and by `utils.auth` for
 SSM / Secrets Manager). No static keys.
 
-TENANT-ISOLATION NOTE (Phase 2):
-The AgentCore avatar injected the verified Cognito `sub` (user_id) and the KB
-pipeline scope into every gateway tool call via Strands `BeforeToolCallEvent`
-hooks (UserScopeHook / PipelineScopeHook). LiveKit's MCP path does NOT run
-those hooks, so per-user scoping is not yet enforced here. The verified
-identity is available on the room participant (set by the token Lambda from
-the Cognito `sub`); Phase 2 wraps the scoped tools as LiveKit `@function_tool`s
-that inject `user_id` + `pipelines` server-side, restoring the isolation
-contract documented in `docs/kb-isolation.md`. Until then this path is
-single-tenant-safe only.
+TENANT ISOLATION:
+The AgentCore avatar injects the verified Cognito `sub` into every gateway tool
+call via Strands `BeforeToolCallEvent` hooks (UserScopeHook / PipelineScopeHook).
+Those hooks do not run here, because LiveKit reaches the gateway through its own
+MCP layer, so this worker enforces the same contract itself: `_ScopedGatewayServer`
+wraps each user-scoped tool and merges the runtime `user_id` over whatever the
+model supplied. See `docs/kb-isolation.md`.
+
+Until that existed nothing on this transport supplied a `user_id`, and the
+gateway correctly refused: kb_search answered `caller-scope-required`,
+retrieve_user_profile found no profile, and the Relationship Manager could not
+see an account the Client Advisor had just opened for the same person.
 """
 
 import asyncio
@@ -37,10 +39,12 @@ import os
 
 from livekit import rtc
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli, mcp
+from livekit.agents.llm import function_tool
 from livekit.plugins import aws
 from persona_prompts import get_persona_prompt
 from utils.auth import get_gateway_access_token
 from utils.ssm import get_ssm_parameter
+from utils.tool_guard import USER_SCOPED_TOOLS, bare_tool_name
 
 logger = logging.getLogger("livekit-agent")
 logging.basicConfig(
@@ -82,7 +86,70 @@ GREETING_INSTRUCTIONS = (
 )
 
 
-def _build_gateway_toolset() -> mcp.MCPToolset:
+class _ScopedGatewayServer(mcp.MCPServerHTTP):
+    """Gateway MCP server that injects the verified caller into every tool call.
+
+    The Strands hooks that do this on the AgentCore path (UserScopeHook,
+    PipelineScopeHook) do not run here — LiveKit reaches the gateway through its
+    own MCP layer. So on this transport nothing supplied `user_id`, and every
+    user-scoped tool refused: kb_search returned `caller-scope-required`,
+    retrieve_user_profile reported no profile, and the Relationship Manager could
+    not see an account the Client Advisor had just opened for the same person.
+
+    Injection happens in `list_tools`, which is a documented extension point the
+    plugin itself overrides for `allowed_tools`. Wrapping the tools rather than
+    the client session matters: the session is replaced on reconnect, so a
+    session-level patch would silently stop scoping mid-conversation.
+
+    `pipelines` is set to every view the user owns rather than using
+    archive_mode. kb_search filters by user_id independently, so this reads only
+    this caller's own reports across their sections — which is what the persona
+    promises — without taking on the archive view's fail-open semantics.
+    """
+
+    ALL_PIPELINES = ("strategy_research", "market_research", "services")
+
+    def __init__(self, *args, user_id: str, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._user_id = user_id
+
+    def _scope_for(self, tool_name: str) -> dict:
+        bare = bare_tool_name(tool_name)
+        if bare not in USER_SCOPED_TOOLS:
+            return {}
+        scope: dict = {"user_id": self._user_id}
+        if bare == "kb_search":
+            scope["pipelines"] = list(self.ALL_PIPELINES)
+        return scope
+
+    async def list_tools(self, *, tool_options=None):  # noqa: ANN001, ANN201 - plugin types
+        tools = await super().list_tools(tool_options=tool_options)
+        if not self._user_id:
+            logger.warning("[LIVEKIT] No verified user_id — gateway tools will refuse scoped calls")
+            return tools
+        return [self._wrap(tool) for tool in tools]
+
+    def _wrap(self, tool):  # noqa: ANN001, ANN202 - plugin types
+        schema = tool.info.raw_schema
+        scope = self._scope_for(schema["name"])
+        if not scope:
+            return tool
+
+        async def impl(raw_arguments: dict) -> object:
+            # Runtime value wins over anything the model supplied, which is the
+            # whole point: a model-chosen user_id must never reach the gateway.
+            merged = {**(raw_arguments or {}), **scope}
+            return await tool(merged)
+
+        return function_tool(
+            impl,
+            raw_schema=schema,
+            flags=tool.info.flags,
+            on_duplicate=tool.info.on_duplicate,
+        )
+
+
+def _build_gateway_toolset(user_id: str) -> mcp.MCPToolset:
     """Build the AgentCore Gateway MCP toolset with a fresh M2M bearer token.
 
     Mirrors `avatar_agent.create_gateway_mcp_client`: the gateway URL comes from
@@ -107,12 +174,13 @@ def _build_gateway_toolset() -> mcp.MCPToolset:
 
     return mcp.MCPToolset(
         id="gateway",
-        mcp_server=mcp.MCPServerHTTP(
+        mcp_server=_ScopedGatewayServer(
             gateway_url,
             headers={"Authorization": f"Bearer {access_token}"},
             transport_type="streamable_http",
             # Applies to each tool call. See GATEWAY_TOOL_TIMEOUT_SECONDS.
             client_session_timeout_seconds=GATEWAY_TOOL_TIMEOUT_SECONDS,
+            user_id=user_id,
         ),
     )
 
@@ -272,7 +340,9 @@ async def entrypoint(ctx: JobContext) -> None:
         # look broken on this transport: the dropdown only reaches the WebSocket
         # avatar runtime, never this worker.
         llm=aws.realtime.RealtimeModel(voice=VOICE_ID),
-        tools=[_build_gateway_toolset()],
+        # The verified identity is resolved above, before the toolset is built,
+        # so every user-scoped gateway call carries it.
+        tools=[_build_gateway_toolset(user_id)],
     )
     _attach_session_logging(session)
     _attach_tool_activity_publisher(session, ctx.room)
