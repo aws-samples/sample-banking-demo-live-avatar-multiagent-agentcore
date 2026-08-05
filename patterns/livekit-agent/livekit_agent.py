@@ -30,9 +30,12 @@ contract documented in `docs/kb-isolation.md`. Until then this path is
 single-tenant-safe only.
 """
 
+import asyncio
+import json
 import logging
 import os
 
+from livekit import rtc
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli, mcp
 from livekit.plugins import aws
 from persona_prompts import get_persona_prompt
@@ -112,6 +115,81 @@ def _build_gateway_toolset() -> mcp.MCPToolset:
             client_session_timeout_seconds=GATEWAY_TOOL_TIMEOUT_SECONDS,
         ),
     )
+
+
+# Topic the browser listens on for tool activity.
+#
+# Speech is already covered: the agents framework publishes both sides of the
+# conversation as text streams on `lk.transcription`, so the transcript panel
+# only needed a subscriber. Tool calls are not published by anything, which is
+# why an answer containing a link or a generated image left no trace on screen —
+# the avatar said it had produced something and the page never showed it.
+TOOL_ACTIVITY_TOPIC = "trb.tool"
+
+# Gateway tools arrive prefixed with their target, e.g.
+# "website-generator___website_generator". The suffix is the real tool name and
+# the only part worth showing a user.
+GATEWAY_NAME_SEPARATOR = "___"
+
+# A tool result only has to carry a URL or a small record for the UI to render a
+# card. Full payloads (base64 images, whole HTML documents, long KB result sets)
+# would bloat the data channel for no benefit, so results are truncated.
+MAX_TOOL_OUTPUT_CHARS = 24_000
+
+
+def _display_tool_name(name: str) -> str:
+    return name.rsplit(GATEWAY_NAME_SEPARATOR, 1)[-1]
+
+
+def _attach_tool_activity_publisher(session: AgentSession, room: rtc.Room) -> None:
+    """Publish tool starts and results to the browser.
+
+    Sent on a dedicated topic rather than piggybacking on the transcript so the
+    client can render a tool card, a website link or an image without having to
+    parse them out of spoken text — which cannot be done reliably, because Nova
+    Sonic speaks a URL aloud rather than emitting it verbatim.
+    """
+
+    def publish(payload: dict) -> None:
+        async def send() -> None:
+            try:
+                await room.local_participant.send_text(json.dumps(payload), topic=TOOL_ACTIVITY_TOPIC)
+            except Exception:
+                # Presentational only — never let this take down a conversation.
+                logger.warning("[LIVEKIT] Could not publish tool activity", exc_info=True)
+
+        asyncio.create_task(send())
+
+    @session.on("tool_execution_updated")
+    def _on_tool_update(ev) -> None:  # noqa: ANN001 - plugin event model
+        update = ev.update
+        if update.type == "tool_call_started":
+            publish(
+                {
+                    "callId": update.function_call.call_id,
+                    "name": _display_tool_name(update.function_call.name),
+                    "status": "running",
+                }
+            )
+
+    @session.on("function_tools_executed")
+    def _on_tools_done(ev) -> None:  # noqa: ANN001
+        # `function_tools_executed` carries the raw tool output, which
+        # `tool_call_ended` does not — it only has the text meant to be spoken.
+        # The raw output is what holds the image URL or website link.
+        for call, output in ev.zipped():
+            # A None output means the tool raised, most often the gateway MCP
+            # call timing out; `is_error` covers a tool that returned a failure.
+            failed = output is None or output.is_error
+            text = "" if output is None else str(output.output or "")
+            publish(
+                {
+                    "callId": call.call_id,
+                    "name": _display_tool_name(call.name),
+                    "status": "error" if failed else "done",
+                    "output": text[:MAX_TOOL_OUTPUT_CHARS],
+                }
+            )
 
 
 def _attach_session_logging(session: AgentSession) -> None:
@@ -197,6 +275,7 @@ async def entrypoint(ctx: JobContext) -> None:
         tools=[_build_gateway_toolset()],
     )
     _attach_session_logging(session)
+    _attach_tool_activity_publisher(session, ctx.room)
 
     await session.start(
         room=ctx.room,

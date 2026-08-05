@@ -57,6 +57,8 @@ import {
 } from "@/lib/websocket-client/voice-config";
 import { presignAgentCoreWebSocket } from "@/lib/websocket-client/sigv4";
 import { AvatarLiveKitClient } from "@/lib/livekit-client/avatarLiveKitClient";
+import type { TranscriptUpdate, ToolActivity } from "@/lib/livekit-client/avatarLiveKitClient";
+import { extractToolArtifacts } from "./toolArtifacts";
 import { getAWSCredentials } from "@/lib/auth/credentials";
 import { createPCMProcessorUrl, arrayBufferToBase64 } from "@/lib/websocket-client/audio-utils";
 import AvatarTextInput from "./AvatarTextInput";
@@ -75,6 +77,14 @@ interface TranscriptEntry {
     role: "user" | "assistant" | "system";
     segments: TranscriptSegment[];
     timestamp: string;
+    /**
+     * Identifies an entry that is still being written to, so streamed text
+     * updates the bubble it belongs to instead of appending a new one. Set on
+     * the LiveKit path, where transcripts arrive as growing streams keyed by
+     * utterance; the WebSocket path tracks its in-progress text through refs
+     * instead and leaves this undefined.
+     */
+    streamId?: string;
 }
 
 interface ToolResultMedia {
@@ -354,6 +364,103 @@ export default function AvatarInterface(): JSX.Element {
         },
         [language, voiceId, voicePinned]
     );
+
+    // --- LiveKit transcript + tool activity ---
+    // Nova Sonic is speech-to-speech, so without these the transcript panel
+    // stayed empty for the whole conversation and anything a tool produced — a
+    // website link, a generated image — was spoken about but never shown.
+
+    /** Update the bubble for this utterance, or start one if it is new. */
+    const handleLiveKitTranscript = useCallback(
+        ({ segmentId, role, text, isFinal }: TranscriptUpdate): void => {
+            setTranscript((prev) => {
+                const idx = prev.findIndex((e) => e.streamId === segmentId);
+                if (idx === -1) {
+                    return [
+                        ...prev,
+                        {
+                            role,
+                            segments: [{ kind: "text", content: text }],
+                            timestamp: new Date().toISOString(),
+                            // Dropping the key once final stops a late duplicate
+                            // stream from reopening a finished bubble.
+                            streamId: isFinal ? undefined : segmentId,
+                        },
+                    ];
+                }
+                const updated = [...prev];
+                updated[idx] = {
+                    ...updated[idx],
+                    segments: [{ kind: "text", content: text }],
+                    streamId: isFinal ? undefined : segmentId,
+                };
+                return updated;
+            });
+        },
+        []
+    );
+
+    /** Show a tool card while it runs, then whatever it produced. */
+    const handleLiveKitToolActivity = useCallback((activity: ToolActivity): void => {
+        const { callId, name, status, output } = activity;
+        const cardId = `tool-${callId}`;
+
+        setTranscript((prev) => {
+            const idx = prev.findIndex((e) => e.streamId === cardId);
+            const card: TranscriptEntry = {
+                role: "assistant",
+                segments: [
+                    {
+                        kind: "tool",
+                        toolName: name,
+                        status: status === "running" ? "running" : "done",
+                    },
+                ],
+                timestamp: new Date().toISOString(),
+                // Kept after completion so a late-arriving duplicate updates the
+                // same card rather than adding a second one.
+                streamId: cardId,
+            };
+            const next = idx === -1 ? [...prev, card] : [...prev];
+            if (idx !== -1) next[idx] = { ...next[idx], ...card };
+
+            if (status === "running" || !output) return next;
+
+            // Anything the tool produced becomes its own entry below the card,
+            // reusing the segment kinds the panel already renders.
+            for (const artifact of extractToolArtifacts(name, output)) {
+                next.push({
+                    role: "assistant",
+                    segments: [artifact],
+                    timestamp: new Date().toISOString(),
+                });
+            }
+            return next;
+        });
+
+        if (status !== "done" || !output) return;
+
+        // Side panels mirror what the WebSocket path does for the same results.
+        for (const artifact of extractToolArtifacts(name, output)) {
+            if (artifact.kind === "website") {
+                if (name.includes("pdf_generator")) {
+                    setPdfPreview({ url: artifact.url, filename: artifact.title });
+                } else {
+                    setWebsitePreview(artifact.url);
+                }
+            } else if (artifact.kind === "media") {
+                setMediaResults((prev) => [
+                    ...prev,
+                    {
+                        type: artifact.mediaType,
+                        url: artifact.url,
+                        toolName: name,
+                        timestamp: new Date().toISOString(),
+                    },
+                ]);
+            }
+        }
+    }, []);
 
     // --- WebSocket message handler ---
     const handleWSMessage = useCallback(
@@ -813,7 +920,14 @@ export default function AvatarInterface(): JSX.Element {
     // --- Send text to avatar ---
     const handleSendText = useCallback(
         (text: string): void => {
-            if (!wsClientRef.current || connectionState !== "connected") return;
+            if (connectionState !== "connected") return;
+
+            // On LiveKit the agent accepts typed input on its own channel. This
+            // used to return early because it only checked for a WebSocket
+            // client, so on that transport the input box and the suggested
+            // prompts silently did nothing.
+            const lkClient = liveKitTokenUrl ? liveKitClientRef.current : null;
+            if (!lkClient && !wsClientRef.current) return;
 
             setTranscript((prev) => [
                 ...prev,
@@ -825,9 +939,14 @@ export default function AvatarInterface(): JSX.Element {
             ]);
             currentAssistantTextRef.current = "";
             lastRoleRef.current = "user";
-            wsClientRef.current.sendText(text);
+
+            if (lkClient) {
+                void lkClient.sendText(text);
+            } else {
+                wsClientRef.current?.sendText(text);
+            }
         },
-        [connectionState]
+        [connectionState, liveKitTokenUrl]
     );
 
     // --- Connect ---
@@ -853,6 +972,8 @@ export default function AvatarInterface(): JSX.Element {
                 onSpeakingChange: setLiveKitSpeaking,
                 onConnectionState: setConnectionState,
                 onAudioTrack: setAgentAudioTrack,
+                onTranscript: handleLiveKitTranscript,
+                onToolActivity: handleLiveKitToolActivity,
                 onError: (err) => setError(`LiveKit error: ${err.message}`),
             });
             liveKitClientRef.current = lkClient;
@@ -933,6 +1054,8 @@ export default function AvatarInterface(): JSX.Element {
         handleWSMessage,
         clearQueue,
         liveKitTokenUrl,
+        handleLiveKitTranscript,
+        handleLiveKitToolActivity,
     ]);
 
     // --- Recording ---
