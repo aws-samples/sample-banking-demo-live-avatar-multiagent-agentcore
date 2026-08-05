@@ -126,18 +126,28 @@ def _generate_image(
     if METADATA_TABLE:
         try:
             table = dynamodb.Table(METADATA_TABLE)
+            created_at = datetime.utcnow().isoformat()
             table.put_item(
                 Item={
-                    "PK": f"session#{session_id}",
-                    "SK": f"image#{image_id}",
+                    # Partitioned by the verified caller, not by session_id.
+                    # session_id is supplied by the model and defaults to a fresh
+                    # uuid that is never returned, so anything written under
+                    # PK=session#{session_id} was unreachable: nova_canvas_history
+                    # had no way to name the partition. Keying on the caller also
+                    # removes a cross-user read, since the old history query
+                    # trusted whatever session id it was handed.
+                    "PK": f"user#{user_id}",
+                    "SK": f"image#{created_at}#{image_id}",
+                    "imageId": image_id,
+                    "sessionId": session_id,
                     "type": "image",
                     "prompt": prompt,
                     "style": style or "none",
                     "width": width,
                     "height": height,
                     "s3_key": s3_key,
-                    "user_id": user_id or "unknown",
-                    "created_at": datetime.utcnow().isoformat(),
+                    "user_id": user_id,
+                    "created_at": created_at,
                     "ttl": int(datetime.utcnow().timestamp()) + 604800,  # 7 days
                 }
             )
@@ -188,6 +198,10 @@ def handler(event, context):
 
             if not prompt:
                 return {"error": "Missing required parameter: prompt"}
+            # The record is partitioned by the caller, so an absent user_id would
+            # file the image under user# where nothing can find it again.
+            if not user_id:
+                return {"error": "Missing user_id — runtime hook not wired."}
 
             if not IMAGES_BUCKET:
                 return {"error": "IMAGES_BUCKET environment variable not configured"}

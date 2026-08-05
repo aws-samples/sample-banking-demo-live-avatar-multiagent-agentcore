@@ -18,12 +18,19 @@ METADATA_TABLE = os.environ.get("METADATA_TABLE", "")
 IMAGES_BUCKET = os.environ.get("IMAGES_BUCKET", "")
 
 
-def _get_image_history(session_id: str, limit: int) -> str:
-    """Query DynamoDB for image generation history for a session."""
+def _get_image_history(user_id: str, limit: int) -> str:
+    """Query DynamoDB for the caller's image generation history.
+
+    Queries the caller's own partition. This used to query
+    PK=session#{session_id} with a session id the model supplied, which failed
+    twice over: the generating tool defaults that id to a fresh uuid it never
+    returns, so the partition could not be named and history came back empty;
+    and any caller handing over someone else's session id read their images.
+    """
     table = dynamodb.Table(METADATA_TABLE)
 
     response = table.query(
-        KeyConditionExpression=Key("PK").eq(f"session#{session_id}") & Key("SK").begins_with("image#"),
+        KeyConditionExpression=Key("PK").eq(f"user#{user_id}") & Key("SK").begins_with("image#"),
         ScanIndexForward=False,  # newest first
         Limit=limit,
     )
@@ -33,7 +40,7 @@ def _get_image_history(session_id: str, limit: int) -> str:
 
     for item in items:
         image_entry = {
-            "image_id": item.get("SK", "").replace("image#", ""),
+            "image_id": item.get("imageId", ""),
             "type": item.get("type", "image"),
             "prompt": item.get("prompt", item.get("edit_prompt", "")),
             "style": item.get("style", ""),
@@ -62,7 +69,7 @@ def _get_image_history(session_id: str, limit: int) -> str:
 
     return json.dumps(
         {
-            "session_id": session_id,
+            "user_id": user_id,
             "images": images,
             "count": len(images),
         }
@@ -86,16 +93,16 @@ def handler(event, context):
         logger.info(f"Processing tool: {tool_name}")
 
         if tool_name == "nova_canvas_history":
-            session_id = event.get("session_id", "")
+            user_id = event.get("user_id", "")
             limit = event.get("limit", 10)
 
-            if not session_id:
-                return {"error": "Missing required parameter: session_id"}
+            if not user_id:
+                return {"error": "Missing user_id — runtime hook not wired."}
 
             if not METADATA_TABLE:
                 return {"error": "METADATA_TABLE environment variable not configured"}
 
-            result = _get_image_history(session_id, limit)
+            result = _get_image_history(user_id, limit)
             return {"content": [{"type": "text", "text": result}]}
         else:
             return {"error": f"This Lambda only supports 'nova_canvas_history', received: {tool_name}"}

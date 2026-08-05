@@ -1,20 +1,15 @@
 [
     {
         "name": "nova_canvas_history",
-        "description": "Retrieve the image generation history for a session. Returns metadata and fresh presigned URLs for all images generated or edited during the session.",
+        "description": "Retrieve the images this user has generated or edited. Returns metadata and fresh presigned URLs, newest first. The caller is identified by the runtime, so no identifier is needed.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "The session identifier to retrieve image history for"
-                },
                 "limit": {
                     "type": "integer",
                     "description": "Maximum number of images to return (optional, default = 10)"
                 }
-            },
-            "required": ["session_id"]
+            }
         }
     }
 ]

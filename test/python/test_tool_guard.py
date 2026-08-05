@@ -28,7 +28,9 @@ REGISTERED_SCOPED_TOOLS = (
     "gateway_retrieve-user-profile___retrieve_user_profile",
     "gateway_nova-canvas-generate___nova_canvas_generate",
     "gateway_nova-canvas-edit___nova_canvas_edit",
+    "gateway_nova-canvas-history___nova_canvas_history",
     "gateway_nova-reel-generate___nova_reel_generate",
+    "gateway_nova-reel-history___nova_reel_history",
     "gateway_place-order___place_order",
 )
 
@@ -55,7 +57,12 @@ def test_user_scoped_tools_covers_all_tenant_sensitive_tools():
         "retrieve_user_profile",
         "nova_canvas_generate",
         "nova_canvas_edit",
+        # The history tools read per-user data and so belong here. They used to
+        # take a model-supplied session_id as their only key, which meant a
+        # caller handing over someone else's id read their media.
+        "nova_canvas_history",
         "nova_reel_generate",
+        "nova_reel_history",
         "place_order",
     }
     assert set(USER_SCOPED_TOOLS) == expected

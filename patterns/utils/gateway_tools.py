@@ -41,7 +41,9 @@ USER_SCOPED_TOOLS: frozenset[str] = frozenset(
         "retrieve_user_profile",
         "nova_canvas_generate",
         "nova_canvas_edit",
+        "nova_canvas_history",
         "nova_reel_generate",
+        "nova_reel_history",
         "place_order",
     }
 )

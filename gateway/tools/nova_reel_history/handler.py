@@ -22,12 +22,19 @@ METADATA_TABLE = os.environ.get("METADATA_TABLE", "")
 VIDEOS_BUCKET = os.environ.get("VIDEOS_BUCKET", os.environ.get("IMAGES_BUCKET", ""))
 
 
-def _get_video_history(session_id: str, limit: int) -> str:
-    """Query DynamoDB for video generation history for a session."""
+def _get_video_history(user_id: str, limit: int) -> str:
+    """Query DynamoDB for the caller's video generation history.
+
+    Queries the caller's own partition. This used to query
+    PK=session#{session_id} with a session id the model supplied, which failed
+    twice over: the generating tool defaults that id to a fresh uuid it never
+    returns, so the partition could not be named and history came back empty;
+    and any caller handing over someone else's session id read their videos.
+    """
     table = dynamodb.Table(METADATA_TABLE)
 
     response = table.query(
-        KeyConditionExpression=Key("PK").eq(f"session#{session_id}") & Key("SK").begins_with("video#"),
+        KeyConditionExpression=Key("PK").eq(f"user#{user_id}") & Key("SK").begins_with("video#"),
         ScanIndexForward=False,  # newest first
         Limit=limit,
     )
@@ -37,7 +44,7 @@ def _get_video_history(session_id: str, limit: int) -> str:
 
     for item in items:
         video_entry = {
-            "video_id": item.get("SK", "").replace("video#", ""),
+            "video_id": item.get("videoId", ""),
             "prompt": item.get("prompt", ""),
             "duration_seconds": item.get("duration_seconds"),
             "status": item.get("status", "Unknown"),
@@ -79,7 +86,7 @@ def _get_video_history(session_id: str, limit: int) -> str:
 
     return json.dumps(
         {
-            "session_id": session_id,
+            "user_id": user_id,
             "videos": videos,
             "count": len(videos),
         }
@@ -103,16 +110,16 @@ def handler(event, context):
         logger.info(f"Processing tool: {tool_name}")
 
         if tool_name == "nova_reel_history":
-            session_id = event.get("session_id", "")
+            user_id = event.get("user_id", "")
             limit = event.get("limit", 10)
 
-            if not session_id:
-                return {"error": "Missing required parameter: session_id"}
+            if not user_id:
+                return {"error": "Missing user_id — runtime hook not wired."}
 
             if not METADATA_TABLE:
                 return {"error": "METADATA_TABLE environment variable not configured"}
 
-            result = _get_video_history(session_id, limit)
+            result = _get_video_history(user_id, limit)
             return {"content": [{"type": "text", "text": result}]}
         else:
             return {"error": f"This Lambda only supports 'nova_reel_history', received: {tool_name}"}

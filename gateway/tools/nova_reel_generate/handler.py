@@ -62,18 +62,23 @@ def _generate_video(prompt: str, duration_seconds: int, session_id: str, user_id
     if METADATA_TABLE:
         try:
             table = dynamodb.Table(METADATA_TABLE)
+            created_at = datetime.utcnow().isoformat()
             table.put_item(
                 Item={
-                    "PK": f"session#{session_id}",
-                    "SK": f"video#{request_id}",
+                    # Keyed by the verified caller — see nova_canvas_generate for
+                    # why session_id cannot be the partition.
+                    "PK": f"user#{user_id}",
+                    "SK": f"video#{created_at}#{request_id}",
+                    "videoId": request_id,
+                    "sessionId": session_id,
                     "type": "video",
                     "prompt": prompt,
                     "duration_seconds": duration_seconds,
                     "invocation_arn": invocation_arn,
                     "s3_output_uri": s3_output_uri,
                     "status": "InProgress",
-                    "user_id": user_id or "unknown",
-                    "created_at": datetime.utcnow().isoformat(),
+                    "user_id": user_id,
+                    "created_at": created_at,
                     "ttl": int(datetime.utcnow().timestamp()) + 604800,  # 7 days
                 }
             )
@@ -121,6 +126,10 @@ def handler(event, context):
 
             if not prompt:
                 return {"error": "Missing required parameter: prompt"}
+            # The record is partitioned by the caller, so an absent user_id would
+            # file the job under user# where nothing can find it again.
+            if not user_id:
+                return {"error": "Missing user_id — runtime hook not wired."}
 
             if not VIDEOS_BUCKET:
                 return {"error": "VIDEOS_BUCKET (or IMAGES_BUCKET) environment variable not configured"}
