@@ -13,7 +13,7 @@
  * link on every mount, which keeps working for as long as the object exists.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Alert from "@cloudscape-design/components/alert";
 import Container from "@cloudscape-design/components/container";
 import Spinner from "@cloudscape-design/components/spinner";
@@ -74,6 +74,28 @@ export function PdfDeliveryCard({
         };
     }, [reportId, idToken, url]);
 
+    /**
+     * Save the report rather than display it.
+     *
+     * A separate link signed with `attachment` disposition — the one driving the
+     * iframe is signed `inline`, so navigating to it would only show the PDF
+     * again. Falls back to opening in a new tab when the report has no id to
+     * re-sign against, which at least never replaces the app.
+     */
+    const download = useCallback((): void => {
+        void (async () => {
+            let target = url;
+            if (reportId && idToken) {
+                try {
+                    target = (await fetchReportUrl(idToken, reportId, "attachment")) ?? url;
+                } catch {
+                    // Fall through to the inline link; opening beats doing nothing.
+                }
+            }
+            window.open(target, "_blank", "noopener,noreferrer");
+        })();
+    }, [reportId, idToken, url]);
+
     if (expired) {
         return (
             <Alert type="info" header={title}>
@@ -92,5 +114,5 @@ export function PdfDeliveryCard({
         );
     }
 
-    return <PdfViewer url={displayUrl} title={title} />;
+    return <PdfViewer url={displayUrl} title={title} onDownload={download} />;
 }

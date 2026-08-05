@@ -31,6 +31,24 @@ function CopyButton({ text }: { text: string }): JSX.Element {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const components: Record<string, any> = {
+    /**
+     * Links open in a new tab.
+     *
+     * Without this override react-markdown emits a bare anchor with no target,
+     * so following a generated website link navigated away from the app and
+     * discarded the conversation — the run, the transcript and the report
+     * viewer all went with it, and returning meant starting over.
+     *
+     * `rel` is required alongside `target="_blank"`: it stops the opened page
+     * reaching back through window.opener and denies it the referrer.
+     */
+    a({ href, children }: { href?: string; children?: React.ReactNode }) {
+        return (
+            <a href={href} target="_blank" rel="noopener noreferrer">
+                {children}
+            </a>
+        );
+    },
     code({ className, children }: { className?: string; children?: React.ReactNode }) {
         const match = /language-(\w+)/.exec(className || "");
         const codeString = String(children).replace(/\n$/, "");

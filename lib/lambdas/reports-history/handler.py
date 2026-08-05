@@ -63,15 +63,21 @@ def _user_id(event: dict) -> str:
     return claims.get("sub", "")
 
 
-def _sign(s3_key: str, filename: str) -> str | None:
-    """Mint a short-lived inline-display URL for one object."""
+def _sign(s3_key: str, filename: str, disposition: str = "inline") -> str | None:
+    """Mint a short-lived URL for one object.
+
+    `disposition` decides what the browser does with it: "inline" to display in
+    a viewer, "attachment" to download. It is baked into the signature rather
+    than left to the client, because the response header is what actually drives
+    the browser and a client cannot add one to a cross-origin navigation.
+    """
     try:
         return s3_client.generate_presigned_url(
             "get_object",
             Params={
                 "Bucket": REPORTS_BUCKET,
                 "Key": s3_key,
-                "ResponseContentDisposition": f'inline; filename="{filename}"',
+                "ResponseContentDisposition": f'{disposition}; filename="{filename}"',
                 "ResponseContentType": "application/pdf",
             },
             ExpiresIn=URL_TTL_SECONDS,
@@ -81,7 +87,7 @@ def _sign(s3_key: str, filename: str) -> str | None:
         return None
 
 
-def _to_item(record: dict) -> dict:
+def _to_item(record: dict, disposition: str = "inline") -> dict:
     s3_key = record.get("s3_key", "")
     filename = s3_key.rsplit("/", 1)[-1] or "report.pdf"
     return {
@@ -93,7 +99,7 @@ def _to_item(record: dict) -> dict:
         "sizeBytes": int(record.get("size_bytes", 0) or 0),
         "filename": filename,
         # Signed per request. Deliberately not stored anywhere.
-        "url": _sign(s3_key, filename),
+        "url": _sign(s3_key, filename, disposition),
     }
 
 
@@ -110,6 +116,12 @@ def handler(event, _context):
     table = dynamodb.Table(METADATA_TABLE)
     report_id = (event.get("pathParameters") or {}).get("reportId")
 
+    # ?disposition=attachment returns a link the browser downloads instead of
+    # displaying. Allowlisted rather than passed through, since the value ends up
+    # in a signed response header.
+    requested = ((event.get("queryStringParameters") or {}).get("disposition") or "").lower()
+    disposition = "attachment" if requested == "attachment" else "inline"
+
     try:
         if report_id:
             # SK carries a timestamp prefix, so fetch by prefix rather than a
@@ -121,7 +133,7 @@ def handler(event, _context):
             match = next((r for r in resp.get("Items", []) if r.get("report_id") == report_id), None)
             if not match:
                 return _response(404, {"error": "Report not found"})
-            return _response(200, {"report": _to_item(match)})
+            return _response(200, {"report": _to_item(match, disposition)})
 
         resp = table.query(
             KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
@@ -130,7 +142,7 @@ def handler(event, _context):
             ScanIndexForward=False,
             Limit=100,
         )
-        items = [_to_item(r) for r in resp.get("Items", [])]
+        items = [_to_item(r, disposition) for r in resp.get("Items", [])]
         logger.info("Returning %d reports for user", len(items))
         return _response(200, {"reports": items, "count": len(items)})
 

@@ -38,11 +38,22 @@ export function isReportHistoryAvailable(): boolean {
  * has aged out of the bucket — and throws on anything else, so a genuine outage
  * is not reported to the user as a missing file.
  */
-export async function fetchReportUrl(idToken: string, reportId: string): Promise<string | null> {
+export async function fetchReportUrl(
+    idToken: string,
+    reportId: string,
+    /**
+     * "attachment" returns a link the browser downloads rather than displays.
+     * The disposition is baked into the signature server-side, because the
+     * response header is what drives the browser and the page cannot add one to
+     * a cross-origin navigation.
+     */
+    disposition: "inline" | "attachment" = "inline"
+): Promise<string | null> {
     const base = getApiUrl();
     if (!base) throw new Error("Report history endpoint is not configured");
 
-    const response = await fetch(`${base}/${encodeURIComponent(reportId)}`, {
+    const query = disposition === "attachment" ? "?disposition=attachment" : "";
+    const response = await fetch(`${base}/${encodeURIComponent(reportId)}${query}`, {
         method: "GET",
         headers: {
             Authorization: `Bearer ${idToken}`,

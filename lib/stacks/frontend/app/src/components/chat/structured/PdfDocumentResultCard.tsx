@@ -36,7 +36,7 @@ export function PdfDocumentResultCard({ data }: { data: PdfDocumentResult }): JS
         try {
             let url =
                 data.report_id && auth.user?.id_token
-                    ? await fetchReportUrl(auth.user.id_token, data.report_id)
+                    ? await fetchReportUrl(auth.user.id_token, data.report_id, "attachment")
                     : null;
             // Older results carry no report_id, so the original link is all
             // there is. It may already have expired.
@@ -68,8 +68,8 @@ export function PdfDocumentResultCard({ data }: { data: PdfDocumentResult }): JS
                             {data.filename ?? "report.pdf"}
                         </Box>
                     </div>
-                    <Button onClick={() => void open()} loading={isOpening} iconName="external">
-                        Open report
+                    <Button onClick={() => void open()} loading={isOpening} iconName="download">
+                        Download report
                     </Button>
                 </div>
 

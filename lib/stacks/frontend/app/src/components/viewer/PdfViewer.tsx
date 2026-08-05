@@ -9,9 +9,17 @@ import Spinner from "@cloudscape-design/components/spinner";
 interface PdfViewerProps {
     url: string;
     title?: string;
+    /**
+     * Called instead of opening `url` when the download button is pressed.
+     *
+     * `url` is signed for inline display, so navigating to it shows the PDF
+     * rather than saving it. A caller that can mint an attachment-signed link
+     * supplies this so the button actually downloads.
+     */
+    onDownload?: () => void;
 }
 
-export default function PdfViewer({ url, title = "Document" }: PdfViewerProps) {
+export default function PdfViewer({ url, title = "Document", onDownload }: PdfViewerProps) {
     const [loading, setLoading] = useState(true);
     const [fullscreen, setFullscreen] = useState(false);
 
@@ -57,8 +65,11 @@ export default function PdfViewer({ url, title = "Document" }: PdfViewerProps) {
                                 <Button
                                     iconName="download"
                                     variant="icon"
-                                    ariaLabel="Open PDF in new tab"
-                                    onClick={() => window.open(url, "_blank", "noopener")}
+                                    ariaLabel={onDownload ? "Download PDF" : "Open PDF in new tab"}
+                                    onClick={
+                                        onDownload ??
+                                        (() => window.open(url, "_blank", "noopener,noreferrer"))
+                                    }
                                 />
                             </SpaceBetween>
                         }

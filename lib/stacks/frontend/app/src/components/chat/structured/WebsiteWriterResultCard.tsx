@@ -28,6 +28,10 @@ export function WebsiteWriterResultCard({ data }: { data: WebsiteWriterResult })
                 {data.download_url && (
                     <a
                         href={data.download_url}
+                        // Same reason as the View link above: without a target
+                        // this replaced the app and lost the conversation.
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold
                                    border border-cyan-500/50 text-cyan-300 hover:bg-cyan-500/10 transition-all duration-300"
                     >
