@@ -40,9 +40,12 @@ export function PdfDocumentResultCard({ data }: { data: PdfDocumentResult }): JS
                     : null;
             // Older results carry no report_id, so the original link is all
             // there is. It may already have expired.
+            // A 404 from history means there is no run record, not that the
+            // object is gone; fall back to the link the tool returned rather
+            // than claiming the report no longer exists.
             url ??= data.url;
             if (!url) {
-                setError("This report is no longer available.");
+                setError("No download link is available for this report.");
                 return;
             }
             window.open(url, "_blank", "noopener,noreferrer");

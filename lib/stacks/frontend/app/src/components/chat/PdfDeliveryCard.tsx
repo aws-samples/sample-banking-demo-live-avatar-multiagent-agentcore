@@ -14,7 +14,6 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import Alert from "@cloudscape-design/components/alert";
 import Container from "@cloudscape-design/components/container";
 import Spinner from "@cloudscape-design/components/spinner";
 import { useAuth } from "react-oidc-context";
@@ -38,7 +37,6 @@ export function PdfDeliveryCard({
     const title = filename || "Report";
 
     const [freshUrl, setFreshUrl] = useState<string | null>(null);
-    const [expired, setExpired] = useState(false);
 
     // Without a report_id there is nothing to re-sign against: the report
     // predates the id being returned, so the original link is all there is.
@@ -52,21 +50,18 @@ export function PdfDeliveryCard({
 
         let cancelled = false;
         void (async () => {
+            let fresh: string | null = null;
             try {
-                const fresh = await fetchReportUrl(idToken, reportId);
-                if (cancelled) return;
-                if (fresh) {
-                    setFreshUrl(fresh);
-                } else {
-                    // 404 — the object has aged out of the bucket. Say so rather
-                    // than showing a viewer that will fail to load.
-                    setExpired(true);
-                }
+                fresh = await fetchReportUrl(idToken, reportId);
             } catch {
-                // A transient failure should not hide a report whose original
-                // link may still be inside its hour.
-                if (!cancelled) setFreshUrl(url);
+                // Transient failure; the original link may still be inside its hour.
             }
+            // A 404 means history has no record of this run, which is NOT the
+            // same as the object being gone — it was reported as "no longer
+            // stored" for a report that was sitting in the bucket, because the
+            // run record had been skipped. Fall back to the link we were given
+            // rather than telling the user something untrue about their file.
+            if (!cancelled) setFreshUrl(fresh ?? url);
         })();
 
         return () => {
@@ -95,14 +90,6 @@ export function PdfDeliveryCard({
             window.open(target, "_blank", "noopener,noreferrer");
         })();
     }, [reportId, idToken, url]);
-
-    if (expired) {
-        return (
-            <Alert type="info" header={title}>
-                This report is no longer stored. Generate it again to get a fresh copy.
-            </Alert>
-        );
-    }
 
     if (!displayUrl) {
         return (

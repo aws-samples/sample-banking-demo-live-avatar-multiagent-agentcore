@@ -35,6 +35,8 @@ from typing import Any
 
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 
+from utils.tool_guard import bare_tool_name
+
 logger = logging.getLogger(__name__)
 
 
@@ -144,10 +146,13 @@ class PipelineScopeHook(HookProvider):
         registry.add_callback(BeforeToolCallEvent, self._inject_pipeline)
 
     def _inject_pipeline(self, event: BeforeToolCallEvent) -> None:
-        tool_name = event.tool_use["name"]
+        # Bare name: a gateway tool registers as "<prefix>_<target>___<tool>",
+        # so comparing the full string matched nothing and this hook never
+        # applied a filter. See tool_guard.bare_tool_name.
+        tool_name = bare_tool_name(event.tool_use["name"])
         tool_input: dict[str, Any] = event.tool_use["input"]
 
-        if tool_name == "gateway_kb_search":
+        if tool_name == "kb_search":
             if self._is_archive:
                 # Positive archive signal. kb_search verifies this flag before
                 # returning unfiltered results — the LLM cannot set it.
@@ -179,7 +184,7 @@ class PipelineScopeHook(HookProvider):
                 logger.info("pipeline_scope: injected kb_search pipelines=%r", read_filter)
             return
 
-        if tool_name == "gateway_pdf_generator":
+        if tool_name == "pdf_generator":
             write_pipeline = self._coerce_write(self._write_provider())
             if not write_pipeline:
                 return

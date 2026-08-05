@@ -2121,6 +2121,8 @@ async def _run_pipeline(
 
     accumulated = initial_accumulated or query
     menu_designer_output = ""
+    # Last report produced by this run, re-emitted as a link once it finishes.
+    delivered_pdf: dict | None = None
 
     # Build one PipelineScopeHook for the whole pipeline — per-mode KB filter + pdf_generator write.
     _pipeline_cfg = mode_config(mode)
@@ -2310,6 +2312,7 @@ async def _run_pipeline(
 
                 if tag == "pdf_url":
                     # Emit the presigned URL directly — bypasses LLM text relay
+                    delivered_pdf = value
                     yield {
                         "_ui": {
                             "component": "PdfDelivery",
@@ -2413,6 +2416,17 @@ async def _run_pipeline(
                 )
             else:
                 accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
+
+    # Close with a download link when the run produced a report.
+    #
+    # The viewer is emitted the moment the PDF exists, which puts it above the
+    # closing summary — often far above it, so finishing a run left the reader
+    # scrolling back to find the report. The agent's closing text names the file
+    # but cannot link it, because a presigned URL pasted into prose expires while
+    # the message is kept. This is the same payload rendered as a single link, at
+    # the point the reader has actually reached.
+    if delivered_pdf:
+        yield {"_ui": {"component": "PdfDownloadLink", "props": delivered_pdf}}
 
     yield {"result": {"stop_reason": "end_turn"}}
 

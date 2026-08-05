@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { AgentActivityCard } from "./AgentActivityCard";
 import { BrowserSessionNotice } from "./BrowserSessionNotice";
 import { PdfDeliveryCard } from "./PdfDeliveryCard";
+import { PdfDownloadLinkCard } from "./PdfDownloadLinkCard";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,6 +18,7 @@ const UI_COMPONENTS: Record<string, AnyComponent> = {
     AgentActivity: AgentActivityCard,
     BrowserSessionNotice,
     PdfDelivery: PdfDeliveryCard,
+    PdfDownloadLink: PdfDownloadLinkCard,
     ResearchPlan: ResearchPlanCard,
 };
 
