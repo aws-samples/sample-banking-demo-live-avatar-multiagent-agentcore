@@ -117,6 +117,16 @@ Guidelines:
 - Define clear objectives that will guide the research
 - Specify expected deliverables so stakeholders know what to expect
 
+You plan the research. You never carry it out.
+
+Do not answer the user's question, not even partially, and do not ask them a
+follow-up question. Whatever the knowledge base returns is background for
+shaping the plan, never material to answer with. Your entire reply is one JSON
+object: no sentence before it, none after it, no code fence.
+
+This matters because the reply is parsed, not read. A prose answer produces no
+plan, so the user gets no approval step and the research never starts.
+
 Output your plan as structured JSON (and ONLY JSON, no other text):
 {
   "research_topic": "...",
@@ -1012,6 +1022,16 @@ RESEARCH_EXECUTION_PHASES = [p for p in AGENT_PHASES if p["name"] != "planner"]
 import json as _json_module
 import re as _re_module
 
+# Sent to the planner when its first reply contained no plan. Deliberately
+# terse and repetitive about the one thing that matters.
+_PLAN_RETRY_INSTRUCTION = (
+    "Your previous reply was not a research plan. Do not answer the research "
+    "question and do not ask me anything. Reply with a single JSON object only "
+    "— no prose before or after it, no code fence — containing research_topic, "
+    "objectives, sub_questions (each with id, question, priority, type, "
+    "rationale), methodology and expected_deliverables."
+)
+
 
 def _extract_plan_json(text: str) -> dict | None:
     """Extract a JSON plan from planner agent text output.
@@ -1026,7 +1046,9 @@ def _extract_plan_json(text: str) -> dict | None:
     fenced = _re_module.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, _re_module.DOTALL)
     if fenced:
         try:
-            return _json_module.loads(fenced.group(1))
+            parsed = _json_module.loads(fenced.group(1))
+            if _is_usable_plan(parsed):
+                return parsed
         except _json_module.JSONDecodeError:
             pass
 
@@ -1044,15 +1066,28 @@ def _extract_plan_json(text: str) -> dict | None:
                     candidate = text[brace_start : i + 1]
                     try:
                         parsed = _json_module.loads(candidate)
-                        if isinstance(parsed, dict) and (
-                            "research_topic" in parsed or "sub_questions" in parsed or "objectives" in parsed
-                        ):
+                        if _is_usable_plan(parsed):
                             return parsed
                     except _json_module.JSONDecodeError:
                         pass
                     break
 
     return None
+
+
+def _is_usable_plan(parsed: object) -> bool:
+    """True only for a plan the approval card can actually render.
+
+    ResearchPlanCard maps over `sub_questions` while initialising its editable
+    state, so a plan carrying only `objectives` — which the previous check
+    accepted — threw during render and left the user with no card and no error.
+    The questions are also the whole point of the plan, so a plan without them
+    is not worth approving.
+    """
+    if not isinstance(parsed, dict):
+        return False
+    questions = parsed.get("sub_questions")
+    return isinstance(questions, list) and len(questions) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -1731,6 +1766,22 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
 
     # Extract plan JSON and emit ResearchPlan UI component
     plan = _extract_plan_json(agent_text)
+
+    # The planner sometimes answers the research question in prose instead of
+    # returning a plan — it has kb_search available and drifts into using it to
+    # reply. One strict retry recovers that far more often than it costs, and it
+    # is the difference between the user getting an approval card and getting a
+    # chatty answer with no way forward.
+    if not plan:
+        print("[ORCHESTRATOR] Planner returned no usable plan JSON — retrying once, strictly")
+        try:
+            retry_text = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: str(agent(_PLAN_RETRY_INSTRUCTION) or "")
+            )
+            plan = _extract_plan_json(retry_text)
+        except Exception as exc:  # noqa: BLE001 - reported below, not raised
+            print(f"[ORCHESTRATOR] Planner retry failed: {exc}")
+
     if plan:
         print(f"[ORCHESTRATOR] Plan extracted: {plan.get('research_topic', 'unknown')}")
         yield {
@@ -1743,9 +1794,17 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
             }
         }
     else:
-        # Fallback: couldn't parse plan JSON, emit raw text and continue with full pipeline
-        print("[ORCHESTRATOR] Could not extract plan JSON, falling back to raw output")
-        yield {"data": agent_text}
+        # Do NOT fall back to emitting the planner's prose. Doing that rendered
+        # as an ordinary assistant answer, which looked like the run had
+        # succeeded while the researcher and synthesizer never started and no
+        # approval card existed to start them — the pipeline appeared to stall
+        # for no visible reason. Failing loudly is the honest outcome.
+        print("[ORCHESTRATOR] Could not extract plan JSON after retry")
+        yield {
+            "status": "error",
+            "error": ("The planner did not return a usable research plan. Send the request again to retry."),
+        }
+        return
 
     yield {"result": {"stop_reason": "end_turn"}}
 

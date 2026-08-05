@@ -23,7 +23,12 @@ interface SubQuestion {
 interface ResearchPlan {
     research_topic: string;
     objectives?: string[];
-    sub_questions: SubQuestion[];
+    /**
+     * Optional defensively: this comes from LLM output, and a plan missing it
+     * used to throw while initialising the editable state below, which blanked
+     * the card and left no approval controls at all.
+     */
+    sub_questions?: SubQuestion[];
     methodology: string;
     expected_deliverables?: string[];
     timeline?: string;
@@ -44,6 +49,10 @@ const PRIORITY_COLORS: Record<string, "blue" | "grey" | "red"> = {
 };
 
 export function ResearchPlanCard({ plan, query, onAction }: ResearchPlanCardProps): JSX.Element {
+    // Normalised once so every use below is safe against a plan that came
+    // back without questions.
+    const subQuestions = plan.sub_questions ?? [];
+
     const [isEditing, setIsEditing] = useState(false);
     const [isApproved, setIsApproved] = useState(false);
 
@@ -51,7 +60,7 @@ export function ResearchPlanCard({ plan, query, onAction }: ResearchPlanCardProp
     const [editObjectives, setEditObjectives] = useState((plan.objectives || []).join("\n"));
     const [editMethodology, setEditMethodology] = useState(plan.methodology || "");
     const [editQuestions, setEditQuestions] = useState(
-        plan.sub_questions.map((q) => q.question).join("\n")
+        subQuestions.map((q) => q.question).join("\n")
     );
     const [editDeliverables, setEditDeliverables] = useState(
         (plan.expected_deliverables || []).join("\n")
@@ -75,9 +84,9 @@ export function ResearchPlanCard({ plan, query, onAction }: ResearchPlanCardProp
                 .map((q, i) => ({
                     id: i + 1,
                     question: q,
-                    priority: plan.sub_questions[i]?.priority || "medium",
-                    type: plan.sub_questions[i]?.type || "web",
-                    rationale: plan.sub_questions[i]?.rationale || "",
+                    priority: subQuestions[i]?.priority || "medium",
+                    type: subQuestions[i]?.type || "web",
+                    rationale: subQuestions[i]?.rationale || "",
                 })),
             expected_deliverables: editDeliverables
                 .split("\n")
@@ -102,7 +111,7 @@ export function ResearchPlanCard({ plan, query, onAction }: ResearchPlanCardProp
     // Calculate a realistic timeline based on question count instead of
     // trusting the LLM's guess.  Each question ≈ 30-45s of KB + web searches
     // running sequentially, plus ~60s for synthesis and ~30s for PDF generation.
-    const questionCount = plan.sub_questions.length || 5;
+    const questionCount = subQuestions.length || 5;
     const researchMinutes = Math.ceil((questionCount * 40) / 60); // ~40s per question
     const overheadMinutes = 2; // synthesis + PDF generation
     const lowMinutes = researchMinutes + overheadMinutes;
@@ -153,16 +162,16 @@ export function ResearchPlanCard({ plan, query, onAction }: ResearchPlanCardProp
                     )}
 
                     {/* Key Questions */}
-                    {plan.sub_questions.length > 0 && (
+                    {subQuestions.length > 0 && (
                         <div>
                             <Box variant="h3">
                                 <span className="flex items-center gap-2">
                                     <Search size={16} />
-                                    Research Questions ({plan.sub_questions.length})
+                                    Research Questions ({subQuestions.length})
                                 </span>
                             </Box>
                             <SpaceBetween size="xs">
-                                {plan.sub_questions.map((q) => (
+                                {subQuestions.map((q) => (
                                     <div
                                         key={q.id}
                                         className="flex items-start gap-2 mt-1 p-2 rounded"
