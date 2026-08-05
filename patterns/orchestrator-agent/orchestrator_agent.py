@@ -1100,19 +1100,76 @@ def _extract_plan_json(text: str) -> dict | None:
     return None
 
 
-def _retry_plan_structured(agent) -> dict | None:  # noqa: ANN001 - strands Agent
-    """One more schema-constrained attempt, restating only the contract.
+# Ceiling on planner loop iterations. The planner needs a turn or two to consult
+# the knowledge base and one to emit the plan, so this is generous — it exists
+# only to stop a model that never reaches the plan from spinning forever. Without
+# it the UI sat at 0% indefinitely with no response and no error, because nothing
+# was failing; the loop simply never finished.
+PLANNER_MAX_TURNS = 8
 
-    Runs against the agent's existing conversation, so the planner sees whatever
-    it already gathered and only has to shape it. Returns None if the provider
-    still declines to produce a plan.
-    """
-    result = agent(
-        "Return the research plan for the query above. Do not answer the question and do not ask anything.",
-        structured_output_model=ResearchPlan,
-    )
+
+def _plan_from_result(result) -> dict | None:  # noqa: ANN001 - strands AgentResult
     plan_obj = getattr(result, "structured_output", None)
     return plan_obj.model_dump() if plan_obj else None
+
+
+def _planner_supports_schema(model_id: str) -> bool:
+    """Whether this model can be asked for the plan as a constrained tool call.
+
+    Measured across every model in the UI selector, planning the same query:
+
+      Claude Sonnet 5 / Opus 5 / Opus 4.7 / Sonnet 4.6 / Haiku 4.5
+          with the gateway tools attached -> a usable plan in 1-4 turns
+      Nova 2 Lite
+          with tools    -> 8 turns, limit_turns, no plan, zero output text
+          without tools -> 2 turns, limit_turns, no plan
+
+    Nova 2 Lite never calls the forced tool, and separately cannot survive the
+    seventeen-tool gateway loop: given those tools it exhausted the turn ceiling
+    and produced no text at all, which is what left Market Strategy running with
+    no response. Asked on its own with no tools it plans perfectly well and
+    returns parseable JSON in a few seconds.
+
+    So the model decides the strategy rather than the code trying one and
+    recovering. Gating on the family is coarse but honest about what was
+    measured; the alternative — attempting a schema call on every model and
+    falling back — costs Nova roughly a minute of dead work per run.
+    """
+    return "anthropic" in model_id
+
+
+def _plan_via_schema(agent, query: str) -> dict | None:  # noqa: ANN001 - strands Agent
+    """Ask for the plan as a constrained tool call."""
+    result = agent(query, structured_output_model=ResearchPlan, limits={"turns": PLANNER_MAX_TURNS})
+    if result.stop_reason == "limit_turns":
+        print(f"[ORCHESTRATOR] Planner hit the {PLANNER_MAX_TURNS}-turn ceiling without a plan")
+    return _plan_from_result(result)
+
+
+def _plan_via_prompt(agent, query: str) -> tuple[dict | None, str]:  # noqa: ANN001
+    """Ask in prose and parse the reply. Used for models without schema support."""
+    result = agent(query, limits={"turns": PLANNER_MAX_TURNS})
+    text = str(result) if result else ""
+    if result.stop_reason == "limit_turns":
+        print(f"[ORCHESTRATOR] Planner hit the {PLANNER_MAX_TURNS}-turn ceiling without a plan")
+    return _extract_plan_json(text), text
+
+
+def _retry_plan_toolless(model, model_id: str, system_prompt: str, query: str) -> dict | None:  # noqa: ANN001
+    """Last attempt, with no tools attached at all.
+
+    Competing tools are what a weaker model gets lost in, so removing them is the
+    strongest position left to ask from. Tries the schema first where the model
+    supports it, then prose, because on Nova the prose path is the one that
+    works. Costs the knowledge-base check, which only shapes the plan and is
+    worth giving up to get one at all.
+    """
+    agent = Agent(name="PlannerRetryAgent", system_prompt=system_prompt, model=model)
+    if _planner_supports_schema(model_id):
+        plan = _plan_from_result(agent(query, structured_output_model=ResearchPlan, limits={"turns": 2}))
+        if plan:
+            return plan
+    return _extract_plan_json(str(agent(query, limits={"turns": 2}) or ""))
 
 
 def _is_usable_plan(parsed: object) -> bool:
@@ -1381,8 +1438,15 @@ def _create_agent(
     bedrock_model: BedrockModel,
     extra_tools: list | None = None,
     pipeline_scope: PipelineScopeHook | None = None,
+    include_gateway: bool = True,
 ) -> Agent:
-    """Create a Strands Agent with Gateway MCP + Memory (identical to standalone pattern)."""
+    """Create a Strands Agent with Gateway MCP + Memory (identical to standalone pattern).
+
+    `include_gateway=False` omits the gateway toolset. Needed because a model can
+    be capable of the work and still unable to drive seventeen tools: Nova 2 Lite
+    exhausts the turn ceiling and returns no text at all when they are attached
+    (see `_planner_supports_schema`).
+    """
     memory_id = os.environ.get("MEMORY_ID")
     if not memory_id:
         raise ValueError("MEMORY_ID environment variable is required")
@@ -1410,7 +1474,7 @@ def _create_agent(
     agent = Agent(
         name=f"{name.title().replace('_', '')}Agent",
         system_prompt=augmented_prompt,
-        tools=[gateway_client, *(extra_tools or [])],
+        tools=[*([gateway_client] if include_gateway else []), *(extra_tools or [])],
         model=bedrock_model,
         hooks=hooks,
         session_manager=session_manager,
@@ -1719,6 +1783,11 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
             f"[ORCHESTRATOR] Plan-only pipeline scope: write={_pipeline_cfg.get('write')!r}, "
             f"read_filter={_pipeline_cfg.get('read_filter')!r}, archive={_pipeline_cfg.get('archive', False)}"
         )
+        use_schema = _planner_supports_schema(model_id)
+        print(
+            f"[ORCHESTRATOR] Planner strategy for {model_id}: "
+            f"{'schema + gateway tools' if use_schema else 'prompt, no tools'}"
+        )
         agent = _create_agent(
             "planner",
             planner_phase["prompt"],
@@ -1727,6 +1796,7 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
             gateway_client,
             bedrock_model,
             pipeline_scope=_pipeline_scope,
+            include_gateway=use_schema,
         )
     except Exception as e:
         print(f"[ORCHESTRATOR] Failed to create planner agent: {e}")
@@ -1744,15 +1814,18 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
 
     def _run_planner_sync():
         try:
-            # `structured_output_model` constrains the reply to the ResearchPlan
-            # schema while still running the normal tool loop, so the planner can
-            # consult the knowledge base and cannot answer in prose. The parsed
-            # object comes back on `structured_output`; the text is kept only as
-            # a fallback for the extractor below.
-            result = agent(query, structured_output_model=ResearchPlan)
-            plan_obj = getattr(result, "structured_output", None)
-            tq.put(("plan", plan_obj.model_dump() if plan_obj else None))
-            tq.put(("text", str(result) if result else ""))
+            # Where the model supports it, the plan is requested as a constrained
+            # tool call, which still runs the tool loop so the planner can consult
+            # the knowledge base and cannot answer in prose. Where it does not,
+            # the plan is asked for in prose and parsed — see
+            # `_planner_supports_schema` for what was measured.
+            if use_schema:
+                tq.put(("plan", _plan_via_schema(agent, query)))
+                tq.put(("text", ""))
+            else:
+                parsed, text = _plan_via_prompt(agent, query)
+                tq.put(("plan", parsed))
+                tq.put(("text", text))
         except Exception as exc:
             tq.put((_ERROR, exc))
         finally:
@@ -1813,15 +1886,21 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
     }
     yield {"agent_phase": {"agent": "planner", "phase": "planning", "status": "end"}}
 
-    # The schema-constrained result is authoritative. Parsing the reply text is
-    # kept only for the case where the provider returned no structured output,
-    # which should not happen but is cheap to tolerate.
+    # Whichever strategy ran has already parsed its own result; agent_text is
+    # only populated on the prose path and is re-parsed here as a cheap backstop.
     plan = structured_plan if _is_usable_plan(structured_plan) else _extract_plan_json(agent_text)
 
     if plan is None:
-        print("[ORCHESTRATOR] Planner produced no structured plan; retrying once")
+        print("[ORCHESTRATOR] Planner produced no plan; retrying with no tools attached")
         try:
-            plan = await asyncio.get_running_loop().run_in_executor(None, _retry_plan_structured, agent)
+            plan = await asyncio.get_running_loop().run_in_executor(
+                None,
+                _retry_plan_toolless,
+                bedrock_model,
+                model_id,
+                planner_phase["prompt"],
+                query,
+            )
         except Exception as exc:  # noqa: BLE001 - reported below, not raised
             print(f"[ORCHESTRATOR] Planner retry failed: {exc}")
 
