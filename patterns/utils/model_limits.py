@@ -40,6 +40,10 @@ MODEL_MAX_OUTPUT_TOKENS: tuple[tuple[str, int], ...] = (
     ("claude-opus-5", 128_000),
     ("claude-opus-4-7", 128_000),
     ("nova-2-lite", 65_535),
+    # Far below every other entry, and below the unrecognised-model default, so
+    # Nova Pro raised a ValidationException before this line existed. Probed
+    # 5 Aug 2026: 10000 accepted, 10001 rejected.
+    ("nova-pro", 10_000),
 )
 
 # Applied to any model not listed above. 64000 is the smallest ceiling across

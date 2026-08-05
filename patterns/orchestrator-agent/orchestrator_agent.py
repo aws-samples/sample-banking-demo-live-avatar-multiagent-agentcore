@@ -1113,22 +1113,39 @@ def _plan_from_result(result) -> dict | None:  # noqa: ANN001 - strands AgentRes
     return plan_obj.model_dump() if plan_obj else None
 
 
+# The planner sees only the knowledge-base search, not the whole gateway.
+#
+# Its prompt names exactly one tool, so the other sixteen were surface with no
+# purpose — and that surface was the difference between working and not. Measured
+# planning the same query:
+#
+#   Nova 2 Lite, all 17 tools     -> 8 turns, limit_turns, no plan, no output
+#   Nova 2 Lite, kb_search only   -> a usable plan in 5.9s, kb_search called once
+#   Claude Haiku, kb_search only  -> a usable plan in 10.5s, kb_search called 3x
+#
+# So restricting the toolset is what lets the knowledge-base step survive on
+# Nova, rather than dropping it there. Fewer tools is also cheaper and faster on
+# every model, which is why this applies to all of them and not just Nova.
+PLANNER_GATEWAY_FILTER: dict = {"allowed": [_re_module.compile(r".*kb_search$")]}
+
+
 def _planner_supports_schema(model_id: str) -> bool:
     """Whether this model can be asked for the plan as a constrained tool call.
 
     Measured across every model in the UI selector, planning the same query:
 
       Claude Sonnet 5 / Opus 5 / Opus 4.7 / Sonnet 4.6 / Haiku 4.5
-          with the gateway tools attached -> a usable plan in 1-4 turns
+          schema honoured -> a usable plan in 1-4 turns
       Nova 2 Lite
-          with tools    -> 8 turns, limit_turns, no plan, zero output text
-          without tools -> 2 turns, limit_turns, no plan
+          schema, with tools    -> 8 turns, limit_turns, no plan
+          schema, without tools -> 2 turns, limit_turns, no plan
+          prose,  kb_search only -> a usable plan in 5.9s
 
-    Nova 2 Lite never calls the forced tool, and separately cannot survive the
-    seventeen-tool gateway loop: given those tools it exhausted the turn ceiling
-    and produced no text at all, which is what left Market Strategy running with
-    no response. Asked on its own with no tools it plans perfectly well and
-    returns parseable JSON in a few seconds.
+    Nova 2 Lite never calls a forced tool, whatever else is attached, so it has
+    to be asked in prose. It plans well that way and returns parseable JSON in a
+    few seconds. Its trouble with tools is separate and handled by narrowing the
+    planner's toolset (see PLANNER_GATEWAY_FILTER), which is what lets the
+    knowledge-base step survive here rather than being dropped.
 
     So the model decides the strategy rather than the code trying one and
     recovering. Gating on the family is coarse but honest about what was
@@ -1350,7 +1367,12 @@ def _build_model(
     """
     is_claude_thinking = "anthropic" in model_id and "haiku" not in model_id
     is_nova = "nova" in model_id and "sonic" not in model_id
-    is_nova_reasoning = is_nova and "lite" not in model_id and "micro" not in model_id
+    # reasoningConfig is a Nova 2 feature. Testing only for "nova" caught the
+    # first generation too, and nova-pro-v1 rejects it outright:
+    #   Malformed input request: the provided reasoning config value is invalid
+    # which made Nova Pro unusable on every call. Requiring "nova-2" keeps the
+    # field for a future Nova 2 Pro without sending it to a v1 model.
+    is_nova_reasoning = is_nova and "nova-2" in model_id and "lite" not in model_id and "micro" not in model_id
 
     kwargs = dict(extra_kwargs)
     kwargs["model_id"] = model_id
@@ -1385,8 +1407,14 @@ def _build_model(
     return BedrockModel(**kwargs)
 
 
-def _create_gateway_mcp_client(access_token: str) -> MCPClient:
-    """Create MCP client for AgentCore Gateway with OAuth2 authentication."""
+def _create_gateway_mcp_client(access_token: str, tool_filters: dict | None = None) -> MCPClient:
+    """Create MCP client for AgentCore Gateway with OAuth2 authentication.
+
+    `tool_filters` narrows which gateway tools the agent can see, e.g.
+    ``{"allowed": [re.compile(r".*kb_search")]}``. Used by the planner, which
+    only needs the knowledge-base search and cannot rely on every model coping
+    with all seventeen — see `_planner_gateway_filter`.
+    """
     stack_name = os.environ.get("STACK_NAME")
     if not stack_name:
         raise ValueError("STACK_NAME environment variable is required")
@@ -1402,6 +1430,7 @@ def _create_gateway_mcp_client(access_token: str) -> MCPClient:
     gateway_client = MCPClient(
         lambda: streamablehttp_client(url=gateway_url, headers={"Authorization": f"Bearer {access_token}"}),
         prefix="gateway",
+        tool_filters=tool_filters,
     )
 
     print("[ORCHESTRATOR] Gateway MCP client created successfully")
@@ -1438,14 +1467,12 @@ def _create_agent(
     bedrock_model: BedrockModel,
     extra_tools: list | None = None,
     pipeline_scope: PipelineScopeHook | None = None,
-    include_gateway: bool = True,
 ) -> Agent:
     """Create a Strands Agent with Gateway MCP + Memory (identical to standalone pattern).
 
-    `include_gateway=False` omits the gateway toolset. Needed because a model can
-    be capable of the work and still unable to drive seventeen tools: Nova 2 Lite
-    exhausts the turn ceiling and returns no text at all when they are attached
-    (see `_planner_supports_schema`).
+    The caller decides which gateway tools the agent sees, by passing a client
+    built with `tool_filters`. The planner passes a narrowed one; the pipeline
+    phases pass the full set.
     """
     memory_id = os.environ.get("MEMORY_ID")
     if not memory_id:
@@ -1474,7 +1501,7 @@ def _create_agent(
     agent = Agent(
         name=f"{name.title().replace('_', '')}Agent",
         system_prompt=augmented_prompt,
-        tools=[*([gateway_client] if include_gateway else []), *(extra_tools or [])],
+        tools=[gateway_client, *(extra_tools or [])],
         model=bedrock_model,
         hooks=hooks,
         session_manager=session_manager,
@@ -1744,7 +1771,8 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
 
     try:
         access_token = get_gateway_access_token()
-        gateway_client = _create_gateway_mcp_client(access_token)
+        # Plan-only mode runs the planner and nothing else, and the planner needs
+        # just the knowledge-base search, so the full toolset is never built here.
         model_id = requested_model or os.environ.get("MODEL_ID", "us.anthropic.claude-sonnet-4-6")
         bedrock_model = _build_model(model_id, temperature=0.1)
     except Exception as e:
@@ -1785,18 +1813,19 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
         )
         use_schema = _planner_supports_schema(model_id)
         print(
-            f"[ORCHESTRATOR] Planner strategy for {model_id}: "
-            f"{'schema + gateway tools' if use_schema else 'prompt, no tools'}"
+            f"[ORCHESTRATOR] Planner strategy for {model_id}: {'schema' if use_schema else 'prompt'} + kb_search only"
         )
+        # A second, narrowed client: the pipeline's own client keeps the full
+        # toolset for the researcher and synthesizer phases.
+        planner_gateway = _create_gateway_mcp_client(access_token, PLANNER_GATEWAY_FILTER)
         agent = _create_agent(
             "planner",
             planner_phase["prompt"],
             user_id,
             session_id,
-            gateway_client,
+            planner_gateway,
             bedrock_model,
             pipeline_scope=_pipeline_scope,
-            include_gateway=use_schema,
         )
     except Exception as e:
         print(f"[ORCHESTRATOR] Failed to create planner agent: {e}")
