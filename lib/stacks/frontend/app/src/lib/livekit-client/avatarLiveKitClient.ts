@@ -230,9 +230,13 @@ export class AvatarLiveKitClient {
             void (async () => {
                 let text = "";
                 try {
-                    // Each yield is the full text received so far, not a delta.
+                    // Each yield is one chunk's decoded text, not the text so
+                    // far — the reader's own type doc claims otherwise, which is
+                    // wrong: it returns `decoder.decode(chunk.content)`. Taking
+                    // it literally showed a single word at a time, each
+                    // replacing the last, so accumulate.
                     for await (const chunk of reader) {
-                        text = chunk;
+                        text += chunk;
                         this.options.onTranscript?.({ segmentId, role, text, isFinal: false });
                     }
                 } catch (err) {

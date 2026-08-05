@@ -372,7 +372,14 @@ export default function AvatarInterface(): JSX.Element {
 
     /** Update the bubble for this utterance, or start one if it is new. */
     const handleLiveKitTranscript = useCallback(
-        ({ segmentId, role, text, isFinal }: TranscriptUpdate): void => {
+        // `isFinal` is deliberately ignored: the bubble keeps its key for the
+        // life of the utterance. The agent's speech arrives as one delta stream
+        // that is closed at the end, while a transcribed voice arrives as
+        // successive streams that each carry the latest full text under the same
+        // segment id. Retiring the key on the first completion left that second
+        // stream with no bubble to update, so it appended and the sentence
+        // showed twice.
+        ({ segmentId, role, text }: TranscriptUpdate): void => {
             setTranscript((prev) => {
                 const idx = prev.findIndex((e) => e.streamId === segmentId);
                 if (idx === -1) {
@@ -382,9 +389,7 @@ export default function AvatarInterface(): JSX.Element {
                             role,
                             segments: [{ kind: "text", content: text }],
                             timestamp: new Date().toISOString(),
-                            // Dropping the key once final stops a late duplicate
-                            // stream from reopening a finished bubble.
-                            streamId: isFinal ? undefined : segmentId,
+                            streamId: segmentId,
                         },
                     ];
                 }
@@ -392,7 +397,6 @@ export default function AvatarInterface(): JSX.Element {
                 updated[idx] = {
                     ...updated[idx],
                     segments: [{ kind: "text", content: text }],
-                    streamId: isFinal ? undefined : segmentId,
                 };
                 return updated;
             });
