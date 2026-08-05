@@ -23,6 +23,11 @@ from pathlib import Path
 
 import pytest
 
+# The name the gateway actually registers; "gateway_kb_search" matches
+# nothing, so asserting against it proved nothing. See
+# gateway_tools.bare_tool_name.
+KB_SEARCH_TOOL = "gateway_kb-search___kb_search"
+
 # Load avatar_agent.py as a module. We can't just `from avatar_agent import ...`
 # because the Python file is named `avatar_agent.py` (with underscore) but
 # the directory is `avatar-agent` (with hyphen), so the package is unreachable.
@@ -98,7 +103,7 @@ class TestHolderBackedPipelineScopeHook:
             return raw
 
         hook = PipelineScopeHook(read_filter=_provider)
-        event = make_event("gateway_kb_search")
+        event = make_event(KB_SEARCH_TOOL)
         hook._inject_pipeline(event)
         assert event.tool_use["input"]["pipelines"] == ["strategy_research"]
 
@@ -116,19 +121,19 @@ class TestHolderBackedPipelineScopeHook:
         hook = PipelineScopeHook(read_filter=_provider)
 
         # First call: bistro scope.
-        e1 = make_event("gateway_kb_search")
+        e1 = make_event(KB_SEARCH_TOOL)
         hook._inject_pipeline(e1)
         assert e1.tool_use["input"]["pipelines"] == ["strategy_research"]
 
         # Simulate kbPipelinesChange → holder[0] mutated in place.
         holder[0] = avatar_module._parse_kb_pipelines("services")
-        e2 = make_event("gateway_kb_search")
+        e2 = make_event(KB_SEARCH_TOOL)
         hook._inject_pipeline(e2)
         assert e2.tool_use["input"]["pipelines"] == ["services"]
 
         # Simulate "All" toggle → frontend sends empty list → holder becomes None.
         holder[0] = None
-        e3 = make_event("gateway_kb_search")
+        e3 = make_event(KB_SEARCH_TOOL)
         hook._inject_pipeline(e3)
         # Empty holder should expand to every valid pipeline (UI semantics).
         assert set(e3.tool_use["input"]["pipelines"]) == set(avatar_module.VALID_PIPELINES)
@@ -148,7 +153,7 @@ class TestHolderBackedPipelineScopeHook:
             return raw
 
         hook = PipelineScopeHook(read_filter=_provider)
-        event = make_event("gateway_kb_search")
+        event = make_event(KB_SEARCH_TOOL)
         hook._inject_pipeline(event)
         assert event.tool_use["input"]["pipelines"] != []
         assert set(event.tool_use["input"]["pipelines"]) == set(avatar_module.VALID_PIPELINES)

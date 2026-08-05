@@ -43,8 +43,8 @@ from livekit.agents.llm import function_tool
 from livekit.plugins import aws
 from persona_prompts import get_persona_prompt
 from utils.auth import get_gateway_access_token
+from utils.gateway_tools import USER_SCOPED_TOOLS, bare_tool_name
 from utils.ssm import get_ssm_parameter
-from utils.tool_guard import USER_SCOPED_TOOLS, bare_tool_name
 
 logger = logging.getLogger("livekit-agent")
 logging.basicConfig(

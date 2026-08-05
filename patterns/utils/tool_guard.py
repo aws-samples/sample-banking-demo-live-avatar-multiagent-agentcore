@@ -9,44 +9,11 @@ from typing import Any
 
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 
+from utils.gateway_tools import USER_SCOPED_TOOLS, bare_tool_name
+
+__all__ = ["USER_SCOPED_TOOLS", "UserScopeHook", "bare_tool_name"]
+
 logger = logging.getLogger(__name__)
-
-# Separator the AgentCore Gateway puts between a target name and its tool name.
-GATEWAY_NAME_SEPARATOR = "___"
-
-
-def bare_tool_name(registered_name: str) -> str:
-    """Reduce a registered tool name to the tool itself.
-
-    A gateway tool reaches Strands as ``<prefix>_<target>___<tool>``, e.g.
-    ``gateway_pdf-generator___pdf_generator`` — the target segment uses hyphens
-    and the client prefix is prepended. Matching on the full string therefore
-    never succeeded, and both hooks in this package returned early for every
-    call: nothing was ever injected or filtered. Probed against the live gateway,
-    all 17 registered names differ from the values previously listed here, so the
-    exact-match set had zero overlap.
-
-    Comparing only the trailing segment is stable against both the prefix and the
-    target's own naming.
-    """
-    return registered_name.rsplit(GATEWAY_NAME_SEPARATOR, 1)[-1]
-
-
-# Gateway tools that require the verified user_id, by bare tool name.
-USER_SCOPED_TOOLS: frozenset[str] = frozenset(
-    {
-        "kb_search",
-        "pdf_generator",
-        "save_memory",
-        "recall_memories",
-        "analyze_patterns",
-        "retrieve_user_profile",
-        "nova_canvas_generate",
-        "nova_canvas_edit",
-        "nova_reel_generate",
-        "place_order",
-    }
-)
 
 
 class UserScopeHook(HookProvider):

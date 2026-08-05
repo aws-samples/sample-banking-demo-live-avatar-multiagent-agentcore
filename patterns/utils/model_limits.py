@@ -46,10 +46,16 @@ MODEL_MAX_OUTPUT_TOKENS: tuple[tuple[str, int], ...] = (
     ("nova-pro", 10_000),
 )
 
-# Applied to any model not listed above. 64000 is the smallest ceiling across
-# the current selector, so an unrecognised model fails safe (a smaller output
-# budget) rather than raising a ValidationException at stream time.
-DEFAULT_MAX_OUTPUT_TOKENS = 64_000
+# Applied to any model not listed above, and deliberately equal to the smallest
+# ceiling in the table so an unrecognised model fails safe — a smaller output
+# budget — rather than raising a ValidationException at stream time.
+#
+# It was 64000 while every listed ceiling was at least that. Adding Nova Pro at
+# 10000 broke the guarantee: an unlisted model with a small ceiling was handed
+# 64000 and rejected the request outright, which is how Nova Pro failed every
+# call before it was listed. Lowering this trades output budget on a model nobody
+# selected for that model working at all.
+DEFAULT_MAX_OUTPUT_TOKENS = 10_000
 
 
 def model_max_output_tokens(model_id: str) -> int:

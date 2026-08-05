@@ -35,7 +35,7 @@ from typing import Any
 
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 
-from utils.tool_guard import bare_tool_name
+from utils.gateway_tools import bare_tool_name
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ class PipelineScopeHook(HookProvider):
     def _inject_pipeline(self, event: BeforeToolCallEvent) -> None:
         # Bare name: a gateway tool registers as "<prefix>_<target>___<tool>",
         # so comparing the full string matched nothing and this hook never
-        # applied a filter. See tool_guard.bare_tool_name.
+        # applied a filter. See gateway_tools.bare_tool_name.
         tool_name = bare_tool_name(event.tool_use["name"])
         tool_input: dict[str, Any] = event.tool_use["input"]
 
