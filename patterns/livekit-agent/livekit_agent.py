@@ -209,6 +209,27 @@ def _display_tool_name(name: str) -> str:
     return name.rsplit(GATEWAY_NAME_SEPARATOR, 1)[-1]
 
 
+def _serialize_tool_output(output: object) -> str:
+    """Render a tool result as something the browser can actually parse.
+
+    An MCP tool does not return a string — it returns content blocks, so `str()`
+    produced a Python repr with single quotes. That is not JSON, `JSON.parse`
+    threw in the client, the artifact parser bailed, and a generated website
+    showed a "Done" badge with no link next to the avatar claiming it had shared
+    one. Serialising with `json.dumps` keeps both shapes valid on the wire.
+    """
+    if output is None:
+        return ""
+    if isinstance(output, str):
+        return output
+    try:
+        return json.dumps(output, default=str)
+    except (TypeError, ValueError):
+        # Something unserialisable: keep the text rather than dropping the event,
+        # even though the client will not find an artifact in it.
+        return str(output)
+
+
 def _attach_tool_activity_publisher(session: AgentSession, room: rtc.Room) -> None:
     """Publish tool starts and results to the browser.
 
@@ -249,7 +270,7 @@ def _attach_tool_activity_publisher(session: AgentSession, room: rtc.Room) -> No
             # A None output means the tool raised, most often the gateway MCP
             # call timing out; `is_error` covers a tool that returned a failure.
             failed = output is None or output.is_error
-            text = "" if output is None else str(output.output or "")
+            text = "" if output is None else _serialize_tool_output(output.output)
             publish(
                 {
                     "callId": call.call_id,

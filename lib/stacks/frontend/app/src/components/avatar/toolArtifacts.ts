@@ -11,7 +11,8 @@
  * Field names come from the tool handlers in `gateway/tools/*`:
  *   nova_canvas_generate / nova_canvas_edit -> image_url
  *   nova_reel_status                        -> video_url
- *   website_generator / pdf_generator       -> url
+ *   website_generator / pdf_generator       -> url, or website_url on the
+ *                                              pipeline path
  */
 
 /** Segments this module can produce. Mirrors TranscriptSegment in AvatarInterface. */
@@ -25,18 +26,31 @@ interface ToolRecord {
     image_url?: string;
     video_url?: string;
     url?: string;
+    website_url?: string;
     title?: string;
     s3_key?: string;
     content?: Array<{ text?: string }>;
     [key: string]: unknown;
 }
 
+/** First `text` field of an MCP content-block list, if that is what this is. */
+function unwrapContentBlocks(value: unknown): string | null {
+    const blocks = Array.isArray(value) ? value : (value as ToolRecord | null)?.content;
+    if (!Array.isArray(blocks)) return null;
+    for (const block of blocks) {
+        const text = (block as { text?: unknown } | null)?.text;
+        if (typeof text === "string" && text) return text;
+    }
+    return null;
+}
+
 /**
  * Parse a tool result, unwrapping the MCP envelope when present.
  *
  * Gateway tools return their payload as a JSON string, but a tool routed
- * through MCP arrives wrapped as `{content: [{text: "<json>"}]}` — sometimes
- * doubly so. Unwrapping is done by looking for the envelope rather than by
+ * through MCP arrives wrapped in content blocks — either as
+ * `{content: [{text: "<json>"}]}` or as a bare `[{text: "<json>"}]`, sometimes
+ * nested twice. Both shapes are unwrapped by inspecting the value rather than
  * guessing from the tool name, since the same tool can arrive either way.
  */
 function parseRecord(raw: string): ToolRecord | null {
@@ -47,11 +61,10 @@ function parseRecord(raw: string): ToolRecord | null {
         return null;
     }
 
-    // Two passes is enough for the deepest envelope the gateway produces.
-    for (let i = 0; i < 2; i++) {
-        const record = value as ToolRecord | null;
-        const nested = record?.content?.[0]?.text;
-        if (typeof nested !== "string") break;
+    // Three passes covers a bare block list holding an enveloped payload.
+    for (let i = 0; i < 3; i++) {
+        const nested = unwrapContentBlocks(value);
+        if (nested === null) break;
         try {
             value = JSON.parse(nested);
         } catch {
@@ -59,7 +72,9 @@ function parseRecord(raw: string): ToolRecord | null {
         }
     }
 
-    return value && typeof value === "object" ? (value as ToolRecord) : null;
+    return value && !Array.isArray(value) && typeof value === "object"
+        ? (value as ToolRecord)
+        : null;
 }
 
 /**
@@ -102,12 +117,20 @@ export function extractToolArtifacts(toolName: string, rawOutput: string): ToolA
 
     // `url` is generic, so it is only treated as a site or document when the
     // tool is one that produces one. Other tools use `url` for other things.
+    // `website_url` is accepted too: website_generator returns `url` from the
+    // avatar path but `website_url` from the pipeline path.
     const producesLink =
         toolName.includes("website_generator") || toolName.includes("pdf_generator");
-    if (producesLink && typeof record.url === "string" && record.url) {
+    const link =
+        typeof record.url === "string" && record.url
+            ? record.url
+            : typeof record.website_url === "string" && record.website_url
+              ? record.website_url
+              : "";
+    if (producesLink && link) {
         artifacts.push({
             kind: "website",
-            url: record.url,
+            url: link,
             title: typeof record.title === "string" ? record.title : undefined,
             s3_key: typeof record.s3_key === "string" ? record.s3_key : undefined,
         });

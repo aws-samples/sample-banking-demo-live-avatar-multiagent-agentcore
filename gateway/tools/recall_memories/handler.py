@@ -143,27 +143,30 @@ def _recall_from_agentcore(user_id: str, memory_id: str, query: str, limit: int)
     long-term-only reader answers "nothing" about a memory the user just watched
     being saved.
 
-    Returns a JSON string on success, or None if both tiers fail or no
-    caller-scoped namespace could be resolved (the caller then tries Neptune or
-    reports disabled). Returning None rather than an empty result matters: an
-    empty list is indistinguishable from "you have no memories", which is how
-    this path stayed broken.
+    Returns a JSON string when either tier could be read — including an empty
+    list, which is the honest answer for a user who has saved nothing. Returns
+    None only when both reads actually failed, so the caller can fall back
+    instead of asserting anything about the user's memories.
+
+    The distinction has to come from whether the call raised, not from whether
+    the result was empty. Treating "empty" as "broken" made a brand-new user's
+    recall report "No memory backend configured", which was simply untrue.
     """
+    long_term_ok = True
     try:
         long_term = agentcore_memory.long_term_records(memory_id, user_id, query=query, limit=limit)
     except Exception as e:
         logger.warning("AgentCore long-term retrieval failed: %s", e)
-        long_term = []
+        long_term, long_term_ok = [], False
 
+    short_term_ok = True
     try:
         short_term = agentcore_memory.short_term_events(memory_id, user_id)
     except Exception as e:
         logger.warning("AgentCore short-term retrieval failed: %s", e)
-        short_term = []
+        short_term, short_term_ok = [], False
 
-    if not long_term and not short_term:
-        # Cannot distinguish "no memories" from "could not read them", so hand
-        # over to the fallback instead of asserting the user has none.
+    if not long_term_ok and not short_term_ok:
         return None
 
     if query:
@@ -250,8 +253,16 @@ def handler(event, context):
                             "query": query,
                             "memories": [],
                             "count": 0,
-                            "status": "disabled",
-                            "reason": "No memory backend configured (neither MEMORY_ID nor NEPTUNE_ENDPOINT)",
+                            "status": "unavailable",
+                            # Distinguish the two ways of getting here. Reporting
+                            # "not configured" when a configured backend simply
+                            # failed to read sends anyone debugging it to the
+                            # wrong place, and tells the user something untrue.
+                            "reason": (
+                                "No memory backend configured (neither MEMORY_ID nor NEPTUNE_ENDPOINT)"
+                                if not memory_id
+                                else "Memory backend is configured but could not be read"
+                            ),
                         }
                     ),
                 }

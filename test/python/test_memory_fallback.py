@@ -109,15 +109,16 @@ class TestRecallMemoriesFallbackChain:
     def _ctx(self, lambda_context):
         return lambda_context("recall_memories")
 
-    def test_disabled_when_no_backends(self, load_tool, lambda_context, monkeypatch):
+    def test_unavailable_when_no_backends(self, load_tool, lambda_context, monkeypatch):
         monkeypatch.delenv("MEMORY_ID", raising=False)
         mod = load_tool("recall_memories")
         monkeypatch.setattr(mod, "NEPTUNE_ENDPOINT", "")
 
         resp = mod.handler({"user_id": "alice", "query": "food"}, self._ctx(lambda_context))
         body = json.loads(resp["content"][0]["text"])
-        assert body["status"] == "disabled"
+        assert body["status"] == "unavailable"
         assert body["memories"] == []
+        assert "No memory backend configured" in body["reason"]
 
     def test_agentcore_success_returns_long_term_records(self, load_tool, lambda_context, monkeypatch):
         """This test used to assert `/actors/alice/` and pass while nothing worked.
@@ -189,8 +190,13 @@ class TestRecallMemoriesFallbackChain:
         assert body["count"] == 1
         assert body["memories"][0]["tier"] == "short_term"
 
-    def test_both_tiers_failing_falls_through_instead_of_claiming_none(self, load_tool, lambda_context, monkeypatch):
-        """An empty result would be indistinguishable from "you have no memories"."""
+    def test_a_user_with_no_memories_gets_an_honest_empty_answer(self, load_tool, lambda_context, monkeypatch):
+        """Empty is not broken.
+
+        Treating an empty read as a failure made a brand-new user's recall report
+        "No memory backend configured" — untrue, and it sends anyone debugging it
+        to the wrong place. The signal for failure has to be that the call raised.
+        """
         monkeypatch.setenv("MEMORY_ID", "mem-123")
         mod = load_tool("recall_memories")
         monkeypatch.setattr(mod, "NEPTUNE_ENDPOINT", "")
@@ -200,16 +206,59 @@ class TestRecallMemoriesFallbackChain:
 
         resp = mod.handler({"user_id": "alice", "query": "food"}, self._ctx(lambda_context))
         body = json.loads(resp["content"][0]["text"])
-        assert body["status"] == "disabled"
+        assert body["backend"] == "agentcore"
+        assert body["count"] == 0
+        assert "status" not in body
+
+    def test_both_tiers_raising_falls_through_instead_of_claiming_none(self, load_tool, lambda_context, monkeypatch):
+        """A failed read must not be reported as "you have no memories"."""
+        monkeypatch.setenv("MEMORY_ID", "mem-123")
+        mod = load_tool("recall_memories")
+        monkeypatch.setattr(mod, "NEPTUNE_ENDPOINT", "")
+
+        def boom(*_a, **_k):
+            raise RuntimeError("AgentCore down")
+
+        monkeypatch.setattr(mod.agentcore_memory, "long_term_records", boom)
+        monkeypatch.setattr(mod.agentcore_memory, "short_term_events", boom)
+
+        resp = mod.handler({"user_id": "alice", "query": "food"}, self._ctx(lambda_context))
+        body = json.loads(resp["content"][0]["text"])
+        assert body["status"] == "unavailable"
+        # The backend exists; saying it is unconfigured would be false.
+        assert "could not be read" in body["reason"]
+
+    def test_one_tier_raising_still_returns_the_other(self, load_tool, lambda_context, monkeypatch):
+        monkeypatch.setenv("MEMORY_ID", "mem-123")
+        mod = load_tool("recall_memories")
+
+        def boom(*_a, **_k):
+            raise RuntimeError("long term down")
+
+        monkeypatch.setattr(mod.agentcore_memory, "long_term_records", boom)
+        monkeypatch.setattr(
+            mod.agentcore_memory,
+            "short_term_events",
+            lambda *a, **k: [{"content": "joint account please", "role": "USER", "timestamp": "t", "session_id": "s"}],
+        )
+
+        resp = mod.handler({"user_id": "alice", "query": "joint"}, self._ctx(lambda_context))
+        body = json.loads(resp["content"][0]["text"])
+        assert body["count"] == 1
+        assert body["memories"][0]["tier"] == "short_term"
 
     def test_neptune_fallback_uses_parameterized_cypher(self, load_tool, lambda_context, monkeypatch):
         monkeypatch.setenv("MEMORY_ID", "mem-123")
         mod = load_tool("recall_memories")
         monkeypatch.setattr(mod, "NEPTUNE_ENDPOINT", "neptune.example")
 
-        # Make AgentCore return nothing from either tier so we fall through.
-        monkeypatch.setattr(mod.agentcore_memory, "long_term_records", lambda *a, **k: [])
-        monkeypatch.setattr(mod.agentcore_memory, "short_term_events", lambda *a, **k: [])
+        # Both AgentCore tiers must raise, not return empty — an empty read is a
+        # legitimate answer and no longer triggers the fallback.
+        def boom(*_a, **_k):
+            raise RuntimeError("AgentCore down")
+
+        monkeypatch.setattr(mod.agentcore_memory, "long_term_records", boom)
+        monkeypatch.setattr(mod.agentcore_memory, "short_term_events", boom)
 
         captured: list[tuple[str, dict]] = []
 

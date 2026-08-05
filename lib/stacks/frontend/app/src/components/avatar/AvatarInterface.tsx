@@ -63,6 +63,7 @@ import { getAWSCredentials } from "@/lib/auth/credentials";
 import { createPCMProcessorUrl, arrayBufferToBase64 } from "@/lib/websocket-client/audio-utils";
 import AvatarTextInput from "./AvatarTextInput";
 import AvatarSuggestedPrompts from "./AvatarSuggestedPrompts";
+import AvatarPromptsDialog from "./AvatarPromptsDialog";
 import { useAuth } from "react-oidc-context";
 import "./AvatarPage.css";
 
@@ -135,6 +136,7 @@ export default function AvatarInterface(): JSX.Element {
 
     const [isRecording, setIsRecording] = useState(false);
     const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+    const [promptsOpen, setPromptsOpen] = useState(false);
     const [mediaResults, setMediaResults] = useState<ToolResultMedia[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [audioLevel, setAudioLevel] = useState(0);
@@ -1443,6 +1445,15 @@ export default function AvatarInterface(): JSX.Element {
                 <div className="avatar-page__chat-col">
                     <div className="avatar-page__chat-header">
                         <h3>Transcript</h3>
+                        {/* The starter cards vanish once the transcript fills, so
+                            the same list stays available here for the session. */}
+                        <Button
+                            variant="inline-link"
+                            iconName="status-info"
+                            onClick={() => setPromptsOpen(true)}
+                        >
+                            Examples
+                        </Button>
                     </div>
 
                     <div className="avatar-page__transcript" ref={transcriptRef}>
@@ -1671,6 +1682,13 @@ export default function AvatarInterface(): JSX.Element {
                     />
                 )}
             </Modal>
+
+            <AvatarPromptsDialog
+                visible={promptsOpen}
+                onDismiss={() => setPromptsOpen(false)}
+                onSelect={handleSendText}
+                disabled={!isConnected}
+            />
         </div>
     );
 }
