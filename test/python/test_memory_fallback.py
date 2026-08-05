@@ -119,28 +119,58 @@ class TestRecallMemoriesFallbackChain:
         assert body["status"] == "disabled"
         assert body["memories"] == []
 
-    def test_agentcore_success_uses_actor_namespace(self, load_tool, lambda_context, monkeypatch):
+    def test_agentcore_success_uses_the_resolved_strategy_namespace(self, load_tool, lambda_context, monkeypatch):
+        """This test used to assert `/actors/alice/` and pass while nothing worked.
+
+        `namespace` is a strict prefix filter and the strategies live under
+        `/strategies/{memoryStrategyId}/actors/{actorId}/`, so that prefix matched
+        no record. The stub returned `memoryRecords`, a key the API does not have,
+        which made the assertion self-consistent and meaningless. See
+        test_recall_namespace_scope for the full contract.
+        """
         monkeypatch.setenv("MEMORY_ID", "mem-123")
         mod = load_tool("recall_memories")
+        mod._NAMESPACE_TEMPLATES = None
 
-        fake_client = MagicMock()
-        fake_client.retrieve_memory_records.return_value = {
-            "memoryRecords": [
-                {"content": "user likes spicy", "timestamp": "2026-01-01T00:00:00Z"},
+        control = MagicMock()
+        control.get_memory.return_value = {
+            "memory": {
+                "strategies": [
+                    {
+                        "strategyId": "strat-9",
+                        "namespaces": ["/strategies/{memoryStrategyId}/actors/{actorId}/"],
+                    }
+                ]
+            }
+        }
+        data = MagicMock()
+        data.retrieve_memory_records.return_value = {
+            "memoryRecordSummaries": [
+                {
+                    "memoryRecordId": "rec-1",
+                    "content": {"text": "user prefers paperless statements"},
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "score": 0.9,
+                },
             ]
         }
-        with patch.object(mod.boto3, "client", return_value=fake_client):
+
+        def fake_client(name, **_):
+            return control if name.endswith("-control") else data
+
+        with patch.object(mod.boto3, "client", side_effect=fake_client):
             resp = mod.handler(
-                {"user_id": "alice", "query": "food", "limit": 5},
+                {"user_id": "alice", "query": "statements", "limit": 5},
                 self._ctx(lambda_context),
             )
 
         body = json.loads(resp["content"][0]["text"])
         assert body["backend"] == "agentcore"
         assert body["count"] == 1
-        # Critical: namespace is /actors/{user_id}/ — strategy-ID-free.
-        kwargs = fake_client.retrieve_memory_records.call_args.kwargs
-        assert kwargs["namespace"] == "/actors/alice/"
+        assert body["memories"][0]["content"] == "user prefers paperless statements"
+
+        kwargs = data.retrieve_memory_records.call_args.kwargs
+        assert kwargs["namespace"] == "/strategies/strat-9/actors/alice/"
         assert kwargs["memoryId"] == "mem-123"
 
     def test_neptune_fallback_uses_parameterized_cypher(self, load_tool, lambda_context, monkeypatch):

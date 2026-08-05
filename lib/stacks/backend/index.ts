@@ -215,12 +215,14 @@ export class Backend extends Stack {
         }
 
         // Pass memory IDs to tool Lambdas (used by recall_memories, save_memory).
-        // The tools use `/actors/{user_id}/` namespace for retrieval (no strategy
-        // prefix), which lets us avoid resolving the generated strategy IDs at
-        // deploy time. AgentCore Memory's CreateEvent API doesn't take a strategy
-        // ID either — strategies process events asynchronously into records that
-        // share the actor's namespace. See docs/kb-isolation.md for the broader
-        // memory architecture notes.
+        // CreateEvent takes no strategy ID — strategies process events
+        // asynchronously into records under the namespaces configured above.
+        // Retrieval does need those namespaces, and there is no shared
+        // `/actors/{user_id}/` namespace to read from: the configured paths all
+        // begin `/strategies/{memoryStrategyId}/`, and `namespace` on
+        // RetrieveMemoryRecords matches by prefix. recall_memories therefore
+        // resolves the generated strategy IDs at call time via GetMemory.
+        // See docs/kb-isolation.md for the broader memory architecture notes.
         commonEnv.MEMORY_ID = memoryId;
 
         const toolDefs: Array<{
@@ -379,6 +381,11 @@ export class Backend extends Stack {
                             "bedrock-agentcore:CreateEvent",
                             "bedrock-agentcore:GetEvent",
                             "bedrock-agentcore:ListEvents",
+                            // recall_memories resolves the strategies' real
+                            // namespaces at call time, because `namespace` on
+                            // RetrieveMemoryRecords is a strict prefix filter and
+                            // the strategy IDs are generated at deploy time.
+                            "bedrock-agentcore:GetMemory",
                         ],
                         resources: [memoryArn],
                     })
