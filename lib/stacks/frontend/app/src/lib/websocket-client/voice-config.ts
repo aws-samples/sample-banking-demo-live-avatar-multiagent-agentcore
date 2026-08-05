@@ -22,18 +22,33 @@ export const LANGUAGES: LanguageOption[] = [
     { code: "pt-BR", label: "Portuguese (BR)", flag: "🇧🇷" },
 ];
 
+/**
+ * Voices Nova Sonic 2 (`amazon.nova-2-sonic-v1:0`) actually accepts.
+ *
+ * Every id here is checked against SONIC2_VOICES in the AWS realtime plugin
+ * (`livekit/plugins/aws/experimental/realtime/types.py`). The list previously
+ * held ids from a different TTS catalogue — Pedro, Léa, Rémi, Bianca, Hans,
+ * Vicki and Vitória are not Nova Sonic voices, and four of them were the
+ * defaults for Spanish, French, German and Portuguese, so picking any language
+ * other than English sent the model a voice it does not have.
+ *
+ * Only add an id after confirming it appears in SONIC2_VOICES.
+ */
 export const VOICES: VoiceProfile[] = [
     { id: "tiffany", name: "Tiffany", language: "en-US", gender: "female" },
     { id: "matthew", name: "Matthew", language: "en-US", gender: "male" },
+    { id: "olivia", name: "Olivia", language: "en-US", gender: "female" },
     { id: "amy", name: "Amy", language: "en-US", gender: "female" },
     { id: "lupe", name: "Lupe", language: "es-US", gender: "female" },
-    { id: "pedro", name: "Pedro", language: "es-US", gender: "male" },
-    { id: "lea", name: "Léa", language: "fr-FR", gender: "female" },
-    { id: "remi", name: "Rémi", language: "fr-FR", gender: "male" },
-    { id: "bianca", name: "Bianca", language: "it-IT", gender: "female" },
-    { id: "hans", name: "Hans", language: "de-DE", gender: "male" },
-    { id: "vicki", name: "Vicki", language: "de-DE", gender: "female" },
-    { id: "vitoria", name: "Vitória", language: "pt-BR", gender: "female" },
+    { id: "carlos", name: "Carlos", language: "es-US", gender: "male" },
+    { id: "ambre", name: "Ambre", language: "fr-FR", gender: "female" },
+    { id: "florian", name: "Florian", language: "fr-FR", gender: "male" },
+    { id: "beatrice", name: "Beatrice", language: "it-IT", gender: "female" },
+    { id: "lorenzo", name: "Lorenzo", language: "it-IT", gender: "male" },
+    { id: "tina", name: "Tina", language: "de-DE", gender: "female" },
+    { id: "lennart", name: "Lennart", language: "de-DE", gender: "male" },
+    { id: "carolina", name: "Carolina", language: "pt-BR", gender: "female" },
+    { id: "leo", name: "Leo", language: "pt-BR", gender: "male" },
 ];
 
 /**
@@ -53,10 +68,10 @@ export const VOICES: VoiceProfile[] = [
 const DEFAULT_VOICE_BY_LANGUAGE: Record<LanguageCode, string> = {
     "en-US": "tiffany",
     "es-US": "lupe",
-    "fr-FR": "lea",
-    "it-IT": "bianca",
-    "de-DE": "vicki",
-    "pt-BR": "vitoria",
+    "fr-FR": "ambre",
+    "it-IT": "beatrice",
+    "de-DE": "tina",
+    "pt-BR": "carolina",
 };
 
 export function getVoicesForLanguage(language: LanguageCode): VoiceProfile[] {
@@ -71,8 +86,7 @@ export function getDefaultVoice(language: LanguageCode): VoiceProfile {
 
 /**
  * Best voice of a given gender for a language, falling back to that language's
- * default when it has no voice of that gender (Italian and Portuguese are
- * female-only in the list above).
+ * default when it has no voice of that gender.
  *
  * Used to match the voice to the avatar on screen: a female GLB with a male
  * voice reads as a bug, which is exactly what happened when the default was

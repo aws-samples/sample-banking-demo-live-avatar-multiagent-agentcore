@@ -181,6 +181,8 @@ export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
     private visemeValues: Record<string, number> = {};
     private lastFrameMs = 0;
     private disposed = false;
+    /** Incremented per setAudioTrack call so a superseded setup can bail out. */
+    private audioGeneration = 0;
 
     constructor(container: HTMLElement) {
         super(container);
@@ -243,11 +245,21 @@ export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
      * own <audio> element. Connecting it would double the voice.
      */
     async setAudioTrack(track: MediaStreamTrack | null): Promise<void> {
+        // Setup is asynchronous (two network fetches), so a second call can
+        // arrive mid-flight — connect/disconnect cycles and variant switches
+        // both do it. A generation counter lets the older attempt notice it has
+        // been superseded and discard what it built instead of installing it
+        // over the newer one.
+        const generation = ++this.audioGeneration;
         this.teardownAudio();
         if (!track || this.disposed) return;
 
+        // Held locally until the very end. Assigning to `this.audioCtx` early
+        // would let a concurrent teardown close a context that is still being
+        // built; keeping it local means the abandon paths below own it.
+        let ctx: AudioContext | null = null;
         try {
-            const ctx = new AudioContext();
+            ctx = new AudioContext();
             await ctx.audioWorklet.addModule(WORKLET_URL);
             const node = new HeadAudio(ctx, {
                 parameterData: { vadGateActiveDb: -45, vadGateInactiveDb: -65 },
@@ -257,6 +269,11 @@ export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
             // user has clicked Connect.
             await ctx.resume();
 
+            if (this.disposed || generation !== this.audioGeneration) {
+                void ctx.close();
+                return;
+            }
+
             node.onvalue = (key: string, value: number): void => {
                 this.visemeValues[key] = value;
                 if (value > 0.05 && key !== "viseme_sil") this.hasViseme = true;
@@ -265,15 +282,16 @@ export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
             const source = ctx.createMediaStreamSource(new MediaStream([track]));
             source.connect(node);
 
-            if (this.disposed) {
-                ctx.close();
-                return;
-            }
             this.audioCtx = ctx;
             this.headAudio = node;
             this.sourceNode = source;
         } catch (err) {
             // Fall back to amplitude rather than losing the avatar entirely.
+            // The context must be closed explicitly: it was never assigned to
+            // `this.audioCtx`, so teardownAudio() cannot see it, and browsers
+            // cap concurrent AudioContexts (six in Chrome) — leaking one per
+            // failed connect eventually makes `new AudioContext()` itself throw.
+            void ctx?.close();
             // eslint-disable-next-line no-console
             console.warn("[Avatar3DPhoto] HeadAudio unavailable, using amplitude:", err);
             this.teardownAudio();
@@ -386,6 +404,7 @@ export class Avatar3DPhoto extends Avatar3D implements AvatarVariant {
 
     dispose(): void {
         this.disposed = true;
+        this.audioGeneration++;
         this.teardownAudio();
         this.textures.forEach((t) => t.dispose());
         this.textures = [];

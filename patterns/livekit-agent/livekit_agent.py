@@ -54,6 +54,23 @@ DEFAULT_PERSONA = os.environ.get("PERSONA", "friendly")
 # transport. Set via VOICE_ID (cdk.json -> context.livekit.voiceId).
 VOICE_ID = os.environ.get("VOICE_ID", "tiffany")
 
+# How long to wait for a gateway tool to answer.
+#
+# `MCPServerHTTP` defaults to 5 seconds, which is far shorter than the tools it
+# is calling: the gateway targets are Lambdas configured for 60-900s
+# (kb_search and web_search 300s, pdf_generator 900s), and a cold start alone
+# can eat several seconds. Every call that ran long raised
+#
+#   McpError: Timed out while waiting for response to ClientRequest.
+#             Waited 5.0 seconds.
+#
+# which surfaces to the user as the avatar going quiet — it asked for data,
+# never got it, and had nothing to say. Nova Sonic recycles the session every
+# 360s, so a result arriving after that is useless anyway; 120s sits inside
+# that budget, covers a cold Lambda plus a knowledge-base or web search, and
+# matches the value the LiveKit docs use in their own example.
+GATEWAY_TOOL_TIMEOUT_SECONDS = float(os.environ.get("GATEWAY_TOOL_TIMEOUT_SECONDS", "120"))
+
 # First-turn greeting. Nova Sonic is speech-to-speech; we prompt an opening line
 # so the user hears the Relationship Manager without having to speak first.
 GREETING_INSTRUCTIONS = (
@@ -78,7 +95,12 @@ def _build_gateway_toolset() -> mcp.MCPToolset:
 
     gateway_url = get_ssm_parameter(f"/{stack_name}/gateway_url")
     access_token = get_gateway_access_token()
-    logger.info("[LIVEKIT] Gateway MCP toolset — url=%s token=%s...", gateway_url, access_token[:12])
+    logger.info(
+        "[LIVEKIT] Gateway MCP toolset — url=%s token=%s... tool_timeout=%ss",
+        gateway_url,
+        access_token[:12],
+        GATEWAY_TOOL_TIMEOUT_SECONDS,
+    )
 
     return mcp.MCPToolset(
         id="gateway",
@@ -86,8 +108,50 @@ def _build_gateway_toolset() -> mcp.MCPToolset:
             gateway_url,
             headers={"Authorization": f"Bearer {access_token}"},
             transport_type="streamable_http",
+            # Applies to each tool call. See GATEWAY_TOOL_TIMEOUT_SECONDS.
+            client_session_timeout_seconds=GATEWAY_TOOL_TIMEOUT_SECONDS,
         ),
     )
+
+
+def _attach_session_logging(session: AgentSession) -> None:
+    """Log the conversation's turning points at INFO.
+
+    The AWS realtime plugin logs generation, tool calls and transcripts at
+    DEBUG, so at INFO a healthy session and a mute one produce identical
+    output: "Sent text message", then nothing. That made a report of "the
+    avatar is non-responsive" impossible to confirm from CloudWatch — there was
+    no way to tell whether the model had spoken, whether the user's speech had
+    been heard, or whether a tool had stalled.
+
+    These handlers cost nothing per session and make each of those visible
+    without turning on DEBUG, which would also dump base64 audio frames.
+    """
+
+    @session.on("agent_state_changed")
+    def _on_agent_state(ev) -> None:  # noqa: ANN001 - plugin event model
+        logger.info("[LIVEKIT] agent state %s -> %s", ev.old_state, ev.new_state)
+
+    @session.on("user_input_transcribed")
+    def _on_transcript(ev) -> None:  # noqa: ANN001
+        # Only final transcripts: interim results fire per word.
+        if ev.is_final:
+            logger.info("[LIVEKIT] heard user: %s", ev.transcript[:160])
+
+    @session.on("function_tools_executed")
+    def _on_tools(ev) -> None:  # noqa: ANN001
+        # A None output means the tool produced nothing to send back — a raised
+        # exception, most often the gateway MCP call timing out. Those are the
+        # calls that leave the avatar with nothing to say, so name them.
+        for call, output in ev.zipped():
+            if output is None:
+                logger.warning("[LIVEKIT] tool returned no output: %s", call.name)
+            else:
+                logger.info("[LIVEKIT] tool called: %s", call.name)
+
+    @session.on("error")
+    def _on_error(ev) -> None:  # noqa: ANN001
+        logger.error("[LIVEKIT] session error: %s", ev.error)
 
 
 def _resolve_user_id(ctx: JobContext) -> str:
@@ -132,6 +196,7 @@ async def entrypoint(ctx: JobContext) -> None:
         llm=aws.realtime.RealtimeModel(voice=VOICE_ID),
         tools=[_build_gateway_toolset()],
     )
+    _attach_session_logging(session)
 
     await session.start(
         room=ctx.room,
