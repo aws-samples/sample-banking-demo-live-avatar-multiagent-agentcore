@@ -50,8 +50,14 @@ def handler(event, context):
         table = dynamodb.Table(METADATA_TABLE)
         table.put_item(
             Item={
-                "PK": f"order#{order_id}",
-                "SK": f"placed#{timestamp}",
+                # Partitioned by the caller, so a later reader can list one
+                # user's applications with a single query. The previous key,
+                # PK=order#{uuid}, made every order unreachable: `customerId`
+                # was only an attribute, the table has no index on it, and the
+                # docstring's "future readers" would have needed a full scan.
+                # Matches the run-record layout used for reports.
+                "PK": f"user#{user_id}",
+                "SK": f"order#{timestamp}#{order_id}",
                 "orderId": order_id,
                 "customerId": user_id,
                 "items": items,

@@ -14,6 +14,45 @@ logger.setLevel(logging.INFO)
 
 dynamodb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 CUSTOMERS_TABLE = os.environ.get("CUSTOMERS_TABLE", os.environ.get("DYNAMODB_TABLE_NAME", ""))
+METADATA_TABLE = os.environ.get("METADATA_TABLE", "")
+
+
+def _recent_accounts(user_id: str, limit: int = 10) -> list[dict]:
+    """Applications this caller has opened, newest first.
+
+    Without this nothing could read back an account the Client Advisor had just
+    created: place_order writes the record, and no tool returned it. The
+    Relationship Manager would ask the knowledge base — which holds reports, not
+    accounts — and truthfully say it had never heard of it.
+
+    Read from the metadata table rather than the customers table, because that is
+    where an application is written. The customers table holds seeded demo
+    profiles keyed by customerId and does not contain the signed-in Cognito
+    subject, which is why a profile lookup alone reports nothing for a real user.
+    """
+    if not METADATA_TABLE:
+        return []
+    try:
+        response = dynamodb.Table(METADATA_TABLE).query(
+            KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+            ExpressionAttributeValues={":pk": f"user#{user_id}", ":sk": "order#"},
+            ScanIndexForward=False,  # SK carries an ISO timestamp
+            Limit=limit,
+        )
+    except ClientError as e:
+        logger.warning("Could not read accounts for %s: %s", user_id, e)
+        return []
+
+    return [
+        {
+            "orderId": item.get("orderId", ""),
+            "products": [i.get("name", "") for i in item.get("items", []) or []],
+            "status": item.get("status", ""),
+            "openedAt": item.get("timestamp", ""),
+            "applicantName": item.get("guestName", ""),
+        }
+        for item in response.get("Items", [])
+    ]
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -42,6 +81,7 @@ def _retrieve_profile(user_id: str) -> str:
                     "found": True,
                     "user_id": user_id,
                     "profile": profile,
+                    "accounts": _recent_accounts(user_id),
                 },
                 cls=DecimalEncoder,
             )
@@ -62,12 +102,20 @@ def _retrieve_profile(user_id: str) -> str:
                     cls=DecimalEncoder,
                 )
 
+        accounts = _recent_accounts(user_id)
         return json.dumps(
             {
                 "found": False,
                 "user_id": user_id,
-                "message": f"No profile found for user: {user_id}",
-            }
+                # A caller with no seeded profile may still have opened accounts
+                # in this session — the normal case for a real signed-in user —
+                # so report those rather than only that no profile exists.
+                "accounts": accounts,
+                "message": (
+                    f"No stored profile for user: {user_id}. {len(accounts)} account application(s) on record."
+                ),
+            },
+            cls=DecimalEncoder,
         )
 
     except ClientError as e:

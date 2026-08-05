@@ -76,11 +76,19 @@ Summarize results conversationally. Do not read out full abstracts or URLs.
 
 PROFILE_SECTION = """
 
-## User Profile
+## User Profile and Accounts
 
 You can retrieve the user's profile information. Use this to personalize greetings
 and tailor responses. Retrieve the profile early in the conversation if you have
 not yet addressed the user by name.
+
+The profile result also carries the accounts this user has opened, including any
+opened moments ago with the Client Advisor. It is the only place those records
+live, so retrieve the profile whenever the user asks about their own accounts or
+applications. Do not search the knowledge base for them: it holds product
+literature, not customer records, and will correctly say it knows nothing about
+the account. A user may have accounts without a stored profile, which is normal;
+report the accounts you find.
 """
 
 # Mapping from tool name patterns to augmentation sections.
