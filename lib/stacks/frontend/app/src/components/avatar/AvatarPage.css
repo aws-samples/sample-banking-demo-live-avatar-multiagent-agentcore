@@ -368,6 +368,120 @@
     color: var(--color-text-body-secondary, #5f6b7a);
 }
 
+/* ── Expandable tool call ─────────────────────────────────────────────── */
+
+.avatar-page__tool-details {
+    display: block;
+}
+
+/* The native marker sits outside the pill and looks detached from it. */
+.avatar-page__tool-details > summary {
+    list-style: none;
+}
+.avatar-page__tool-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.avatar-page__tool-card--clickable {
+    cursor: pointer;
+}
+
+.avatar-page__tool-card--clickable:hover {
+    border-color: var(--color-border-item-focused, #0972d3);
+}
+
+.avatar-page__tool-card--clickable:focus-visible {
+    outline: 2px solid var(--color-border-item-focused, #0972d3);
+    outline-offset: 2px;
+}
+
+.avatar-page__tool-hint {
+    font-size: 0.68rem;
+    color: var(--color-text-body-secondary, #5f6b7a);
+    opacity: 0.75;
+}
+
+.avatar-page__tool-details[open] .avatar-page__tool-hint {
+    opacity: 1;
+}
+
+.avatar-page__tool-body {
+    margin-top: 6px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--color-background-layout-panel-content, #f2f3f3);
+    border: 1px solid var(--color-border-divider-default, #e9ebed);
+}
+
+.avatar-page__tool-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-body-secondary, #5f6b7a);
+    margin: 6px 0 2px;
+}
+
+.avatar-page__tool-pre {
+    margin: 0;
+    max-height: 240px;
+    overflow: auto;
+    font-family: monospace;
+    font-size: 0.7rem;
+    line-height: 1.45;
+    /* Presigned URLs and HTML have no spaces to wrap at. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--color-text-body-default, #16191f);
+}
+
+.avatar-page__tool-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+/* ── Generic asset link ───────────────────────────────────────────────── */
+
+.avatar-page__asset-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--color-background-layout-panel-content, #f2f3f3);
+    border: 1px solid var(--color-border-divider-default, #e9ebed);
+}
+
+.avatar-page__asset-tool {
+    font-family: monospace;
+    font-size: 0.72rem;
+    color: var(--color-text-body-secondary, #5f6b7a);
+}
+
+.avatar-page__asset-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: #fff;
+    background: var(--color-background-button-primary-default, #0972d3);
+}
+
+.avatar-page__asset-link:hover {
+    background: var(--color-background-button-primary-hover, #065299);
+}
+
+.avatar-page__asset-link:focus-visible {
+    outline: 2px solid var(--color-border-item-focused, #0972d3);
+    outline-offset: 2px;
+}
+
 .avatar-page__bubble--system {
     align-self: center;
 }

@@ -258,6 +258,10 @@ def _attach_tool_activity_publisher(session: AgentSession, room: rtc.Room) -> No
                     "callId": update.function_call.call_id,
                     "name": _display_tool_name(update.function_call.name),
                     "status": "running",
+                    # The arguments make the tool card worth opening: they show
+                    # what was actually asked for, which is otherwise invisible
+                    # because the avatar only speaks its interpretation.
+                    "input": _serialize_tool_output(update.function_call.arguments)[:MAX_TOOL_OUTPUT_CHARS],
                 }
             )
 
@@ -271,6 +275,17 @@ def _attach_tool_activity_publisher(session: AgentSession, room: rtc.Room) -> No
             # call timing out; `is_error` covers a tool that returned a failure.
             failed = output is None or output.is_error
             text = "" if output is None else _serialize_tool_output(output.output)
+            # Log the shape being sent. Whether the client can find a link in a
+            # result depends entirely on this payload, and without it the only
+            # symptom was "the card did not appear" with nothing to inspect.
+            logger.info(
+                "[LIVEKIT] tool result: %s status=%s output_type=%s len=%d head=%s",
+                _display_tool_name(call.name),
+                "error" if failed else "done",
+                type(output.output).__name__ if output is not None else "None",
+                len(text),
+                text[:200].replace("\n", " "),
+            )
             publish(
                 {
                     "callId": call.call_id,
@@ -321,28 +336,50 @@ def _attach_session_logging(session: AgentSession) -> None:
         logger.error("[LIVEKIT] session error: %s", ev.error)
 
 
-def _resolve_user_id(ctx: JobContext) -> str:
-    """Best-effort read of the verified caller identity from the room.
+# How long to wait for the browser to appear in the room before giving up on a
+# verified identity. Dispatch happens on room creation, so the agent normally
+# arrives first and the wait is short; this only stops a job hanging forever if
+# no participant ever joins.
+PARTICIPANT_WAIT_SECONDS = 15.0
+
+
+async def _resolve_user_id(ctx: JobContext) -> str:
+    """Read the verified caller identity from the room, waiting for the browser.
 
     The token Lambda sets the LiveKit participant `identity` to the Cognito
-    `sub`, so the first remote participant's identity is the authenticated
-    user. Returns an empty string if not yet available (the worker still runs;
-    see the tenant-isolation note in the module docstring).
+    `sub`, so the first remote participant's identity is the authenticated user.
+
+    This has to wait. LiveKit dispatches an agent when the room is *created*, not
+    when a participant joins, so reading `remote_participants` immediately after
+    connect usually found it empty: the identity came back "", every user-scoped
+    gateway tool was refused, and the avatar improvised around the failure —
+    offering to describe an image it could not generate. `wait_for_participant`
+    returns immediately when the browser is already there, so the common case
+    costs nothing.
+
+    Returns an empty string if no participant arrives, which leaves scoped tools
+    refusing rather than silently unscoped.
     """
     try:
-        for participant in ctx.room.remote_participants.values():
-            if participant.identity:
-                return participant.identity
+        participant = await asyncio.wait_for(ctx.wait_for_participant(), timeout=PARTICIPANT_WAIT_SECONDS)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "[LIVEKIT] No participant joined within %.0fs — scoped tools will refuse",
+            PARTICIPANT_WAIT_SECONDS,
+        )
+        return ""
     except Exception:
         logger.warning("[LIVEKIT] Could not resolve participant identity", exc_info=True)
-    return ""
+        return ""
+
+    return participant.identity or ""
 
 
 async def entrypoint(ctx: JobContext) -> None:
     """LiveKit dispatches this once per room a browser joins."""
     await ctx.connect()
 
-    user_id = _resolve_user_id(ctx)
+    user_id = await _resolve_user_id(ctx)
     persona = os.environ.get("PERSONA", DEFAULT_PERSONA)
     logger.info(
         "[LIVEKIT] Session start: room=%s user_id=%s persona=%s model=%s region=%s",

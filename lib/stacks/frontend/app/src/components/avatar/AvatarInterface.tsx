@@ -9,7 +9,6 @@ import {
     HandMetal,
     Settings2,
     ChevronDown,
-    Wrench,
     Bot,
     Camera,
     Circle,
@@ -64,15 +63,23 @@ import { createPCMProcessorUrl, arrayBufferToBase64 } from "@/lib/websocket-clie
 import AvatarTextInput from "./AvatarTextInput";
 import AvatarSuggestedPrompts from "./AvatarSuggestedPrompts";
 import AvatarPromptsDialog from "./AvatarPromptsDialog";
+import ToolCallCard from "./ToolCallCard";
 import { useAuth } from "react-oidc-context";
 import "./AvatarPage.css";
 
 type TranscriptSegment =
     | { kind: "text"; content: string }
     | { kind: "media"; mediaType: "image" | "video"; url: string; toolName: string }
-    | { kind: "tool"; toolName: string; status: "running" | "done"; input?: string }
+    | {
+          kind: "tool";
+          toolName: string;
+          status: "running" | "done";
+          input?: string;
+          output?: string;
+      }
     | { kind: "kb"; resultJson: string }
-    | { kind: "website"; url: string; title?: string; s3_key?: string };
+    | { kind: "website"; url: string; title?: string; s3_key?: string }
+    | { kind: "link"; url: string; label: string; toolName: string };
 
 interface TranscriptEntry {
     role: "user" | "assistant" | "system";
@@ -408,11 +415,13 @@ export default function AvatarInterface(): JSX.Element {
 
     /** Show a tool card while it runs, then whatever it produced. */
     const handleLiveKitToolActivity = useCallback((activity: ToolActivity): void => {
-        const { callId, name, status, output } = activity;
+        const { callId, name, status, input, output } = activity;
         const cardId = `tool-${callId}`;
 
         setTranscript((prev) => {
             const idx = prev.findIndex((e) => e.streamId === cardId);
+            const existing =
+                idx === -1 ? undefined : prev[idx].segments.find((s) => s.kind === "tool");
             const card: TranscriptEntry = {
                 role: "assistant",
                 segments: [
@@ -420,6 +429,11 @@ export default function AvatarInterface(): JSX.Element {
                         kind: "tool",
                         toolName: name,
                         status: status === "running" ? "running" : "done",
+                        // The arguments arrive on the start event and the result
+                        // on the finish event, so keep whichever the other
+                        // message already delivered.
+                        input: input ?? (existing?.kind === "tool" ? existing.input : undefined),
+                        output: output ?? (existing?.kind === "tool" ? existing.output : undefined),
                     },
                 ],
                 timestamp: new Date().toISOString(),
@@ -1552,31 +1566,40 @@ export default function AvatarInterface(): JSX.Element {
                                                         </div>
                                                     );
                                                 }
-                                                if (seg.kind === "tool") {
+                                                if (seg.kind === "link") {
+                                                    // Catch-all for an asset the
+                                                    // specific cards did not
+                                                    // recognise. Better a plain
+                                                    // button than an asset the
+                                                    // user cannot reach.
                                                     return (
                                                         <div
                                                             key={j}
-                                                            className="avatar-page__tool-card"
+                                                            className="avatar-page__asset-card"
                                                         >
-                                                            <Wrench
-                                                                size={14}
-                                                                className="avatar-page__tool-icon"
-                                                            />
-                                                            <span className="avatar-page__tool-name">
+                                                            <span className="avatar-page__asset-tool">
                                                                 {seg.toolName}
                                                             </span>
-                                                            <StatusIndicator
-                                                                type={
-                                                                    seg.status === "running"
-                                                                        ? "in-progress"
-                                                                        : "success"
-                                                                }
+                                                            <a
+                                                                href={seg.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="avatar-page__asset-link"
                                                             >
-                                                                {seg.status === "running"
-                                                                    ? "Running"
-                                                                    : "Done"}
-                                                            </StatusIndicator>
+                                                                {seg.label} ↗
+                                                            </a>
                                                         </div>
+                                                    );
+                                                }
+                                                if (seg.kind === "tool") {
+                                                    return (
+                                                        <ToolCallCard
+                                                            key={j}
+                                                            toolName={seg.toolName}
+                                                            status={seg.status}
+                                                            input={seg.input}
+                                                            output={seg.output}
+                                                        />
                                                     );
                                                 }
                                                 return null;

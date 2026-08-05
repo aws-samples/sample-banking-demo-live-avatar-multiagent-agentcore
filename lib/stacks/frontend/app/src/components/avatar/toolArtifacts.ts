@@ -19,7 +19,46 @@
 export type ToolArtifact =
     | { kind: "media"; mediaType: "image" | "video"; url: string; toolName: string }
     | { kind: "kb"; resultJson: string }
-    | { kind: "website"; url: string; title?: string; s3_key?: string };
+    | { kind: "website"; url: string; title?: string; s3_key?: string }
+    | { kind: "link"; url: string; label: string; toolName: string };
+
+/**
+ * Tools whose results are an asset the user should be able to open.
+ *
+ * Used for the catch-all link pass below. Deliberately a list rather than "any
+ * tool with a URL": web_search and kb_search results are full of citation URLs
+ * that are not assets, and offering those as things the agent just produced
+ * would be wrong.
+ */
+const ASSET_TOOLS = [
+    "website_generator",
+    "pdf_generator",
+    "nova_canvas_generate",
+    "nova_canvas_edit",
+    "nova_reel_generate",
+    "nova_reel_status",
+    "extract_pdf_images",
+];
+
+/**
+ * Fields an asset-producing tool may return a URL under.
+ *
+ * Handlers are not consistent — website_generator alone returns `url` on one
+ * path and `website_url` on another — so the specific extractors above cannot
+ * be the only route to a link, or a field name nobody anticipated leaves the
+ * user with an asset they were told about and cannot reach.
+ */
+const URL_FIELDS = [
+    "url",
+    "website_url",
+    "view_url",
+    "presigned_url",
+    "image_url",
+    "video_url",
+    "pdf_url",
+    "download_url",
+    "s3_url",
+];
 
 interface ToolRecord {
     success?: boolean;
@@ -134,6 +173,26 @@ export function extractToolArtifacts(toolName: string, rawOutput: string): ToolA
             title: typeof record.title === "string" ? record.title : undefined,
             s3_key: typeof record.s3_key === "string" ? record.s3_key : undefined,
         });
+    }
+
+    // Catch-all: an asset tool returned a URL under a field the passes above do
+    // not know. Without this the agent announces something it has produced and
+    // the user has no way to open it, which is exactly what happened when
+    // website_generator's field name differed from the one checked here.
+    if (artifacts.length === 0 && ASSET_TOOLS.some((t) => toolName.includes(t))) {
+        for (const field of URL_FIELDS) {
+            const value = record[field];
+            const url = Array.isArray(value) ? value[0] : value;
+            if (typeof url === "string" && url.startsWith("http")) {
+                artifacts.push({
+                    kind: "link",
+                    url,
+                    label: typeof record.title === "string" && record.title ? record.title : "Open",
+                    toolName,
+                });
+                break;
+            }
+        }
     }
 
     return artifacts;

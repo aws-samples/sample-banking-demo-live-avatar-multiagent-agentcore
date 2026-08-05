@@ -110,3 +110,68 @@ describe("extractToolArtifacts", () => {
         expect(extractToolArtifacts(WEBSITE, "not json at all")).toEqual([]);
     });
 });
+
+describe("asset link catch-all", () => {
+    it("offers a link when an asset tool uses an unexpected field name", () => {
+        // The reason this exists: website_generator's field differed from the one
+        // checked, so the agent announced a site the user could not open.
+        const artifacts = extractToolArtifacts(
+            "pdf-generator___pdf_generator",
+            JSON.stringify({ success: true, download_url: URL })
+        );
+
+        expect(artifacts).toEqual([
+            { kind: "link", url: URL, label: "Open", toolName: "pdf-generator___pdf_generator" },
+        ]);
+    });
+
+    it("prefers the specific card and does not also add a catch-all link", () => {
+        const artifacts = extractToolArtifacts(
+            WEBSITE,
+            JSON.stringify({ success: true, url: URL })
+        );
+
+        expect(artifacts).toHaveLength(1);
+        expect(artifacts[0].kind).toBe("website");
+    });
+
+    it("uses the title as the button label when one is given", () => {
+        const artifacts = extractToolArtifacts(
+            "nova-reel-status___nova_reel_status",
+            JSON.stringify({ presigned_url: URL, title: "Branch lobby" })
+        );
+
+        expect(artifacts[0]).toMatchObject({ kind: "link", label: "Branch lobby" });
+    });
+
+    it("unwraps a list-valued url field", () => {
+        const artifacts = extractToolArtifacts(
+            "extract-pdf-images___extract_pdf_images",
+            JSON.stringify({ presigned_url: [URL, "https://example.invalid/second"] })
+        );
+
+        expect(artifacts[0]).toMatchObject({ kind: "link", url: URL });
+    });
+
+    it("never offers citation URLs from search tools as assets", () => {
+        // web_search and kb_search results are full of URLs that the agent did
+        // not produce; presenting them as generated assets would be wrong.
+        for (const tool of ["web-search___web_search", "kb-search___kb_search"]) {
+            const artifacts = extractToolArtifacts(
+                tool,
+                JSON.stringify({ citations: [{ url: URL }], url: URL })
+            );
+
+            expect(artifacts.every((a) => a.kind !== "link")).toBe(true);
+        }
+    });
+
+    it("ignores a non-http value in a url field", () => {
+        const artifacts = extractToolArtifacts(
+            WEBSITE,
+            JSON.stringify({ s3_url: "s3://bucket/key.html" })
+        );
+
+        expect(artifacts).toEqual([]);
+    });
+});

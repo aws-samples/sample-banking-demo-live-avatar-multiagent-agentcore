@@ -57,6 +57,8 @@ export interface ToolActivity {
     callId: string;
     name: string;
     status: "running" | "done" | "error";
+    /** Serialised call arguments; present from the start event. */
+    input?: string;
     /** Raw tool output; only present once finished. */
     output?: string;
 }
