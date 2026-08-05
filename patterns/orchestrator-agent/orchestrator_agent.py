@@ -180,6 +180,13 @@ Your responsibilities:
 Research Guidelines:
 - BUDGET YOUR SEARCHES: 2-3 searches per sub-question, 50 max total. Stop searching once you
   have sufficient information for a sub-question and move on.
+- NEVER repeat a search you have already run, and do not re-run one with only cosmetic
+  wording changes. If a query returned results, use them; if it returned nothing useful,
+  change the substance of the query or record the gap and move to the next sub-question.
+  Repeating a query cannot produce new information — it only consumes your budget.
+- Work through the sub-questions in order and visit each one ONCE. When the last
+  sub-question is done, stop calling tools and output the JSON. Do not revisit earlier
+  sub-questions to look for more detail.
 - Use gateway_web_search exclusively — it is your only research tool
 - Maintain full source attribution for every finding
 - Include SPECIFIC numbers, dates, percentages, dollar amounts, and names whenever available
@@ -790,6 +797,11 @@ data visualization style, blue and white color scheme, 4k quality"
 Collect s3_key and image_url from each Canvas result. Budget: max 3 images.
 
 Research Guidelines:
+- NEVER repeat a search you have already run, and do not re-run one with only cosmetic
+  wording changes. Repeating a query cannot produce new information — it only consumes
+  your budget. Change the substance of the query or record the gap and move on.
+- Work through the sub-questions in order and visit each one ONCE. When the last one is
+  done, do the visual research, then stop calling tools and output the JSON.
 - BUDGET YOUR SEARCHES: 2-3 searches per sub-question, 50 max total
 - Use gateway_web_search as your primary research tool
 - Use gateway_data_sources sparingly for background and academic depth
@@ -1121,6 +1133,40 @@ def _extract_plan_json(text: str) -> dict | None:
 # was failing; the loop simply never finished.
 PLANNER_MAX_TURNS = 8
 
+# The same protection, for the pipeline phases that follow the plan. Only the
+# planner had a ceiling, so a researcher that kept searching never stopped:
+# observed on Nova 2 Lite re-issuing near-identical web_search queries
+# ("regional bank CD rate strategies 2024", then the same query with "customer
+# segmentation" twice), with the UI parked at 95% for six minutes and no error,
+# because nothing was failing — the loop simply never finished.
+#
+# The researcher's ceiling is derived from the depth's own search budget rather
+# than fixed, because that budget is what the prompt tells the model it may
+# spend: 15 searches on quick, 50 on standard, 100 on deep. A fixed ceiling would
+# contradict the instructions and cut off legitimate work on the deeper settings.
+# The headroom covers the turns spent writing findings up after searching.
+PHASE_TURN_HEADROOM = 8
+
+# Phases with no search budget to derive from. The synthesizer writes from
+# findings already gathered and only calls pdf_generator, so it needs few turns.
+STATIC_PHASE_MAX_TURNS: dict[str, int] = {
+    "synthesizer": 12,
+    "pdf_writer": 12,
+    "website_writer": 12,
+}
+DEFAULT_PHASE_MAX_TURNS = 20
+
+
+def _phase_turn_limit(agent_name: str, search_budget: int | None = None) -> int:
+    """Turn ceiling for a pipeline phase.
+
+    A ceiling has to exist for every phase: its absence is what turned a looping
+    model into a frozen UI rather than a visible failure.
+    """
+    if agent_name == "researcher" and search_budget:
+        return search_budget + PHASE_TURN_HEADROOM
+    return STATIC_PHASE_MAX_TURNS.get(agent_name, DEFAULT_PHASE_MAX_TURNS)
+
 
 def _plan_from_result(result) -> dict | None:  # noqa: ANN001 - strands AgentResult
     plan_obj = getattr(result, "structured_output", None)
@@ -1278,6 +1324,9 @@ def _apply_depth_to_phases(phases: list[dict], depth: str) -> list[dict]:
             )
             p["prompt"] = prompt
         elif phase["name"] == "researcher":
+            # Carry the budget the prompt states, so the turn ceiling is derived
+            # from it rather than guessed at separately and drifting from it.
+            p["search_budget"] = cfg["search_budget"]
             # Adjust search budget in researcher prompt
             prompt = p["prompt"]
             prompt = prompt.replace(
@@ -2228,6 +2277,8 @@ async def _run_pipeline(
         _DONE = object()
         _HEARTBEAT = object()
         _ERROR = object()
+        _TRUNCATED = object()
+        phase_truncated_at: int | None = None
         tq: thread_queue.Queue = thread_queue.Queue()
 
         # Callback handler to intercept tool results (e.g. presigned PDF URLs)
@@ -2289,12 +2340,20 @@ async def _run_pipeline(
 
         agent.callback_handler = _pipeline_callback
 
+        turn_limit = _phase_turn_limit(agent_name, phase.get("search_budget"))
+
         def _run_agent_sync():
             """Run the agent synchronously in a worker thread."""
             try:
-                result = agent(accumulated)
+                result = agent(accumulated, limits={"turns": turn_limit})
                 # Extract final text from the synchronous result
                 text = str(result) if result else ""
+                if getattr(result, "stop_reason", None) == "limit_turns":
+                    # Truncated, not failed: the findings gathered so far are
+                    # still worth passing on. Say so rather than presenting a
+                    # partial sweep as a complete one.
+                    print(f"[ORCHESTRATOR] {agent_name} hit the {turn_limit}-turn ceiling")
+                    tq.put((_TRUNCATED, turn_limit))
                 tq.put(("text", text))
             except Exception as exc:
                 tq.put((_ERROR, exc))
@@ -2328,6 +2387,10 @@ async def _run_pipeline(
 
                 if tag is _ERROR:
                     raise value
+
+                if tag is _TRUNCATED:
+                    phase_truncated_at = value
+                    continue
 
                 elapsed = time.monotonic() - start_time
                 progress = min(95, int((elapsed / estimated_duration) * 100))
@@ -2409,6 +2472,18 @@ async def _run_pipeline(
         final_elapsed = time.monotonic() - start_time
         print(f"[ORCHESTRATOR] === Completed {agent_name} in {final_elapsed:.1f}s ===")
 
+        if phase_truncated_at is not None:
+            # The pipeline continues with whatever was gathered, but labelling a
+            # truncated sweep "Complete" would overstate it — and the next phase
+            # is about to write a report from it.
+            yield {
+                "data": (
+                    f"\n\n_Note: {role} stopped after {phase_truncated_at} steps and may not have "
+                    f"covered every sub-question. The findings gathered so far are used below._\n\n"
+                ),
+                "_agent": agent_name,
+            }
+
         yield {
             "_ui": {
                 "component": "AgentActivity",
@@ -2416,7 +2491,7 @@ async def _run_pipeline(
                     "agent": agent_name,
                     "phase": role,
                     "progress": 100,
-                    "activity": "Complete",
+                    "activity": "Truncated" if phase_truncated_at is not None else "Complete",
                     "elapsed": round(final_elapsed),
                     "done": True,
                 },
