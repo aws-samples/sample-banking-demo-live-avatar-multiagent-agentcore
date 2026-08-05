@@ -4,6 +4,7 @@ export type {
     ResearcherResult,
     SynthesizerResult,
     PdfWriterResult,
+    PdfDocumentResult,
     WebsiteWriterResult,
     ContentPart,
     StructuredType,

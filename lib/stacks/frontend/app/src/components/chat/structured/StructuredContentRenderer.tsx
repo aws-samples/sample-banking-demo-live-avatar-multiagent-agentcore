@@ -5,12 +5,14 @@ import { PlannerResultCard } from "./PlannerResultCard";
 import { ResearcherResultCard } from "./ResearcherResultCard";
 import { SynthesizerResultCard } from "./SynthesizerResultCard";
 import { PdfWriterResultCard } from "./PdfWriterResultCard";
+import { PdfDocumentResultCard } from "./PdfDocumentResultCard";
 import { WebsiteWriterResultCard } from "./WebsiteWriterResultCard";
 import type {
     PlannerResult,
     ResearcherResult,
     SynthesizerResult,
     PdfWriterResult,
+    PdfDocumentResult,
     WebsiteWriterResult,
 } from "./types";
 
@@ -52,6 +54,12 @@ export function StructuredContentRenderer({ content }: { content: string }): JSX
                         return (
                             <div key={i} className="my-2">
                                 <PdfWriterResultCard data={part.data as PdfWriterResult} />
+                            </div>
+                        );
+                    case "pdf_document":
+                        return (
+                            <div key={i} className="my-2">
+                                <PdfDocumentResultCard data={part.data as PdfDocumentResult} />
                             </div>
                         );
                     case "website_writer":

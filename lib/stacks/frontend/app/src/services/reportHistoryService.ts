@@ -30,6 +30,35 @@ export function isReportHistoryAvailable(): boolean {
     return Boolean(getApiUrl());
 }
 
+/**
+ * A freshly signed URL for one report, or null when it no longer exists.
+ *
+ * Called at the moment a report is opened rather than when it was generated, so
+ * a link in an old chat message still works. Returns null on 404 — the report
+ * has aged out of the bucket — and throws on anything else, so a genuine outage
+ * is not reported to the user as a missing file.
+ */
+export async function fetchReportUrl(idToken: string, reportId: string): Promise<string | null> {
+    const base = getApiUrl();
+    if (!base) throw new Error("Report history endpoint is not configured");
+
+    const response = await fetch(`${base}/${encodeURIComponent(reportId)}`, {
+        method: "GET",
+        headers: {
+            Authorization: `Bearer ${idToken}`,
+            "Content-Type": "application/json",
+        },
+    });
+
+    if (response.status === 404) return null;
+    if (!response.ok) {
+        throw new Error(`Could not open the report (HTTP ${response.status})`);
+    }
+
+    const body = (await response.json()) as { report?: ReportHistoryItem };
+    return body.report?.url ?? null;
+}
+
 export async function fetchReportHistory(idToken: string): Promise<ReportHistoryItem[]> {
     const url = getApiUrl();
     if (!url) throw new Error("Report history endpoint is not configured");

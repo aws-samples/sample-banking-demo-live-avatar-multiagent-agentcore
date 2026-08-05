@@ -679,7 +679,17 @@ def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "
     return json.dumps(
         {
             "success": True,
+            # Explicit so the UI can tell a PDF from a generated website. Both
+            # payloads carry success/url/s3_key, and without this the frontend
+            # matched the website shape first and rendered a research report as
+            # a "View Website" card.
+            "artifact": "pdf",
             "url": presigned_url,
+            # The durable handle. `url` expires in an hour, so anything that
+            # outlives the turn — chat history, a reopened run — must re-sign via
+            # GET /reports/{report_id} rather than reuse the link above.
+            "report_id": report_id,
+            "filename": s3_key.rsplit("/", 1)[-1],
             "s3_key": s3_key,
             "bucket": REPORTS_BUCKET,
             "topic": topic,
@@ -1048,7 +1058,12 @@ def _generate_services_pdf(title: str, services_data: dict, user_id: str = "", p
     return json.dumps(
         {
             "success": True,
+            # See the research path: distinguishes a PDF from a generated website
+            # and gives the UI a handle it can re-sign once `url` expires.
+            "artifact": "pdf",
             "url": presigned_url,
+            "report_id": report_id,
+            "filename": s3_key.rsplit("/", 1)[-1],
             "s3_key": s3_key,
             "bucket": REPORTS_BUCKET,
             "title": services_title,

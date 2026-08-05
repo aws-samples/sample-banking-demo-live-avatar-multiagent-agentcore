@@ -77,11 +77,31 @@ export interface WebsiteWriterResult {
     item_count?: number;
 }
 
+/**
+ * A generated PDF, as returned by the `pdf_generator` tool.
+ *
+ * `url` is presigned for one hour and must not be treated as durable. Use
+ * `report_id` to mint a fresh link when the report is opened — see
+ * PdfDocumentResultCard.
+ */
+export interface PdfDocumentResult {
+    success: boolean;
+    artifact: "pdf";
+    url: string;
+    report_id?: string;
+    filename?: string;
+    s3_key?: string;
+    topic?: string;
+    title?: string;
+    pages?: number;
+}
+
 export type StructuredType =
     | "planner"
     | "researcher"
     | "synthesizer"
     | "pdf_writer"
+    | "pdf_document"
     | "website_writer";
 
 export type ContentPart =
@@ -93,6 +113,7 @@ export type ContentPart =
               | ResearcherResult
               | SynthesizerResult
               | PdfWriterResult
+              | PdfDocumentResult
               | WebsiteWriterResult;
           structuredType: StructuredType;
       };
