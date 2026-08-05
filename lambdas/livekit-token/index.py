@@ -5,8 +5,25 @@ Fronted by API Gateway with a Cognito User Pools authorizer, so the caller's
 JWT is already verified by the time we run — we read the `sub` claim from
 `requestContext.authorizer.claims` and never trust a client-supplied identity.
 
-The token grants join access to a per-user room (`trb-<sub>`). The LiveKit
-agent worker auto-dispatches into the room and bridges Nova Sonic 2 audio.
+The token grants join access to a fresh room per connection, named
+`trb-<sub>-<nonce>`. The LiveKit agent worker auto-dispatches into the room and
+bridges Nova Sonic 2 audio.
+
+The nonce is what makes the agent show up. LiveKit's automatic dispatch fires
+when a room is *created*, not when a participant joins. The room used to be
+`trb-<sub>`, stable for the life of the user, which meant a room outliving its
+session permanently broke that user: every later connect joined the existing
+room, no creation event fired, no agent was dispatched, and the caller sat in a
+room with nobody in it. That is exactly what happened — a room created at
+00:08 UTC was still listed four hours later holding a participant LiveKit had
+never reaped, so every reconnect after it was silent.
+
+A per-connection room removes the whole class of failure: a stale room can no
+longer poison the next session, reconnecting cannot evict a previous
+same-identity participant, and abandoned rooms fall away on their own via the
+server's empty-room timeout. The `sub` stays in the name so rooms remain
+attributable to a user in logs, and tenant scoping is unaffected either way —
+the worker reads the verified identity from the participant, not the room name.
 
 Response: {"serverUrl": "...", "token": "...", "roomName": "..."} so the
 browser needs only this one endpoint (no separate LiveKit URL env var).
@@ -16,6 +33,7 @@ import json
 import logging
 import os
 import re
+import secrets
 
 import boto3
 from livekit import api
@@ -52,9 +70,15 @@ def _response(status: int, body: dict) -> dict:
     return {"statusCode": status, "headers": _cors_headers(), "body": json.dumps(body)}
 
 
-def _sanitize_room(sub: str) -> str:
-    """LiveKit room names allow a restricted charset; keep it safe."""
-    return "trb-" + re.sub(r"[^a-zA-Z0-9_-]", "-", sub)[:100]
+def _room_name(sub: str) -> str:
+    """A fresh room per connection, still attributable to the caller.
+
+    LiveKit room names allow a restricted charset, so the `sub` is sanitised.
+    The trailing nonce guarantees the room is new, which is what triggers
+    automatic agent dispatch — see the module docstring.
+    """
+    safe_sub = re.sub(r"[^a-zA-Z0-9_-]", "-", sub)[:100]
+    return f"trb-{safe_sub}-{secrets.token_hex(4)}"
 
 
 def handler(event, _context):
@@ -75,7 +99,8 @@ def handler(event, _context):
             logger.error("LiveKit secret not populated — set /<stack>/livekit values.")
             return _response(503, {"error": "livekit_not_configured"})
 
-        room = _sanitize_room(sub)
+        room = _room_name(sub)
+        logger.info("Minted LiveKit token for room %s", room)
         token = (
             api.AccessToken(api_key, api_secret)
             .with_identity(sub)
