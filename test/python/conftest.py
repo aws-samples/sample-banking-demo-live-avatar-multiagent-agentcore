@@ -27,6 +27,13 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# The memory reader tools import `agentcore_memory` from a Lambda layer. At
+# runtime the layer lands on sys.path automatically; here it has to be added, or
+# importing those handlers fails before a single assertion runs.
+_MEMORY_LAYER = REPO_ROOT / "gateway" / "layers" / "memory" / "python"
+if str(_MEMORY_LAYER) not in sys.path:
+    sys.path.insert(0, str(_MEMORY_LAYER))
+
 
 def _load_tool_handler(tool_name: str) -> ModuleType:
     """Load `gateway/tools/<tool_name>/handler.py` as a standalone module.

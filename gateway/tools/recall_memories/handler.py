@@ -4,10 +4,11 @@
 """
 recall_memories — retrieve stored memory records for a user.
 
-Primary backend: AgentCore Memory's `retrieve_memory_records` API, scoped to
-the caller's namespaces. Those namespaces are resolved at call time from
-GetMemory rather than assumed, because `namespace` is a strict prefix filter
-and the strategies are configured under
+Primary backend: AgentCore Memory, read across both tiers via the shared
+`agentcore_memory` layer — long-term extracted records plus short-term events,
+since extraction is asynchronous and a just-saved memory exists only as an event.
+Namespaces are resolved at call time from GetMemory rather than assumed, because
+`namespace` is a strict prefix filter and the strategies are configured under
 `/strategies/{memoryStrategyId}/actors/{actorId}/...`. There is no shared
 `/actors/{user_id}/` namespace to read from — that prefix matches nothing.
 
@@ -25,6 +26,7 @@ import os
 import urllib.parse
 import urllib.request
 
+import agentcore_memory
 import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
@@ -132,115 +134,70 @@ def _recall_from_neptune(user_id: str, query: str, limit: int) -> str:
     )
 
 
-_NAMESPACE_TEMPLATES: list[str] | None = None
-
-
-def _strategy_namespace_templates(memory_id: str) -> list[str]:
-    """Namespace templates of every configured strategy, from GetMemory.
-
-    These cannot be hardcoded. `namespace` on RetrieveMemoryRecords is a strict
-    prefix filter — it returns records whose namespace *starts with* the value —
-    and the strategies are configured under
-    `/strategies/{memoryStrategyId}/actors/{actorId}/...`, where the strategy id
-    is generated at deploy time. Asking for `/actors/{user_id}/` therefore
-    matched nothing, and the tool reported a healthy empty result forever.
-
-    Cached for the life of the container; strategies change only on redeploy.
-    """
-    global _NAMESPACE_TEMPLATES
-    if _NAMESPACE_TEMPLATES is not None:
-        return _NAMESPACE_TEMPLATES
-
-    control = boto3.client("bedrock-agentcore-control")
-    strategies = control.get_memory(memoryId=memory_id).get("memory", {}).get("strategies", [])
-
-    templates: list[str] = []
-    for strategy in strategies:
-        strategy_id = strategy.get("strategyId", "")
-        # `namespaces` is the configured form; `namespaceTemplates` is present on
-        # newer API versions. Either may still carry {memoryStrategyId}.
-        for namespace in strategy.get("namespaces", []) or strategy.get("namespaceTemplates", []) or []:
-            templates.append(namespace.replace("{memoryStrategyId}", strategy_id))
-
-    _NAMESPACE_TEMPLATES = templates
-    return templates
-
-
-def _caller_namespace_prefixes(memory_id: str, user_id: str) -> list[str]:
-    """Resolve strategy templates into prefixes scoped to this caller.
-
-    Truncates at the first placeholder left after substituting the actor — a
-    session-scoped template like `.../actors/{actorId}/sessions/{sessionId}/`
-    becomes `.../actors/{user_id}/sessions/`, which is a valid prefix covering
-    every session. A literal `{sessionId}` would match nothing.
-    """
-    prefixes = []
-    for template in _strategy_namespace_templates(memory_id):
-        resolved = template.replace("{actorId}", user_id)
-        placeholder = resolved.find("{")
-        if placeholder != -1:
-            resolved = resolved[:placeholder]
-        if user_id in resolved:
-            prefixes.append(resolved)
-        else:
-            # Never widen the search past the caller: a template without
-            # {actorId} would read everyone's memories.
-            logger.warning("Skipping namespace template with no actor scope: %s", template)
-    return prefixes
-
-
 def _recall_from_agentcore(user_id: str, memory_id: str, query: str, limit: int) -> str | None:
-    """Primary retrieval path via AgentCore Memory.
+    """Primary retrieval path via AgentCore Memory, across both tiers.
 
-    Returns a JSON string on success, or None if the call fails or no
+    Long-term records carry what the strategies extracted. Short-term events are
+    consulted as well because extraction is asynchronous: for the first stretch
+    after `save_memory`, the event is the only record that exists, so a
+    long-term-only reader answers "nothing" about a memory the user just watched
+    being saved.
+
+    Returns a JSON string on success, or None if both tiers fail or no
     caller-scoped namespace could be resolved (the caller then tries Neptune or
     reports disabled). Returning None rather than an empty result matters: an
-    empty list here is indistinguishable from "you have no memories", which is
-    how this path stayed broken.
+    empty list is indistinguishable from "you have no memories", which is how
+    this path stayed broken.
     """
     try:
-        prefixes = _caller_namespace_prefixes(memory_id, user_id)
-        if not prefixes:
-            logger.warning("No caller-scoped namespaces resolved for memory %s", memory_id)
-            return None
+        long_term = agentcore_memory.long_term_records(memory_id, user_id, query=query, limit=limit)
+    except Exception as e:
+        logger.warning("AgentCore long-term retrieval failed: %s", e)
+        long_term = []
 
-        agentcore_client = boto3.client("bedrock-agentcore")
-        by_id: dict[str, dict] = {}
-        for namespace in prefixes:
-            response = agentcore_client.retrieve_memory_records(
-                memoryId=memory_id,
-                namespace=namespace,
-                searchCriteria={"searchQuery": query, "topK": limit},
-                maxResults=limit,
-            )
-            # The response key is `memoryRecordSummaries`. Reading `memoryRecords`
-            # returned [] on every call regardless of what was stored.
-            for record in response.get("memoryRecordSummaries", []):
-                by_id[record.get("memoryRecordId", "")] = record
+    try:
+        short_term = agentcore_memory.short_term_events(memory_id, user_id)
+    except Exception as e:
+        logger.warning("AgentCore short-term retrieval failed: %s", e)
+        short_term = []
 
-        ranked = sorted(by_id.values(), key=lambda r: r.get("score") or 0, reverse=True)[:limit]
-        memories = [
+    if not long_term and not short_term:
+        # Cannot distinguish "no memories" from "could not read them", so hand
+        # over to the fallback instead of asserting the user has none.
+        return None
+
+    if query:
+        # Long term is already ranked semantically; short term is not searchable,
+        # so filter it literally rather than implying a relevance it doesn't have.
+        needle = query.lower()
+        short_term = [e for e in short_term if needle in e["content"].lower()]
+
+    memories = [
+        {"content": r["content"], "timestamp": r["timestamp"], "score": r["score"], "tier": "long_term"}
+        for r in long_term
+    ]
+    seen = {m["content"] for m in memories}
+    for e in short_term[:limit]:
+        if e["content"] in seen:
+            continue
+        memories.append(
             {
-                # `content` is a structure, not a string, and the timestamp field
-                # is `createdAt`. Both were mapped wrongly.
-                "content": (r.get("content") or {}).get("text", ""),
-                "timestamp": str(r.get("createdAt", "")),
-                "score": float(r["score"]) if r.get("score") is not None else None,
-            }
-            for r in ranked
-        ]
-        return json.dumps(
-            {
-                "user_id": user_id,
-                "query": query,
-                "memories": memories,
-                "count": len(memories),
-                "backend": "agentcore",
+                "content": e["content"],
+                "timestamp": e["timestamp"],
+                "score": None,
+                "tier": "short_term",
             }
         )
-    except Exception as e:
-        logger.warning("AgentCore Memory retrieval failed: %s", e)
-        return None
+
+    return json.dumps(
+        {
+            "user_id": user_id,
+            "query": query,
+            "memories": memories[:limit],
+            "count": len(memories[:limit]),
+            "backend": "agentcore",
+        }
+    )
 
 
 def handler(event, context):

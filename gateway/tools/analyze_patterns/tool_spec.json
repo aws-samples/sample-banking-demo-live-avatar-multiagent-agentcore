@@ -1,7 +1,7 @@
 [
     {
         "name": "analyze_patterns",
-        "description": "Analyze conversation patterns and trends for a user by running analytics queries on the Neptune memory graph. Returns memory distribution by type, recent activity, and topic analysis.",
+        "description": "Summarize this user's conversation history from AgentCore Memory. Returns short-term activity (session count, number of exchanges, first and last activity, recent turns) and long-term extraction (record count grouped by memory strategy, with recent extracted memories). Use for questions about how much has been discussed or what has been remembered over time; use recall_memories to look up a specific fact.",
         "inputSchema": {
             "type": "object",
             "properties": {

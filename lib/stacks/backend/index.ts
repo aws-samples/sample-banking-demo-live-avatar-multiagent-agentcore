@@ -15,6 +15,7 @@ import {
     Architecture,
     Code,
     Function as LambdaFunction,
+    LayerVersion,
     Runtime as LambdaRuntime,
 } from "aws-cdk-lib/aws-lambda";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
@@ -193,6 +194,22 @@ export class Backend extends Stack {
         const toolLambdas: Record<string, LambdaFunction> = {};
         const repoRoot = path.resolve(__dirname, "..", "..", "..");
 
+        // Shared AgentCore Memory access for the memory reader tools. Attached
+        // below; see that loop for why this is a layer rather than a copy per tool.
+        const memoryLayer = new LayerVersion(this, "AgentCoreMemoryLayer", {
+            layerVersionName: `${stackName}-agentcore-memory`,
+            code: Code.fromAsset(path.join(repoRoot, "gateway", "layers", "memory"), {
+                // Running the test suite imports this module, so without the
+                // exclusion local bytecode ships in the layer and changes the
+                // asset hash between machines.
+                exclude: ["__pycache__", "*.pyc"],
+            }),
+            compatibleRuntimes: [LambdaRuntime.PYTHON_3_13],
+            compatibleArchitectures: [Architecture.ARM_64],
+            description: "Namespace resolution and short/long-term reads for AgentCore Memory",
+            removalPolicy: RemovalPolicy.DESTROY,
+        });
+
         const commonEnv: Record<string, string> = {
             AWS_ACCOUNT_ID: this.account,
             SESSIONS_TABLE: shared.sessionsTable.tableName,
@@ -369,27 +386,37 @@ export class Backend extends Stack {
             toolLambdas[def.dir] = fn;
         }
 
-        // Grant AgentCore Memory permissions to memory tool Lambdas
-        for (const memToolDir of ["recall_memories", "save_memory"]) {
+        // Grant AgentCore Memory permissions to memory tool Lambdas, and give the
+        // readers the shared `agentcore_memory` module. A layer rather than a copy
+        // per tool: each tool bundles only its own directory, and the namespace
+        // logic in that module was already wrong once in a way that returned empty
+        // results instead of errors — two copies drifting would silently disable
+        // retrieval on one path.
+        for (const memToolDir of ["recall_memories", "save_memory", "analyze_patterns"]) {
             const memFn = toolLambdas[memToolDir];
-            if (memFn) {
-                memFn.addToRolePolicy(
-                    new PolicyStatement({
-                        effect: Effect.ALLOW,
-                        actions: [
-                            "bedrock-agentcore:RetrieveMemoryRecords",
-                            "bedrock-agentcore:CreateEvent",
-                            "bedrock-agentcore:GetEvent",
-                            "bedrock-agentcore:ListEvents",
-                            // recall_memories resolves the strategies' real
-                            // namespaces at call time, because `namespace` on
-                            // RetrieveMemoryRecords is a strict prefix filter and
-                            // the strategy IDs are generated at deploy time.
-                            "bedrock-agentcore:GetMemory",
-                        ],
-                        resources: [memoryArn],
-                    })
-                );
+            if (!memFn) continue;
+
+            memFn.addToRolePolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: [
+                        "bedrock-agentcore:RetrieveMemoryRecords",
+                        "bedrock-agentcore:ListMemoryRecords",
+                        "bedrock-agentcore:CreateEvent",
+                        "bedrock-agentcore:GetEvent",
+                        "bedrock-agentcore:ListEvents",
+                        "bedrock-agentcore:ListSessions",
+                        // The readers resolve the strategies' real namespaces at
+                        // call time, because `namespace` is a strict prefix filter
+                        // and the strategy IDs are generated at deploy time.
+                        "bedrock-agentcore:GetMemory",
+                    ],
+                    resources: [memoryArn],
+                })
+            );
+
+            if (memToolDir !== "save_memory") {
+                memFn.addLayers(memoryLayer);
             }
         }
 

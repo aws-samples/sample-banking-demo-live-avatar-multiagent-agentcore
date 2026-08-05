@@ -119,68 +119,97 @@ class TestRecallMemoriesFallbackChain:
         assert body["status"] == "disabled"
         assert body["memories"] == []
 
-    def test_agentcore_success_uses_the_resolved_strategy_namespace(self, load_tool, lambda_context, monkeypatch):
+    def test_agentcore_success_returns_long_term_records(self, load_tool, lambda_context, monkeypatch):
         """This test used to assert `/actors/alice/` and pass while nothing worked.
 
         `namespace` is a strict prefix filter and the strategies live under
         `/strategies/{memoryStrategyId}/actors/{actorId}/`, so that prefix matched
         no record. The stub returned `memoryRecords`, a key the API does not have,
-        which made the assertion self-consistent and meaningless. See
-        test_recall_namespace_scope for the full contract.
+        which made the assertion self-consistent and meaningless. The namespace and
+        field contract now lives in test_recall_namespace_scope; this covers the
+        handler's own behaviour.
         """
         monkeypatch.setenv("MEMORY_ID", "mem-123")
         mod = load_tool("recall_memories")
-        mod._NAMESPACE_TEMPLATES = None
 
-        control = MagicMock()
-        control.get_memory.return_value = {
-            "memory": {
-                "strategies": [
-                    {
-                        "strategyId": "strat-9",
-                        "namespaces": ["/strategies/{memoryStrategyId}/actors/{actorId}/"],
-                    }
-                ]
-            }
-        }
-        data = MagicMock()
-        data.retrieve_memory_records.return_value = {
-            "memoryRecordSummaries": [
+        monkeypatch.setattr(
+            mod.agentcore_memory,
+            "long_term_records",
+            lambda *a, **k: [
                 {
-                    "memoryRecordId": "rec-1",
-                    "content": {"text": "user prefers paperless statements"},
-                    "createdAt": "2026-01-01T00:00:00Z",
+                    "content": "user prefers paperless statements",
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "strategy_id": "strat-9",
                     "score": 0.9,
-                },
-            ]
-        }
+                }
+            ],
+        )
+        monkeypatch.setattr(mod.agentcore_memory, "short_term_events", lambda *a, **k: [])
 
-        def fake_client(name, **_):
-            return control if name.endswith("-control") else data
-
-        with patch.object(mod.boto3, "client", side_effect=fake_client):
-            resp = mod.handler(
-                {"user_id": "alice", "query": "statements", "limit": 5},
-                self._ctx(lambda_context),
-            )
+        resp = mod.handler(
+            {"user_id": "alice", "query": "statements", "limit": 5},
+            self._ctx(lambda_context),
+        )
 
         body = json.loads(resp["content"][0]["text"])
         assert body["backend"] == "agentcore"
         assert body["count"] == 1
         assert body["memories"][0]["content"] == "user prefers paperless statements"
+        assert body["memories"][0]["tier"] == "long_term"
 
-        kwargs = data.retrieve_memory_records.call_args.kwargs
-        assert kwargs["namespace"] == "/strategies/strat-9/actors/alice/"
-        assert kwargs["memoryId"] == "mem-123"
+    def test_short_term_covers_a_memory_saved_before_extraction_ran(self, load_tool, lambda_context, monkeypatch):
+        """Extraction is asynchronous, so a just-saved memory is only an event.
+
+        A long-term-only reader answers "nothing" about something the user watched
+        being saved a moment earlier.
+        """
+        monkeypatch.setenv("MEMORY_ID", "mem-123")
+        mod = load_tool("recall_memories")
+
+        monkeypatch.setattr(mod.agentcore_memory, "long_term_records", lambda *a, **k: [])
+        monkeypatch.setattr(
+            mod.agentcore_memory,
+            "short_term_events",
+            lambda *a, **k: [
+                {
+                    "content": "remember I bank with a joint account",
+                    "role": "USER",
+                    "timestamp": "2026-01-01T00:00:05Z",
+                    "session_id": "s-1",
+                }
+            ],
+        )
+
+        resp = mod.handler(
+            {"user_id": "alice", "query": "joint account", "limit": 5},
+            self._ctx(lambda_context),
+        )
+
+        body = json.loads(resp["content"][0]["text"])
+        assert body["count"] == 1
+        assert body["memories"][0]["tier"] == "short_term"
+
+    def test_both_tiers_failing_falls_through_instead_of_claiming_none(self, load_tool, lambda_context, monkeypatch):
+        """An empty result would be indistinguishable from "you have no memories"."""
+        monkeypatch.setenv("MEMORY_ID", "mem-123")
+        mod = load_tool("recall_memories")
+        monkeypatch.setattr(mod, "NEPTUNE_ENDPOINT", "")
+
+        monkeypatch.setattr(mod.agentcore_memory, "long_term_records", lambda *a, **k: [])
+        monkeypatch.setattr(mod.agentcore_memory, "short_term_events", lambda *a, **k: [])
+
+        resp = mod.handler({"user_id": "alice", "query": "food"}, self._ctx(lambda_context))
+        body = json.loads(resp["content"][0]["text"])
+        assert body["status"] == "disabled"
 
     def test_neptune_fallback_uses_parameterized_cypher(self, load_tool, lambda_context, monkeypatch):
         monkeypatch.setenv("MEMORY_ID", "mem-123")
         mod = load_tool("recall_memories")
         monkeypatch.setattr(mod, "NEPTUNE_ENDPOINT", "neptune.example")
 
-        # Make AgentCore fail so we fall through.
-        fake_client = MagicMock()
-        fake_client.retrieve_memory_records.side_effect = RuntimeError("AgentCore down")
+        # Make AgentCore return nothing from either tier so we fall through.
+        monkeypatch.setattr(mod.agentcore_memory, "long_term_records", lambda *a, **k: [])
+        monkeypatch.setattr(mod.agentcore_memory, "short_term_events", lambda *a, **k: [])
 
         captured: list[tuple[str, dict]] = []
 
@@ -188,10 +217,7 @@ class TestRecallMemoriesFallbackChain:
             captured.append((query, parameters or {}))
             return {"results": [{"memoryId": "m1", "content": "x", "type": "fact", "createdAt": "2026"}]}
 
-        with (
-            patch.object(mod.boto3, "client", return_value=fake_client),
-            patch.object(mod, "_execute_neptune_query", _fake_neptune),
-        ):
+        with patch.object(mod, "_execute_neptune_query", _fake_neptune):
             resp = mod.handler(
                 {"user_id": "alice", "query": "food", "limit": 5},
                 self._ctx(lambda_context),

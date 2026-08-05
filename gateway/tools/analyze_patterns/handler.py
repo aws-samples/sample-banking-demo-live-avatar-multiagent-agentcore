@@ -1,134 +1,107 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+"""
+analyze_patterns — summarise a user's conversation history from AgentCore Memory.
+
+Reads both tiers, because they answer different halves of the question:
+
+* Short term (events) — how much the user has talked, across how many sessions,
+  and when. Available immediately after each turn.
+* Long term (records) — what the strategies actually extracted, grouped by
+  strategy. Populated asynchronously, so it lags the conversation.
+
+Previously this queried a Neptune Analytics graph. That graph is only written by
+save_memory's fallback path, and `neptune` is false in cdk.json, so the endpoint
+was never configured and every call returned
+"NEPTUNE_ENDPOINT environment variable not configured" — a registered tool that
+could not work, surfacing an infrastructure error mid-conversation. The Neptune
+path is removed rather than kept dormant; it also interpolated `user_id` straight
+into openCypher, unlike its parameterized siblings.
+
+Reports honestly when a user has no history yet: an empty summary with a note,
+not an error, so a chatbot turn stays graceful.
+"""
+
 import json
 import logging
 import os
-import urllib.request
 
-import boto3
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
+import agentcore_memory
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-NEPTUNE_ENDPOINT = os.environ.get("NEPTUNE_ENDPOINT", "")
-AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+MEMORY_ID = os.environ.get("MEMORY_ID", "")
 
-session = boto3.Session()
+# Enough to characterise usage without risking the tool's timeout.
+MAX_SESSIONS = 10
+EVENTS_PER_SESSION = 50
+PREVIEW = 5
+CONTENT_PREVIEW_CHARS = 200
 
 
-def _sign_request(method: str, url: str, body: str = "") -> dict:
-    """Sign a request for Neptune IAM authentication."""
-    credentials = session.get_credentials().get_frozen_credentials()
-    request = AWSRequest(
-        method=method,
-        url=url,
-        data=body,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
+def _analyze(user_id: str, memory_id: str) -> dict:
+    """Summarise short-term activity and long-term extraction for one caller."""
+    events = agentcore_memory.short_term_events(
+        memory_id,
+        user_id,
+        max_sessions=MAX_SESSIONS,
+        per_session=EVENTS_PER_SESSION,
     )
-    SigV4Auth(credentials, "neptune-db", AWS_REGION).add_auth(request)
-    return dict(request.headers)
+    records = agentcore_memory.long_term_records(memory_id, user_id, limit=100)
 
+    timestamps = sorted(e["timestamp"] for e in events if e["timestamp"])
+    session_ids = {e["session_id"] for e in events if e["session_id"]}
 
-def _execute_neptune_query(query: str) -> dict:
-    """Execute an openCypher query against Neptune Analytics."""
-    url = f"https://{NEPTUNE_ENDPOINT}/queries"
-    body = f"query={query}&lang=opencypher"
+    by_strategy: dict[str, int] = {}
+    for record in records:
+        key = record["strategy_id"] or "unattributed"
+        by_strategy[key] = by_strategy.get(key, 0) + 1
 
-    headers = _sign_request("POST", url, body)
-    headers["Content-Type"] = "application/x-www-form-urlencoded"
-
-    req = urllib.request.Request(url, data=body.encode("utf-8"), headers=headers, method="POST")
-
-    try:
-        with urllib.request.urlopen(req, timeout=300) as response:  # nosec B310 — https://{NEPTUNE_ENDPOINT}/queries, host from CDK env var
-            return json.loads(response.read().decode("utf-8"))
-    except Exception as e:
-        logger.error(f"Neptune query failed: {e}")
-        raise
-
-
-def _analyze_patterns(user_id: str) -> str:
-    """Run analytics queries on the Neptune graph for a user."""
     analysis = {
         "user_id": user_id,
-        "memory_summary": {},
-        "topic_distribution": {},
-        "temporal_patterns": {},
+        "short_term": {
+            "sessions": len(session_ids),
+            "exchanges": len(events),
+            "first_activity": timestamps[0] if timestamps else "",
+            "last_activity": timestamps[-1] if timestamps else "",
+            "recent": [
+                {
+                    "content": e["content"][:CONTENT_PREVIEW_CHARS],
+                    "role": e["role"],
+                    "timestamp": e["timestamp"],
+                }
+                for e in events[:PREVIEW]
+            ],
+        },
+        "long_term": {
+            "records": len(records),
+            "by_strategy": by_strategy,
+            "extracted": [
+                {"content": r["content"][:CONTENT_PREVIEW_CHARS], "timestamp": r["timestamp"]}
+                for r in records[:PREVIEW]
+            ],
+        },
     }
 
-    # 1. Memory count by type
-    type_query = (
-        f"MATCH (u:User {{userId: '{user_id}'}})-[:HAS_MEMORY]->(m:Memory) "
-        f"RETURN m.type AS type, count(m) AS count "
-        f"ORDER BY count DESC"
-    )
-    try:
-        type_result = _execute_neptune_query(type_query)
-        type_counts = {}
-        for row in type_result.get("results", []):
-            type_counts[row.get("type", "unknown")] = row.get("count", 0)
-        analysis["memory_summary"] = {
-            "by_type": type_counts,
-            "total": sum(type_counts.values()),
-        }
-    except Exception as e:
-        logger.warning(f"Failed to get memory type counts: {e}")
-        analysis["memory_summary"] = {"error": str(e)}
+    if not events and not records:
+        analysis["note"] = "No conversation history recorded for this user yet."
+    elif events and not records:
+        # Worth stating rather than letting it read as "nothing was remembered":
+        # extraction runs asynchronously, so this is the expected state early in
+        # a session.
+        analysis["note"] = "Conversation events are recorded; long-term extraction has not produced records yet."
 
-    # 2. Recent memory activity
-    recent_query = (
-        f"MATCH (u:User {{userId: '{user_id}'}})-[:HAS_MEMORY]->(m:Memory) "
-        f"RETURN m.content AS content, m.type AS type, m.createdAt AS createdAt "
-        f"ORDER BY m.createdAt DESC LIMIT 5"
-    )
-    try:
-        recent_result = _execute_neptune_query(recent_query)
-        recent_memories = []
-        for row in recent_result.get("results", []):
-            recent_memories.append(
-                {
-                    "content": row.get("content", "")[:100],
-                    "type": row.get("type", ""),
-                    "created_at": row.get("createdAt", ""),
-                }
-            )
-        analysis["temporal_patterns"] = {
-            "recent_activity": recent_memories,
-            "recent_count": len(recent_memories),
-        }
-    except Exception as e:
-        logger.warning(f"Failed to get recent memories: {e}")
-        analysis["temporal_patterns"] = {"error": str(e)}
-
-    # 3. Connected entities (topics/themes)
-    entity_query = (
-        f"MATCH (u:User {{userId: '{user_id}'}})-[:HAS_MEMORY]->(m:Memory) "
-        f"RETURN m.type AS topic, count(m) AS mentions "
-        f"ORDER BY mentions DESC LIMIT 10"
-    )
-    try:
-        entity_result = _execute_neptune_query(entity_query)
-        topics = {}
-        for row in entity_result.get("results", []):
-            topics[row.get("topic", "unknown")] = row.get("mentions", 0)
-        analysis["topic_distribution"] = topics
-    except Exception as e:
-        logger.warning(f"Failed to get topic distribution: {e}")
-        analysis["topic_distribution"] = {"error": str(e)}
-
-    return json.dumps(analysis)
+    return analysis
 
 
 def handler(event, context):
     """
     Conversation pattern analysis tool Lambda handler.
 
-    Runs analytics queries on the Neptune graph to identify patterns
-    in a user's conversation history, including memory distribution,
-    topic trends, and temporal activity.
+    Summarises the caller's AgentCore Memory across short-term events and
+    long-term extracted records.
     """
     logger.info(f"Received event: {json.dumps(event)}")
 
@@ -143,12 +116,13 @@ def handler(event, context):
             user_id = event.get("user_id", "")
 
             if not user_id:
-                return {"error": "Missing required parameter: user_id"}
-            if not NEPTUNE_ENDPOINT:
-                return {"error": "NEPTUNE_ENDPOINT environment variable not configured"}
+                return {"error": "Missing user_id — runtime hook not wired."}
 
-            result = _analyze_patterns(user_id)
-            return {"content": [{"type": "text", "text": result}]}
+            if not MEMORY_ID:
+                return {"error": "MEMORY_ID environment variable not configured"}
+
+            result = _analyze(user_id, MEMORY_ID)
+            return {"content": [{"type": "text", "text": json.dumps(result)}]}
         else:
             return {"error": f"This Lambda only supports 'analyze_patterns', received: {tool_name}"}
 
