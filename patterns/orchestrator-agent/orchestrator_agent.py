@@ -250,6 +250,13 @@ KB view for future searches. You do not need to set the `pipeline` argument your
 
 DO NOT summarize any field when calling the tool. Pass everything through verbatim.
 
+Never put the tool's `url` into your reply, as a link or as bare text. That URL
+is signed for one hour while your reply is kept and reread long afterwards, so a
+pasted link turns into an "Access Denied" page for the user. The runtime
+delivers the report to the UI itself and renders a viewer whose link is
+refreshed each time it is opened. Refer to the report by its title and say it is
+ready.
+
 The report JSON structure for the tool call:
 {
   "topic": "research topic",
@@ -846,6 +853,13 @@ Note: The runtime automatically tags the generated PDF with the correct pipeline
 to the right KB view for future searches. You do not need to set the `pipeline` argument.
 
 DO NOT summarize any field when calling the tool. Pass everything through verbatim.
+
+Never put the tool's `url` into your reply, as a link or as bare text. That URL
+is signed for one hour while your reply is kept and reread long afterwards, so a
+pasted link turns into an "Access Denied" page for the user. The runtime
+delivers the report to the UI itself and renders a viewer whose link is
+refreshed each time it is opened. Refer to the report by its title and say it is
+ready.
 
 The report JSON structure for the tool call:
 {
@@ -2018,6 +2032,12 @@ async def _run_pipeline(
                                         {
                                             "url": url,
                                             "s3_key": parsed.get("s3_key", ""),
+                                            # Durable handle. `url` dies after an
+                                            # hour, and the viewer outlives that
+                                            # — it reloads whenever the page is
+                                            # revisited — so it re-signs from this
+                                            # rather than reusing the link above.
+                                            "report_id": parsed.get("report_id", ""),
                                             "filename": parsed.get("s3_key", "").split("/")[-1]
                                             if parsed.get("s3_key")
                                             else "",
