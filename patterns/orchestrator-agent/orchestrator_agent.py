@@ -1021,16 +1021,41 @@ RESEARCH_EXECUTION_PHASES = [p for p in AGENT_PHASES if p["name"] != "planner"]
 
 import json as _json_module
 import re as _re_module
+from typing import Literal
 
-# Sent to the planner when its first reply contained no plan. Deliberately
-# terse and repetitive about the one thing that matters.
-_PLAN_RETRY_INSTRUCTION = (
-    "Your previous reply was not a research plan. Do not answer the research "
-    "question and do not ask me anything. Reply with a single JSON object only "
-    "— no prose before or after it, no code fence — containing research_topic, "
-    "objectives, sub_questions (each with id, question, priority, type, "
-    "rationale), methodology and expected_deliverables."
-)
+from pydantic import BaseModel, Field
+
+
+class PlanSubQuestion(BaseModel):
+    """One researchable sub-question in a plan."""
+
+    id: int = Field(description="1-based position in the plan")
+    question: str
+    priority: Literal["high", "medium", "low"] = "medium"
+    type: Literal["web", "kb", "analysis"] = "web"
+    rationale: str = Field(default="", description="Why this question matters")
+
+
+class ResearchPlan(BaseModel):
+    """The planner's output, as a schema rather than a prose contract.
+
+    Passed to the agent as `structured_output_model`, so the provider constrains
+    generation to this shape instead of the prompt asking for JSON and the code
+    hoping to find some. Asking in prose failed in a way that was hard to
+    recover from: the planner would answer the research question instead, the
+    parse found nothing, and the approval step never appeared.
+
+    Field names match what ResearchPlanCard renders and what the execute phase
+    is handed, so nothing downstream changes.
+    """
+
+    research_topic: str
+    objectives: list[str] = Field(default_factory=list)
+    sub_questions: list[PlanSubQuestion] = Field(min_length=1)
+    methodology: str = ""
+    expected_deliverables: list[str] = Field(default_factory=list)
+    dependencies: str = ""
+    estimated_time: str = ""
 
 
 def _extract_plan_json(text: str) -> dict | None:
@@ -1073,6 +1098,21 @@ def _extract_plan_json(text: str) -> dict | None:
                     break
 
     return None
+
+
+def _retry_plan_structured(agent) -> dict | None:  # noqa: ANN001 - strands Agent
+    """One more schema-constrained attempt, restating only the contract.
+
+    Runs against the agent's existing conversation, so the planner sees whatever
+    it already gathered and only has to shape it. Returns None if the provider
+    still declines to produce a plan.
+    """
+    result = agent(
+        "Return the research plan for the query above. Do not answer the question and do not ask anything.",
+        structured_output_model=ResearchPlan,
+    )
+    plan_obj = getattr(result, "structured_output", None)
+    return plan_obj.model_dump() if plan_obj else None
 
 
 def _is_usable_plan(parsed: object) -> bool:
@@ -1695,6 +1735,7 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
 
     # Run planner in thread with heartbeats
     agent_text = ""
+    structured_plan: dict | None = None
     start_time = time.monotonic()
     _DONE = object()
     _HEARTBEAT = object()
@@ -1703,9 +1744,15 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
 
     def _run_planner_sync():
         try:
-            result = agent(query)
-            text = str(result) if result else ""
-            tq.put(("text", text))
+            # `structured_output_model` constrains the reply to the ResearchPlan
+            # schema while still running the normal tool loop, so the planner can
+            # consult the knowledge base and cannot answer in prose. The parsed
+            # object comes back on `structured_output`; the text is kept only as
+            # a fallback for the extractor below.
+            result = agent(query, structured_output_model=ResearchPlan)
+            plan_obj = getattr(result, "structured_output", None)
+            tq.put(("plan", plan_obj.model_dump() if plan_obj else None))
+            tq.put(("text", str(result) if result else ""))
         except Exception as exc:
             tq.put((_ERROR, exc))
         finally:
@@ -1735,6 +1782,8 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
                 raise value
             if tag is _HEARTBEAT:
                 yield {"data": "", "heartbeat": True}
+            elif tag == "plan":
+                structured_plan = value
             elif tag == "text":
                 agent_text = value
     except Exception as e:
@@ -1764,21 +1813,15 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
     }
     yield {"agent_phase": {"agent": "planner", "phase": "planning", "status": "end"}}
 
-    # Extract plan JSON and emit ResearchPlan UI component
-    plan = _extract_plan_json(agent_text)
+    # The schema-constrained result is authoritative. Parsing the reply text is
+    # kept only for the case where the provider returned no structured output,
+    # which should not happen but is cheap to tolerate.
+    plan = structured_plan if _is_usable_plan(structured_plan) else _extract_plan_json(agent_text)
 
-    # The planner sometimes answers the research question in prose instead of
-    # returning a plan — it has kb_search available and drifts into using it to
-    # reply. One strict retry recovers that far more often than it costs, and it
-    # is the difference between the user getting an approval card and getting a
-    # chatty answer with no way forward.
-    if not plan:
-        print("[ORCHESTRATOR] Planner returned no usable plan JSON — retrying once, strictly")
+    if plan is None:
+        print("[ORCHESTRATOR] Planner produced no structured plan; retrying once")
         try:
-            retry_text = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: str(agent(_PLAN_RETRY_INSTRUCTION) or "")
-            )
-            plan = _extract_plan_json(retry_text)
+            plan = await asyncio.get_running_loop().run_in_executor(None, _retry_plan_structured, agent)
         except Exception as exc:  # noqa: BLE001 - reported below, not raised
             print(f"[ORCHESTRATOR] Planner retry failed: {exc}")
 
