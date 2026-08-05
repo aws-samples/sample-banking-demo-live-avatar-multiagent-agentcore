@@ -15,6 +15,11 @@ export function identifySchema(data: unknown): StructuredType | null {
     // button pointing at a PDF whose link had a one-hour life.
     if (obj.artifact === "pdf") return "pdf_document";
     if ("success" in obj && "s3_key" in obj && "url" in obj) return "website_writer";
+    // The Services Catalog's website phase reports a different shape — `status`
+    // and `website_url` rather than `success` and `url`, per
+    // MENU_WEBSITE_WRITER_PROMPT. Without this the catalog's headline
+    // deliverable rendered as a raw JSON block instead of a link to the site.
+    if ("website_url" in obj && "s3_key" in obj) return "website_writer";
 
     return null;
 }

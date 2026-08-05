@@ -1,6 +1,9 @@
 import type { WebsiteWriterResult } from "./types";
 
 export function WebsiteWriterResultCard({ data }: { data: WebsiteWriterResult }): JSX.Element {
+    // Either field name, depending on which phase produced it.
+    const siteUrl = data.url ?? data.website_url ?? "";
+    const sections = data.sections ?? data.sections_included ?? [];
     return (
         <div className="rounded-xl border border-cyan-500/30 bg-gradient-to-br from-gray-900 to-gray-800 p-5 shadow-lg">
             <div className="flex items-center gap-3 mb-3">
@@ -9,14 +12,14 @@ export function WebsiteWriterResultCard({ data }: { data: WebsiteWriterResult })
                     {data.title || "Banking Website"}
                 </h3>
             </div>
-            {data.sections && data.sections.length > 0 && (
+            {sections.length > 0 && (
                 <p className="text-sm text-gray-400 mb-4">
-                    {data.sections.length} sections · {data.item_count ?? "—"} products
+                    {sections.length} sections · {data.item_count ?? "—"} products
                 </p>
             )}
             <div className="flex flex-wrap gap-3">
                 <a
-                    href={data.url}
+                    href={siteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold

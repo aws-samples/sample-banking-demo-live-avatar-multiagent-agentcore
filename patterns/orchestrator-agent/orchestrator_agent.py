@@ -2236,6 +2236,14 @@ async def _run_pipeline(
                             import json as _cbjson
 
                             parsed = _cbjson.loads(text_val)
+                            # Only a PDF. website_generator also returns a
+                            # presigned `url` plus an `s3_key`, so matching on
+                            # those alone rendered a generated website as a PDF
+                            # viewer titled "index.html" — and then reported it
+                            # as a missing report. pdf_generator is the only tool
+                            # that sets this discriminator.
+                            if parsed.get("artifact") != "pdf":
+                                continue
                             url = parsed.get("url", "")
                             if url and ("X-Amz-Signature" in url or "Signature=" in url):
                                 tq.put(

@@ -68,12 +68,19 @@ export interface PdfWriterResult {
 }
 
 export interface WebsiteWriterResult {
-    success: boolean;
-    url: string;
+    success?: boolean;
+    /** Present on the research/website tool result. */
+    url?: string;
+    /**
+     * The Services Catalog's website phase reports the link under this name
+     * instead (see MENU_WEBSITE_WRITER_PROMPT), so the card accepts either.
+     */
+    website_url?: string;
     download_url?: string;
     s3_key: string;
     title?: string;
     sections?: string[];
+    sections_included?: string[];
     item_count?: number;
 }
 
