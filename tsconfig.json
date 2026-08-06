@@ -24,5 +24,10 @@
         "skipLibCheck": true,
         "noEmit": true
     },
-    "exclude": ["node_modules", "cdk.out", "lib/stacks/frontend/app"]
+    "exclude": [
+        "node_modules",
+        "cdk.out",
+        "lib/stacks/frontend/app",
+        "gartner-ai-appdev-platforms-avatar-tavus"
+    ]
 }

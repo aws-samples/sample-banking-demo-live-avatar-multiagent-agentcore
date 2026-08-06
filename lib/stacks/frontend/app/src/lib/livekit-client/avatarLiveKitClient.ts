@@ -25,6 +25,13 @@ import {
     type RemoteTrackPublication,
     type RemoteParticipant,
 } from "livekit-client";
+// Transport-agnostic types live in a runtime-free module so pure adapters and
+// their tests can import them without pulling this client (which uses
+// `import.meta.env`). Imported for local use and re-exported below so existing
+// `from ".../avatarLiveKitClient"` imports keep working.
+import type { AvatarConnectionState, ToolActivity, TranscriptUpdate } from "./avatarTransportTypes";
+
+export type { AvatarConnectionState, ToolActivity, TranscriptUpdate } from "./avatarTransportTypes";
 
 /**
  * Topic the agents framework publishes conversation text on. Both sides arrive
@@ -42,34 +49,6 @@ const TOPIC_TOOL_ACTIVITY = "trb.tool";
  * reaches the model without any worker-side change.
  */
 const TOPIC_CHAT = "lk.chat";
-
-/** One side of the conversation, streamed as it is spoken. */
-export interface TranscriptUpdate {
-    /** Stable per utterance, so a growing stream updates in place. */
-    segmentId: string;
-    role: "user" | "assistant";
-    text: string;
-    isFinal: boolean;
-}
-
-/** A tool call starting, or finishing with its raw result. */
-export interface ToolActivity {
-    callId: string;
-    name: string;
-    status: "running" | "done" | "error";
-    /** Serialised call arguments; present from the start event. */
-    input?: string;
-    /** Raw tool output; only present once finished. */
-    output?: string;
-}
-
-/** App-level connection state — matches websocket-client/client.ts ConnectionState. */
-export type AvatarConnectionState =
-    | "disconnected"
-    | "connecting"
-    | "connected"
-    | "reconnecting"
-    | "error";
 
 /** Response shape from the LiveKit token endpoint. */
 export interface LiveKitTokenResponse {

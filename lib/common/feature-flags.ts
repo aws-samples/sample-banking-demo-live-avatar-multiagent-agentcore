@@ -14,6 +14,15 @@ export interface FeatureFlags {
      * during the migration; once proven, `avatar` can be turned off.
      */
     livekit: boolean;
+    /**
+     * Tavus video-avatar path. When true, deploys the self-hosted Pipecat +
+     * Nova Sonic worker (ECS Fargate) and its Cognito-authorized offer API, and
+     * the frontend's "Realistic" avatar becomes a server-rendered Tavus video
+     * track. Independent of `livekit`: it runs as a parallel transport used
+     * only when the visitor selects the Tavus variant. See the
+     * `tavus-avatar-integration` spec.
+     */
+    tavus_avatar: boolean;
     knowledge_base: boolean;
     kb_backend: KbBackend;
     neptune: boolean;
@@ -36,6 +45,7 @@ export interface ModelConfig {
 const DEFAULT_FEATURES: FeatureFlags = {
     avatar: true,
     livekit: false,
+    tavus_avatar: false,
     knowledge_base: true,
     kb_backend: "s3-vectors",
     neptune: false,
@@ -63,6 +73,34 @@ export function getFeatureFlags(node: Node): FeatureFlags {
 export function getModelConfig(node: Node): ModelConfig {
     const models = node.tryGetContext("models") ?? {};
     return { ...DEFAULT_MODELS, ...models };
+}
+
+export interface TavusConfig {
+    workerCpu: number;
+    workerMemory: number;
+    /**
+     * Nova Sonic voice for the worker, fixed for the life of the Fargate task
+     * (same limitation as the LiveKit worker — the offer carries no voice).
+     * Must be one of the ids in the frontend's voice-config.ts VOICES.
+     */
+    novaSonicVoiceId: string;
+    /**
+     * Optional Tavus persona id passed to TavusVideoService. The replica id and
+     * API key are NOT here — they live only in Secrets Manager.
+     */
+    personaId?: string;
+}
+
+const DEFAULT_TAVUS_CONFIG: TavusConfig = {
+    workerCpu: 1024,
+    workerMemory: 2048,
+    novaSonicVoiceId: "tiffany",
+    personaId: "pipecat-stream",
+};
+
+export function getTavusConfig(node: Node): TavusConfig {
+    const tavus = node.tryGetContext("tavus") ?? {};
+    return { ...DEFAULT_TAVUS_CONFIG, ...tavus };
 }
 
 export function getStackNameBase(node: Node): string {

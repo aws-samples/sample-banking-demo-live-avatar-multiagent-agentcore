@@ -15,6 +15,10 @@ export default [
             // Local experiment sandbox (gitignored) — not part of the project.
             ".sandbox/**",
             "lib/stacks/frontend/app/**",
+            // Reference implementation used as the base for the Tavus avatar
+            // integration; a separate Next.js/Python project with its own
+            // toolchain, not part of this monorepo's build or lint.
+            "gartner-ai-appdev-platforms-avatar-tavus/**",
         ],
     },
     ...tseslint.configs.recommended,

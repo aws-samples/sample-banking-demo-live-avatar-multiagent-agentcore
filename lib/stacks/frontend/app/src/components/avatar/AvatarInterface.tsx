@@ -35,6 +35,7 @@ import ResizablePanelLayout, {
 } from "@/components/common/resizable/ResizablePanelLayout";
 import Avatar3DReactWrapper from "./Avatar3DReactWrapper";
 import TalkingHeadAvatar from "./TalkingHeadAvatar";
+import TavusAvatar from "./TavusAvatar";
 import WebsiteMonitor from "./WebsiteMonitor";
 import { useAudioPlayer, AudioPlayerControls } from "./AudioPlayer";
 import { MarkdownRenderer } from "../chat/MarkdownRenderer";
@@ -57,6 +58,7 @@ import {
 import { presignAgentCoreWebSocket } from "@/lib/websocket-client/sigv4";
 import { AvatarLiveKitClient } from "@/lib/livekit-client/avatarLiveKitClient";
 import type { TranscriptUpdate, ToolActivity } from "@/lib/livekit-client/avatarLiveKitClient";
+import { TavusPipecatClient } from "@/lib/tavus-pipecat-client/tavusPipecatClient";
 import { extractToolArtifacts } from "./toolArtifacts";
 import { getAWSCredentials } from "@/lib/auth/credentials";
 import { createPCMProcessorUrl, arrayBufferToBase64 } from "@/lib/websocket-client/audio-utils";
@@ -167,10 +169,21 @@ export default function AvatarInterface(): JSX.Element {
     });
 
     // --- Avatar variant ---
-    // Default to the photorealistic advisor. The key is versioned (-v2) so
-    // existing sessions that had "robot" saved still pick up the new default.
+    // Default to the advisor GLB. The key is versioned (-v2) so existing
+    // sessions that had "robot" saved still pick up the new default.
     const [avatarVariant, setAvatarVariant] = useState<AvatarVariantName>(() => {
-        return (localStorage.getItem("avatar-variant-v2") as AvatarVariantName) || "realistic";
+        const saved = localStorage.getItem("avatar-variant-v2");
+        // The old browser-rendered "Realistic" variant was named "photo" and has
+        // been replaced by the server-rendered Tavus video variant ("tavus").
+        // Migrate a persisted "photo" so it does not render a blank canvas: to
+        // "tavus" when the feature is available, otherwise to the advisor GLB.
+        if (saved === "photo") {
+            return import.meta.env.VITE_TAVUS_OFFER_URL ? "tavus" : "realistic";
+        }
+        const valid: AvatarVariantName[] = ["realistic", "tavus", "robot", "blob", "crystal"];
+        return valid.includes(saved as AvatarVariantName)
+            ? (saved as AvatarVariantName)
+            : "realistic";
     });
 
     // --- Smart auto-scroll state ---
@@ -188,9 +201,23 @@ export default function AvatarInterface(): JSX.Element {
     // MFCC-based viseme detection on the signal itself.
     const [agentAudioTrack, setAgentAudioTrack] = useState<MediaStreamTrack | null>(null);
 
+    // --- Tavus video-avatar transport — gated behind VITE_TAVUS_OFFER_URL and
+    // used ONLY when the "tavus" variant is selected. It is a parallel WebRTC
+    // transport (Daily) to a Pipecat + Nova Sonic worker; the avatar is a
+    // server-rendered video track rather than a locally rendered mesh.
+    const tavusOfferUrl = import.meta.env.VITE_TAVUS_OFFER_URL;
+    const [avatarVideoTrack, setAvatarVideoTrack] = useState<MediaStreamTrack | null>(null);
+    const [tavusSpeaking, setTavusSpeaking] = useState(false);
+    // True when the Tavus transport should be the active one for this session.
+    const isTavus = avatarVariant === "tavus" && !!tavusOfferUrl;
+
     // --- Refs ---
     const wsClientRef = useRef<AvatarWebSocketClient | null>(null);
     const liveKitClientRef = useRef<AvatarLiveKitClient | null>(null);
+    const tavusClientRef = useRef<TavusPipecatClient | null>(null);
+    // Which transport is currently live, so a variant switch across the Tavus
+    // boundary can tear the old one down before standing up the other.
+    const activeTransportRef = useRef<"none" | "tavus" | "other">("none");
     const mediaStreamRef = useRef<MediaStream | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const workletNodeRef = useRef<AudioWorkletNode | null>(null);
@@ -980,6 +1007,37 @@ export default function AvatarInterface(): JSX.Element {
         clearQueue();
         setInterruptCount(0);
 
+        // --- Tavus video-avatar path (only for the "tavus" variant) ---
+        // Checked before LiveKit because both env vars can be set at once; the
+        // selected variant decides which transport is used.
+        if (isTavus) {
+            if (!auth.user?.id_token) {
+                setError("Avatar connection requires a Cognito id_token — check authentication.");
+                return;
+            }
+            const tavusClient = new TavusPipecatClient({
+                idToken: auth.user.id_token,
+                onVideoTrack: setAvatarVideoTrack,
+                onSpeakingChange: setTavusSpeaking,
+                onConnectionState: setConnectionState,
+                onTranscript: handleLiveKitTranscript,
+                onToolActivity: handleLiveKitToolActivity,
+                onError: (err) => setError(`Tavus error: ${err.message}`),
+            });
+            tavusClientRef.current = tavusClient;
+            try {
+                await tavusClient.connect();
+                activeTransportRef.current = "tavus";
+                // The mic is published on join — reflect that in the UI.
+                setIsRecording(true);
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : "Unknown error";
+                console.error(`[AvatarInterface] Tavus connection failed: ${msg}`);
+                setError(`Failed to establish avatar connection: ${msg}`);
+            }
+            return;
+        }
+
         // --- LiveKit (WebRTC) path ---
         if (liveKitTokenUrl) {
             if (!auth.user?.id_token) {
@@ -999,6 +1057,7 @@ export default function AvatarInterface(): JSX.Element {
             liveKitClientRef.current = lkClient;
             try {
                 await lkClient.connect();
+                activeTransportRef.current = "other";
                 // LiveKit publishes the mic on connect — reflect that in the UI.
                 setIsRecording(true);
             } catch (err) {
@@ -1059,6 +1118,7 @@ export default function AvatarInterface(): JSX.Element {
             );
             console.log("[AvatarInterface] Connecting with SigV4 presigned URL");
             client.connect(presignedUrl);
+            activeTransportRef.current = "other";
         } catch (err) {
             const msg = err instanceof Error ? err.message : "Unknown error";
             console.error(`[AvatarInterface] SigV4 presigning failed: ${msg}`);
@@ -1074,12 +1134,19 @@ export default function AvatarInterface(): JSX.Element {
         handleWSMessage,
         clearQueue,
         liveKitTokenUrl,
+        isTavus,
         handleLiveKitTranscript,
         handleLiveKitToolActivity,
     ]);
 
     // --- Recording ---
     const stopRecording = useCallback((): void => {
+        // Tavus path: mute the published mic on the Daily call.
+        if (isTavus) {
+            tavusClientRef.current?.setMicrophoneEnabled(false);
+            setIsRecording(false);
+            return;
+        }
         // LiveKit path: just mute the published mic; the AudioWorklet below
         // is never set up on this transport.
         if (liveKitTokenUrl) {
@@ -1100,13 +1167,24 @@ export default function AvatarInterface(): JSX.Element {
             mediaStreamRef.current = null;
         }
         setIsRecording(false);
-    }, [liveKitTokenUrl]);
+    }, [liveKitTokenUrl, isTavus]);
 
     const disconnect = useCallback((): void => {
+        // Tavus path: tear down the Daily call and reset UI. Idempotent.
+        if (isTavus) {
+            tavusClientRef.current?.disconnect();
+            tavusClientRef.current = null;
+            activeTransportRef.current = "none";
+            setIsRecording(false);
+            setTavusSpeaking(false);
+            setAvatarVideoTrack(null);
+            return;
+        }
         // LiveKit path: tear down the room + audio analysis and reset UI.
         if (liveKitTokenUrl) {
             liveKitClientRef.current?.disconnect();
             liveKitClientRef.current = null;
+            activeTransportRef.current = "none";
             setIsRecording(false);
             setLiveKitSpeaking(false);
             setAgentAudioTrack(null);
@@ -1121,9 +1199,16 @@ export default function AvatarInterface(): JSX.Element {
         setAudioLevel(0);
         setVisemeShape("neutral");
         resetAnalyzer();
-    }, [clearQueue, stopRecording, liveKitTokenUrl]);
+    }, [clearQueue, stopRecording, liveKitTokenUrl, isTavus]);
 
     const startRecording = useCallback(async (): Promise<void> => {
+        // Tavus path: the mic is published on join; re-enable it here.
+        if (isTavus) {
+            if (connectionState !== "connected") return;
+            tavusClientRef.current?.setMicrophoneEnabled(true);
+            setIsRecording(true);
+            return;
+        }
         // LiveKit path: the mic is published on connect; re-enable it here.
         if (liveKitTokenUrl) {
             if (connectionState !== "connected") return;
@@ -1182,7 +1267,33 @@ export default function AvatarInterface(): JSX.Element {
             const msg = err instanceof Error ? err.message : "Microphone access denied";
             setError(`Microphone error: ${msg}`);
         }
-    }, [connectionState, liveKitTokenUrl]);
+    }, [connectionState, liveKitTokenUrl, isTavus]);
+
+    // --- Mid-session transport swap across the Tavus boundary ---
+    // Selecting the Tavus variant (or leaving it) uses a different transport
+    // than the LiveKit/WebSocket variants. When the variant crosses that
+    // boundary while a session is live, tear the active transport down and
+    // stand the other up. Refs hold the latest connect/disconnect so this
+    // effect can key on the variant alone without re-running on every render.
+    const connectRef = useRef(connect);
+    const disconnectRef = useRef(disconnect);
+    useEffect(() => {
+        connectRef.current = connect;
+        disconnectRef.current = disconnect;
+    });
+    useEffect(() => {
+        const desired = isTavus ? "tavus" : "other";
+        if (activeTransportRef.current === "none" || activeTransportRef.current === desired) {
+            return;
+        }
+        disconnectRef.current();
+        // Let teardown settle before establishing the other transport.
+        const timer = setTimeout(() => {
+            void connectRef.current();
+        }, 100);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [avatarVariant]);
 
     // --- Persona change ---
     const handlePersonaChange = useCallback((newPersona: PersonaId): void => {
@@ -1350,7 +1461,13 @@ export default function AvatarInterface(): JSX.Element {
                     </div>
 
                     <div className="avatar-page__avatar-canvas">
-                        {avatarVariant === "realistic" ? (
+                        {isTavus ? (
+                            <TavusAvatar
+                                videoTrack={avatarVideoTrack}
+                                isSpeaking={tavusSpeaking}
+                                className="w-full h-full"
+                            />
+                        ) : avatarVariant === "realistic" ? (
                             <TalkingHeadAvatar
                                 audioTrack={agentAudioTrack}
                                 audioLevel={audioLevel}
@@ -1383,11 +1500,19 @@ export default function AvatarInterface(): JSX.Element {
                                     icon: <UserRound size={14} />,
                                     label: "Advisor",
                                 },
-                                {
-                                    name: "photo" as const,
-                                    icon: <Camera size={14} />,
-                                    label: "Realistic",
-                                },
+                                // The "Realistic" entry is the server-rendered
+                                // Tavus video avatar. It only appears when the
+                                // Tavus offer endpoint is configured; otherwise
+                                // the picker behaves exactly as before.
+                                ...(tavusOfferUrl
+                                    ? [
+                                          {
+                                              name: "tavus" as const,
+                                              icon: <Camera size={14} />,
+                                              label: "Realistic",
+                                          },
+                                      ]
+                                    : []),
                                 { name: "robot" as const, icon: <Bot size={14} />, label: "Robot" },
                                 {
                                     name: "blob" as const,

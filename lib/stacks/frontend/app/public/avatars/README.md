@@ -1,21 +1,17 @@
-# Avatar GLB Assets
+# Avatar Assets
 
-This directory is scanned at runtime by `Avatar3DHuman.ts` for `chef.glb`.
+## `trinity-advisor.glb`
 
-## How to populate it
+The rigged CC0 avatar (MPFB, meshopt + webp compressed) used by the **Advisor**
+variant (`realistic`), rendered via `@met4citizen/talkinghead` in
+`../src/components/avatar/TalkingHeadAvatar.tsx`. Its 66 morph targets are
+lip-synced from the live Nova Sonic audio by `@met4citizen/headaudio`
+(see `../headaudio/`). Do not remove — the Advisor variant depends on it.
 
-1. Generate a Ready Player Me avatar at <https://readyplayer.me> and export
-   as GLB (MIT-compatible for commercial use). Alternative: Microsoft
-   RocketBox — <https://github.com/microsoft/RocketBox>, also MIT. Both provide
-   ARKit 52-blend-shape rigs compatible with the `VISEME_TO_ARKIT` map in
-   `Avatar3DHuman.ts`.
-2. Drop the file here as `public/avatars/chef.glb`.
-3. Extend `AvatarVariantName` in `../src/components/avatar/AvatarVariant.ts`
-   to include `"human"`.
-4. Add a `case "human":` branch in `createAvatar()` inside
-   `Avatar3DReactWrapper.tsx`.
-5. Add a button for the new variant in the picker row in `AvatarInterface.tsx`.
+## Video avatar (`tavus`) — no asset here
 
-Until a `chef.glb` is present here, selecting the "human" variant (after the
-wiring steps above) will render an empty scene and log a warning — that's by
-design so the build doesn't require a large binary blob to be committed.
+The photoreal **"Realistic"** variant is rendered server-side by Tavus and
+streamed to the browser as a WebRTC video track (see the
+`tavus-avatar-integration` spec). It has no static asset in this directory; the
+`<video>` element is fed by the Pipecat transport client, so nothing needs to be
+committed here for it.

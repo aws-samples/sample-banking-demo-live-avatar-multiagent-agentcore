@@ -35,6 +35,7 @@
         "features": {
             "avatar": true,
             "livekit": true,
+            "tavus_avatar": true,
             "knowledge_base": true,
             "kb_backend": "s3-vectors",
             "neptune": false,
@@ -55,6 +56,12 @@
             "workerCpu": 1024,
             "workerMemory": 2048,
             "voiceId": "tiffany"
+        },
+        "tavus": {
+            "workerCpu": 1024,
+            "workerMemory": 2048,
+            "novaSonicVoiceId": "tiffany",
+            "personaId": "pipecat-stream"
         },
 
         "@aws-cdk/aws-lambda:recognizeLayerVersion": true,

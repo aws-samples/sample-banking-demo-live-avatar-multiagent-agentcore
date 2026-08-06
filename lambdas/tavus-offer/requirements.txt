@@ -1,0 +1,4 @@
+# No third-party dependencies — the offer proxy uses only the Python stdlib
+# (urllib) to forward the authenticated offer to the worker. This file exists so
+# the CDK asset bundler has a requirements.txt to install (a no-op here),
+# matching the livekit-token Lambda's build shape.

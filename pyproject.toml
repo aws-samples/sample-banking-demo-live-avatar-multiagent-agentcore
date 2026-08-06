@@ -12,6 +12,7 @@ pythonpath = [
     "patterns/utils",
     "patterns/avatar-agent",
     "patterns/orchestrator-agent",
+    "patterns/tavus-pipecat-agent",
 ]
 testpaths = ["test/python"]
 # Keep output short so the kit CLI stays readable; individual tests can

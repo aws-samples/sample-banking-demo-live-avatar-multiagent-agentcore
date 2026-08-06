@@ -1,5 +1,27 @@
 # Photorealistic Talking Head + Nova Sonic 2 + LiveKit — Implementation Guide
 
+> **Update — the "Realistic" avatar is now a pluggable server-rendered video.**
+> The photoreal option in the picker (previously a photograph warped in a
+> three.js shader, internal name `photo`) has been replaced by a server-rendered
+> video avatar produced by an avatar-rendering vendor and streamed to the browser
+> over WebRTC. See [`docs/tavus-avatar-integration`](../.kiro/specs/tavus-avatar-integration/design.md)
+> for the full design. Key points:
+>
+> - **The AWS pipeline is unchanged in spirit.** Amazon Nova Sonic (speech-to-speech,
+>   on Bedrock) is still the model, and the AgentCore Gateway tools and per-caller
+>   tenant isolation still apply. A self-hosted [Pipecat](https://pipecat.ai)
+>   worker on ECS Fargate orchestrates the pipeline.
+> - **The avatar renderer is one swappable pipeline stage.** [Tavus](https://tavus.io)
+>   is the shipped vendor (`TavusVideoService`); it sits downstream of the model
+>   and tools, so swapping in [HeyGen](https://heygen.com) or another provider is
+>   a one-stage change with no impact on Nova Sonic, the gateway, or the frontend
+>   video element. Messaging should present AWS as vendor-agnostic here.
+> - **This runs alongside, not instead of, the LiveKit path below.** The Advisor
+>   GLB and the geometric avatars still use the LiveKit transport documented in
+>   this guide. Only the "Realistic" entry uses the Tavus/Pipecat transport, and
+>   only when the `tavus_avatar` flag is on. The rest of this document remains the
+>   reference for the LiveKit path and the rigged-GLB Advisor avatar.
+
 A reproducible recipe for a lip-synced, photorealistic 3D avatar that speaks with
 **Amazon Nova Sonic 2** over **LiveKit** WebRTC. Written to be portable: nothing
 here is specific to the Trinity Reserve Bank demo beyond names.

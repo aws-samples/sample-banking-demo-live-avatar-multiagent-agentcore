@@ -34,29 +34,33 @@ export interface AvatarVariant {
 }
 
 /**
- * `realistic` is not a canvas variant like the others — it renders the rigged
- * TalkingHead GLB (see TalkingHeadAvatar.tsx), which manages its own scene and
- * lip-sync, so it is branched at the AvatarInterface level rather than
- * constructed through `createAvatar`. It is labelled "Advisor" in the picker.
+ * Two variants are branched at the AvatarInterface level rather than built
+ * through `createAvatar`, because they are not three.js canvas scenes:
  *
- * `photo` is the "Realistic" picker entry: a real photograph warped per viseme
- * (see Avatar3DPhoto.ts). It goes through `createAvatar` like the generated
- * variants, because it is a normal three.js scene.
+ * - `realistic` renders the rigged TalkingHead GLB (see TalkingHeadAvatar.tsx),
+ *   which manages its own scene and lip-sync. Labelled "Advisor" in the picker.
+ * - `tavus` renders a server-produced photoreal video track over WebRTC (see
+ *   TavusAvatar.tsx). Labelled "Realistic" in the picker. It has no local
+ *   rendering — the avatar is rendered by Tavus and streamed in.
+ *
+ * `robot`, `blob`, and `crystal` are ordinary three.js scenes built through
+ * `createAvatar` in Avatar3DReactWrapper.
  */
-export type AvatarVariantName = "realistic" | "photo" | "robot" | "blob" | "crystal";
+export type AvatarVariantName = "realistic" | "tavus" | "robot" | "blob" | "crystal";
 
 /**
  * Apparent gender of each avatar, used to keep the selected voice matching the
  * face on screen. `null` means the variant has no apparent gender, so the
  * language default stands.
  *
- * "Advisor" (`realistic`) is the rigged female GLB; "Realistic" (`photo`) is the
- * male photograph. Without this map a female avatar could speak with a male
- * voice, which reads as a bug rather than a choice.
+ * "Advisor" (`realistic`) is the rigged female GLB. `tavus` is `null`: the Tavus
+ * replica's voice and appearance are fixed server-side by the chosen replica id,
+ * and the client voice selector does not reach that transport, so there is no
+ * client-side voice to match.
  */
 export const VARIANT_VOICE_GENDER: Record<AvatarVariantName, "female" | "male" | null> = {
     realistic: "female",
-    photo: "male",
+    tavus: null,
     robot: null,
     blob: null,
     crystal: null,

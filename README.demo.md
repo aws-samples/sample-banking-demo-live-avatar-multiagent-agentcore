@@ -28,6 +28,15 @@ Modules that are unique to a certain CDK construct or React component are coloca
 - Website assets are uploaded to an Amazon S3 bucket from the `app` folder.
 - A CDK custom resource provider triggers an Amazon CodeBuild project which builds the React application.
 
+#### [Tavus Avatar Stack](./lib/stacks/tavus-avatar/index.ts)
+
+- Gated behind the `tavus_avatar` feature flag. Provides the photoreal **"Realistic"** avatar option as a live video, while Amazon Nova Sonic (speech-to-speech, on Amazon Bedrock), the AgentCore Gateway tools, and per-caller tenant isolation continue to power the conversation.
+- A self-hosted [Pipecat](https://pipecat.ai) worker runs on Amazon ECS Fargate (Graviton/ARM64). It streams the visitor's audio to Nova Sonic and passes the model's response audio through a single **avatar render stage** before the WebRTC output.
+- **Pluggable avatar renderer.** The render stage shown is [Tavus](https://tavus.io); because it is one isolated pipeline stage downstream of the AWS-owned model and tools, it can be swapped for another provider (for example [HeyGen](https://heygen.com)) without changing Nova Sonic, the gateway, or the frontend. The demo positions AWS as compatible with the visitor's choice of avatar vendor, not tied to one.
+- The browser reaches the worker through a Cognito-authorized offer API (Amazon API Gateway + Lambda) that injects the verified caller identity; an internal Application Load Balancer fronts the worker. Tavus and Daily credentials live only in AWS Secrets Manager and never reach the browser.
+
+> **Note — third-party dependency and cost.** On this variant the avatar is rendered by Tavus, which uses [Daily](https://daily.co) for its WebRTC transport. Both are AWS Marketplace partners, but this means the "Realistic" video avatar is **not** rendered purely on AWS and Tavus bills per minute of avatar usage. This widens the existing "external managed media plane" exception already set by the LiveKit path. The rest of the demo (and the other avatar options) remain AWS-hosted. Populate the `/{stack}/tavus` secret after the first deploy, as with the LiveKit secret.
+
 ### Frontend
 
 `src/index.tsx` is the entrypoint to the React application. `src/pages` contains the application's pages and child components.
@@ -38,26 +47,31 @@ Modules that are unique to a certain CDK construct or React component are coloca
 
 ## Pricing Estimation
 
-| AWS Service                                                     | Pricing Considerations                  | Estimated Cost (USD) |
-| --------------------------------------------------------------- | --------------------------------------- | -------------------- |
-| [Amazon S3](https://aws.amazon.com/s3/pricing/)                 | • Type of storage class                 | $                    |
-|                                                                 | • Amount of storage per month           |                      |
-|                                                                 | • Number of requests                    |                      |
-|                                                                 | • Amount of data transfer out           |                      |
-| [Amazon CloudFront](https://aws.amazon.com/cloudfront/pricing/) | • Amount of data transfer out by region | $                    |
-|                                                                 | • Number of requests                    |                      |
-|                                                                 | • Type of price class                   |                      |
-| [AWS WAF](https://aws.amazon.com/waf/pricing/)                  | • Number of Web ACLs created            | $                    |
-|                                                                 | • Number of rules per ACL               |                      |
-|                                                                 | • Number of requests                    |                      |
-| [Amazon Cognito](https://aws.amazon.com/cognito/pricing/)       | • Number of monthly active users        | $                    |
-|                                                                 | • Type of pricing tier                  |                      |
-|                                                                 | • Type of identity provider             |                      |
-|                                                                 | • Number of SMS/email messages          |                      |
-| [AWS CodeBuild](https://aws.amazon.com/codebuild/pricing/)      | • Number of build minutes               | $                    |
-|                                                                 | • Type of compute                       |                      |
+| AWS Service                                                     | Pricing Considerations                                            | Estimated Cost (USD) |
+| --------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------- |
+| [Amazon S3](https://aws.amazon.com/s3/pricing/)                 | • Type of storage class                                           | $                    |
+|                                                                 | • Amount of storage per month                                     |                      |
+|                                                                 | • Number of requests                                              |                      |
+|                                                                 | • Amount of data transfer out                                     |                      |
+| [Amazon CloudFront](https://aws.amazon.com/cloudfront/pricing/) | • Amount of data transfer out by region                           | $                    |
+|                                                                 | • Number of requests                                              |                      |
+|                                                                 | • Type of price class                                             |                      |
+| [AWS WAF](https://aws.amazon.com/waf/pricing/)                  | • Number of Web ACLs created                                      | $                    |
+|                                                                 | • Number of rules per ACL                                         |                      |
+|                                                                 | • Number of requests                                              |                      |
+| [Amazon Cognito](https://aws.amazon.com/cognito/pricing/)       | • Number of monthly active users                                  | $                    |
+|                                                                 | • Type of pricing tier                                            |                      |
+|                                                                 | • Type of identity provider                                       |                      |
+|                                                                 | • Number of SMS/email messages                                    |                      |
+| [AWS CodeBuild](https://aws.amazon.com/codebuild/pricing/)      | • Number of build minutes                                         | $                    |
+|                                                                 | • Type of compute                                                 |                      |
+| [Amazon ECS Fargate](https://aws.amazon.com/fargate/pricing/)   | • vCPU/GB-hours for the Tavus Pipecat + Nova Sonic worker (ARM64) | $                    |
+|                                                                 | • One always-on task per deployment                               |                      |
+| [Tavus](https://tavus.io) (3rd-party)                           | • Per-minute avatar rendering                                     | $                    |
+|                                                                 | • Only while the "Realistic" variant is in a live session         |                      |
+| [Daily](https://daily.co) (3rd-party)                           | • Per-minute WebRTC transport used by Tavus                       | $                    |
 
-For more details, visit the [AWS Pricing Calculator](https://calculator.aws/#/).
+For more details, visit the [AWS Pricing Calculator](https://calculator.aws/#/). Tavus and Daily are third-party services (AWS Marketplace partners) billed outside AWS; see their pricing pages for current rates.
 
 ## Getting Started
 

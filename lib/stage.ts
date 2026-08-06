@@ -7,6 +7,7 @@ import { Backend } from "./stacks/backend";
 import { Frontend, FrontendDeployment } from "./stacks/frontend";
 import { LiveKit } from "./stacks/livekit";
 import { Shared } from "./stacks/shared";
+import { TavusAvatar } from "./stacks/tavus-avatar";
 
 export class ApplicationStage extends Stage {
     constructor(scope: Construct, id: string, props?: StageProps) {
@@ -37,6 +38,16 @@ export class ApplicationStage extends Stage {
             livekit = new LiveKit(this, "LiveKit", { auth });
             livekit.addDependency(auth);
             livekit.addDependency(backend);
+        }
+
+        // Tavus video-avatar path (Strategy A — parallel Pipecat + Nova Sonic
+        // worker). Gated on the `tavus_avatar` flag; depends on backend for the
+        // gateway_url SSM param the worker reads at runtime.
+        let tavusAvatar: TavusAvatar | undefined;
+        if (features.tavus_avatar) {
+            tavusAvatar = new TavusAvatar(this, "TavusAvatar", { auth });
+            tavusAvatar.addDependency(auth);
+            tavusAvatar.addDependency(backend);
         }
 
         const environmentVariables: Record<string, string> = {
@@ -76,6 +87,12 @@ export class ApplicationStage extends Stage {
             // LiveKit token endpoint — the browser POSTs here (with its Cognito
             // JWT) to get a room token + LiveKit Cloud server URL.
             ...(features.livekit && livekit ? { VITE_LIVEKIT_TOKEN_URL: livekit.tokenApiUrl } : {}),
+            // Tavus offer endpoint — the browser POSTs here (with its Cognito
+            // JWT) to start a Tavus video-avatar session. Presence of this var
+            // is what makes the "Realistic" (Tavus) picker entry appear.
+            ...(features.tavus_avatar && tavusAvatar
+                ? { VITE_TAVUS_OFFER_URL: tavusAvatar.offerApiUrl }
+                : {}),
         };
 
         // this stack must be named FrontendDeployment
