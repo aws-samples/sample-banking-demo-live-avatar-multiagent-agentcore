@@ -46,9 +46,9 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
             "Generates 12-section research PDF reports via ReportLab and uploads to S3, returning a presigned URL. Handles cover page, TOC, findings, citations, and appendices.",
     },
     nova_canvas_generate: {
-        label: "Canvas Generate",
+        label: "Generate Image",
         description:
-            "Generates product or design imagery via Amazon Nova Canvas. Images are stored in S3 with session-scoped history.",
+            "Generates product or design imagery via Stability SD3.5 (Stable Diffusion) on Bedrock. Images are stored in S3 with session-scoped history.",
     },
     nova_canvas_edit: {
         label: "Canvas Edit",

@@ -13,6 +13,7 @@
 
 import { Wrench } from "lucide-react";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import { displayToolName } from "./toolLabels";
 
 interface ToolCallCardProps {
     toolName: string;
@@ -52,7 +53,7 @@ export default function ToolCallCard({
     const summary = (
         <>
             <Wrench size={14} className="avatar-page__tool-icon" />
-            <span className="avatar-page__tool-name">{toolName}</span>
+            <span className="avatar-page__tool-name">{displayToolName(toolName)}</span>
             <StatusIndicator type={status === "running" ? "in-progress" : "success"}>
                 {status === "running" ? "Running" : "Done"}
             </StatusIndicator>
