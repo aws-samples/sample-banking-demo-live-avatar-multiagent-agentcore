@@ -32,7 +32,7 @@ COPY patterns/tavus-pipecat-agent/server.py .
 # over WebRTC UDP directly between the browser and this task.
 EXPOSE 7860
 
-# server.py adds the ALB /health check around the Pipecat runner app and serves
-# the Daily offer endpoint. Auth is enforced upstream by the offer Lambda.
-CMD ["python", "server.py", "--transport", "daily", "--host", "0.0.0.0", "--port", "7860"]
+# server.py serves the ALB /health check and the /start endpoint that drives
+# TavusTransport. Auth is enforced upstream by the offer Lambda.
+CMD ["python", "server.py", "--host", "0.0.0.0", "--port", "7860"]
 

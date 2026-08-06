@@ -1,73 +1,104 @@
 """
-Server wrapper around the Pipecat runner for the deployed (cloud) worker.
+HTTP server for the deployed (cloud) Tavus video-avatar worker.
 
-Adds a `/health` endpoint for the ALB target-group health check. Unlike the
-reference `server.py`, there is no `DEMO_API_TOKEN` gate here: the offer endpoint
-is reached only through the Cognito-authorized offer Lambda (which verifies the
-caller and injects the verified `sub` into the offer body), so authentication is
-enforced upstream rather than in the container.
+The Pipecat dev runner only knows how to create Daily/WebRTC/telephony rooms, so
+it cannot drive `TavusTransport` (Tavus creates the room itself). This small
+FastAPI app takes its place:
+
+  - `GET  /health` — ALB target-group health check.
+  - `POST /start`  — starts one avatar session and returns the Tavus room URL.
+
+Flow: the offer Lambda POSTs `{"createDailyRoom": true, "body": {user_id,
+persona, voiceId}}` (the `createDailyRoom` flag is ignored here). We start a
+`run_session` task; `TavusTransport` creates the Tavus conversation, and its
+`on_connected` resolves the room URL onto a future. We return
+`{"room_url": "https://tavus.daily.co/<room>"}` to the browser, which joins that
+room with daily-js. The session task keeps running in the background.
+
+Authentication is enforced upstream by the Cognito-authorized offer Lambda, so
+there is no token gate here.
 
 Run:
-    python server.py --transport daily --host 0.0.0.0 --port 7860
+    python server.py --host 0.0.0.0 --port 7860
 """
 
 import argparse
+import asyncio
 import sys
 
 import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from loguru import logger
-from pipecat.runner.run import _configure_server_app
-from pipecat.runner.run import app as pipecat_app
-from tavus_pipecat_agent import _load_tavus_secret
+from tavus_pipecat_agent import _load_tavus_secret, _tavus_creds_present, run_session
+
+# How long to wait for Tavus to create the conversation and the bot to connect
+# before giving up on a /start. Must stay below the offer Lambda's read timeout.
+START_TIMEOUT_SECONDS = 18.0
+
+# Keep references to running session tasks so they are not garbage-collected
+# mid-session (asyncio holds only weak references to bare tasks).
+_sessions: set[asyncio.Task] = set()
 
 
-def create_app(args: argparse.Namespace):
-    # Load Tavus/Daily credentials into os.environ BEFORE the runner is wired up.
-    # Pipecat's Daily runner reads DAILY_API_KEY from os.environ inside the
-    # `/start` request handler (pipecat.runner.daily.configure), which runs
-    # before our per-session bot() — so the lazy load inside bot() is too late
-    # for the cloud/Daily path. Loading here makes the creds available for the
-    # whole process. bot() still calls it (idempotent) for the local path.
+def create_app() -> FastAPI:
+    # Load Tavus credentials into the environment once at process startup, before
+    # any request builds a transport.
     _load_tavus_secret()
-    _configure_server_app(args)
 
-    @pipecat_app.get("/health")
+    app = FastAPI()
+
+    @app.get("/health")
     async def health():  # noqa: ANN202
         return {"status": "ok"}
 
-    return pipecat_app
+    @app.post("/start")
+    async def start(request: Request):  # noqa: ANN202
+        try:
+            payload = await request.json()
+        except Exception:  # noqa: BLE001 - tolerate empty/invalid bodies
+            payload = {}
+
+        # The offer Lambda nests the verified session data under "body"; accept a
+        # bare body too for direct calls.
+        body = payload.get("body") if isinstance(payload, dict) else None
+        if not isinstance(body, dict):
+            body = payload if isinstance(payload, dict) else {}
+
+        if not _tavus_creds_present():
+            logger.warning("[TAVUS] Credentials not configured — refusing /start")
+            return JSONResponse({"error": "tavus_not_configured"}, status_code=503)
+
+        loop = asyncio.get_running_loop()
+        url_future: asyncio.Future = loop.create_future()
+        task = asyncio.create_task(run_session(body, url_future))
+        _sessions.add(task)
+        task.add_done_callback(_sessions.discard)
+
+        try:
+            # Shield so a timeout here does not cancel the running session task.
+            room_url = await asyncio.wait_for(asyncio.shield(url_future), timeout=START_TIMEOUT_SECONDS)
+        except Exception as exc:  # noqa: BLE001 - surface a clean error, cancel the session
+            logger.exception("[TAVUS] Session failed to start: {}", exc)
+            task.cancel()
+            return JSONResponse({"error": "tavus_start_failed"}, status_code=502)
+
+        return JSONResponse({"room_url": room_url})
+
+    return app
 
 
 def main() -> None:
-    # These arguments mirror the Pipecat runner's own CLI. `_configure_server_app`
-    # reads several of them off the Namespace (transport, proxy, direct, folder,
-    # dialin, esp32, whatsapp, allowed_origins), so every one must be defined or
-    # the app setup raises AttributeError at startup.
     parser = argparse.ArgumentParser(description="Tavus Pipecat worker server")
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=7860)
-    parser.add_argument(
-        "-t",
-        "--transport",
-        type=str,
-        choices=["daily", "webrtc"],
-        default="daily",
-    )
-    parser.add_argument("-x", "--proxy", type=str, default=None)
-    parser.add_argument("-d", "--direct", action="store_true", default=False)
-    parser.add_argument("-f", "--folder", type=str, default=None)
     parser.add_argument("-v", "--verbose", action="count", default=0)
-    parser.add_argument("--dialin", action="store_true", default=False)
-    parser.add_argument("--esp32", action="store_true", default=False)
-    parser.add_argument("--whatsapp", action="store_true", default=False)
-    parser.add_argument("--allowed-origins", nargs="*", default=None)
     args = parser.parse_args()
 
     logger.remove()
     logger.add(sys.stderr, level="TRACE" if args.verbose else "INFO")
 
-    app = create_app(args)
-    uvicorn.run(app, host=args.host, port=args.port)
+    uvicorn.run(create_app(), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
