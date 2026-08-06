@@ -12,6 +12,7 @@ import {
     Bot,
     Camera,
     UserRound,
+    FileText,
 } from "lucide-react";
 import type { AvatarVariantName, MouthShape } from "./AvatarVariant";
 import { VARIANT_VOICE_GENDER } from "./AvatarVariant";
@@ -79,6 +80,7 @@ type TranscriptSegment =
       }
     | { kind: "kb"; resultJson: string }
     | { kind: "website"; url: string; title?: string; s3_key?: string }
+    | { kind: "pdf"; url: string; title?: string }
     | { kind: "link"; url: string; label: string; toolName: string };
 
 interface TranscriptEntry {
@@ -508,14 +510,10 @@ export default function AvatarInterface(): JSX.Element {
 
         // Side panels mirror what the WebSocket path does for the same results.
         for (const artifact of extractToolArtifacts(name, output)) {
-            if (artifact.kind === "website") {
-                // PDFs still open in the side preview; website results are shown
-                // only as the transcript card (pushed above) — no full-screen
-                // overlay over the avatar.
-                if (name.includes("pdf_generator")) {
-                    setPdfPreview({ url: artifact.url, filename: artifact.title });
-                }
-            } else if (artifact.kind === "media") {
+            // Website and PDF results are shown only as their transcript cards
+            // (pushed above) — no side panel or full-screen overlay over the
+            // avatar. Images/videos still populate the media strip.
+            if (artifact.kind === "media") {
                 setMediaResults((prev) => [
                     ...prev,
                     {
@@ -1485,6 +1483,7 @@ export default function AvatarInterface(): JSX.Element {
                             <TavusAvatar
                                 videoTrack={avatarVideoTrack}
                                 isSpeaking={tavusSpeaking}
+                                connectionState={connectionState}
                                 className="w-full h-full"
                             />
                         ) : avatarVariant === "realistic" ? (
@@ -1691,6 +1690,32 @@ export default function AvatarInterface(): JSX.Element {
                                                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-cyan-500 to-teal-400 text-gray-900 hover:shadow-[0_0_20px_rgba(0,212,255,0.3)] transition-all"
                                                             >
                                                                 View Website ↗
+                                                            </a>
+                                                        </div>
+                                                    );
+                                                }
+                                                if (seg.kind === "pdf") {
+                                                    return (
+                                                        <div
+                                                            key={j}
+                                                            className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-gray-900 to-gray-800 p-4 shadow-lg my-2"
+                                                        >
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <FileText
+                                                                    size={18}
+                                                                    className="text-amber-400"
+                                                                />
+                                                                <span className="text-sm font-semibold text-white">
+                                                                    {seg.title || "Generated PDF"}
+                                                                </span>
+                                                            </div>
+                                                            <a
+                                                                href={seg.url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-500 to-yellow-400 text-gray-900 hover:shadow-[0_0_20px_rgba(200,162,74,0.3)] transition-all"
+                                                            >
+                                                                View PDF ↗
                                                             </a>
                                                         </div>
                                                     );

@@ -20,6 +20,7 @@ export type ToolArtifact =
     | { kind: "media"; mediaType: "image" | "video"; url: string; toolName: string }
     | { kind: "kb"; resultJson: string }
     | { kind: "website"; url: string; title?: string; s3_key?: string }
+    | { kind: "pdf"; url: string; title?: string }
     | { kind: "link"; url: string; label: string; toolName: string };
 
 /**
@@ -67,6 +68,8 @@ interface ToolRecord {
     url?: string;
     website_url?: string;
     title?: string;
+    topic?: string;
+    filename?: string;
     s3_key?: string;
     content?: Array<{ text?: string }>;
     [key: string]: unknown;
@@ -158,15 +161,24 @@ export function extractToolArtifacts(toolName: string, rawOutput: string): ToolA
     // tool is one that produces one. Other tools use `url` for other things.
     // `website_url` is accepted too: website_generator returns `url` from the
     // avatar path but `website_url` from the pipeline path.
-    const producesLink =
-        toolName.includes("website_generator") || toolName.includes("pdf_generator");
+    const isPdf = toolName.includes("pdf_generator");
+    const isWebsite = toolName.includes("website_generator");
     const link =
         typeof record.url === "string" && record.url
             ? record.url
             : typeof record.website_url === "string" && record.website_url
               ? record.website_url
               : "";
-    if (producesLink && link) {
+    if (isPdf && link) {
+        // pdf_generator names the document in `topic`/`filename`, not `title`,
+        // so pull those; otherwise the card would read as a generic website.
+        const pdfTitle =
+            (typeof record.title === "string" && record.title) ||
+            (typeof record.topic === "string" && record.topic) ||
+            (typeof record.filename === "string" && record.filename) ||
+            undefined;
+        artifacts.push({ kind: "pdf", url: link, title: pdfTitle || undefined });
+    } else if (isWebsite && link) {
         artifacts.push({
             kind: "website",
             url: link,
