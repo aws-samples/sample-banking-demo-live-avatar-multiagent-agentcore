@@ -235,7 +235,7 @@ async def run_session(body: dict, url_future: "asyncio.Future | None" = None) ->
         context_aggregator = LLMContextAggregatorPair(context)
 
         user_transcript = UserTranscriptForwarder()
-        agent_transcript = AgentTranscriptForwarder(accumulate=False)
+        agent_transcript = AgentTranscriptForwarder()
 
         # Nova Sonic pushes user TranscriptionFrame UPSTREAM, so
         # user_transcript sits between the LLM and the aggregator.
