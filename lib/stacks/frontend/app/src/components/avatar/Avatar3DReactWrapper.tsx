@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot } from "lucide-react";
 import { Avatar3DRobot } from "./Avatar3DRobot";
-import { Avatar3DBlob } from "./Avatar3DBlob";
-import { Avatar3DCrystal } from "./Avatar3DCrystal";
 import type { AvatarVariant, AvatarVariantName, MouthShape } from "./AvatarVariant";
 
 interface Avatar3DReactWrapperProps {
@@ -27,18 +25,11 @@ interface Avatar3DReactWrapperProps {
 const EYE_COLOR = 0x6cc4ff;
 
 function createAvatar(variant: AvatarVariantName, container: HTMLElement): AvatarVariant {
-    switch (variant) {
-        case "blob":
-            return new Avatar3DBlob(container);
-        case "crystal":
-            return new Avatar3DCrystal(container);
-        // "realistic" (TalkingHeadAvatar) and "tavus" (server-rendered video)
-        // never reach here — AvatarInterface branches to their own renderers
-        // instead of this wrapper.
-        case "robot":
-        default:
-            return new Avatar3DRobot(container);
-    }
+    // "realistic" (TalkingHeadAvatar) and "tavus" (server-rendered video) never
+    // reach here — AvatarInterface branches to their own renderers instead of
+    // this wrapper. Only "robot" is a three.js scene built here.
+    void variant;
+    return new Avatar3DRobot(container);
 }
 
 export default function Avatar3DReactWrapper({

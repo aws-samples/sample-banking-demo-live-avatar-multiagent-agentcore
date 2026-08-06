@@ -11,8 +11,6 @@ import {
     ChevronDown,
     Bot,
     Camera,
-    Circle,
-    Diamond,
     UserRound,
 } from "lucide-react";
 import type { AvatarVariantName, MouthShape } from "./AvatarVariant";
@@ -169,21 +167,22 @@ export default function AvatarInterface(): JSX.Element {
     });
 
     // --- Avatar variant ---
-    // Default to the advisor GLB. The key is versioned (-v2) so existing
-    // sessions that had "robot" saved still pick up the new default.
+    // Default to the "Realistic" server-rendered Tavus video avatar when it is
+    // available, otherwise the rigged GLB ("Avatar"). The key is versioned
+    // (-v3) so existing sessions pick up the new default and drop the removed
+    // blob/crystal variants.
     const [avatarVariant, setAvatarVariant] = useState<AvatarVariantName>(() => {
-        const saved = localStorage.getItem("avatar-variant-v2");
-        // The old browser-rendered "Realistic" variant was named "photo" and has
-        // been replaced by the server-rendered Tavus video variant ("tavus").
-        // Migrate a persisted "photo" so it does not render a blank canvas: to
-        // "tavus" when the feature is available, otherwise to the advisor GLB.
-        if (saved === "photo") {
-            return import.meta.env.VITE_TAVUS_OFFER_URL ? "tavus" : "realistic";
+        const tavusAvailable = !!import.meta.env.VITE_TAVUS_OFFER_URL;
+        const fallback: AvatarVariantName = tavusAvailable ? "tavus" : "realistic";
+        const saved = localStorage.getItem("avatar-variant-v3");
+        const valid: AvatarVariantName[] = ["realistic", "tavus", "robot"];
+        if (saved && valid.includes(saved as AvatarVariantName)) {
+            // A saved "tavus" is only valid when the offer endpoint is set.
+            return saved === "tavus" && !tavusAvailable
+                ? "realistic"
+                : (saved as AvatarVariantName);
         }
-        const valid: AvatarVariantName[] = ["realistic", "tavus", "robot", "blob", "crystal"];
-        return valid.includes(saved as AvatarVariantName)
-            ? (saved as AvatarVariantName)
-            : "realistic";
+        return fallback;
     });
 
     // --- Smart auto-scroll state ---
@@ -381,14 +380,24 @@ export default function AvatarInterface(): JSX.Element {
     }, []);
 
     // --- Keep the voice matching the avatar on screen ---
-    // "Advisor" is a female GLB and "Realistic" is a male photograph, so the
-    // voice follows the face unless the user has chosen one themselves. Without
-    // this the default female avatar spoke with a male voice, which reads as a
-    // bug rather than a choice.
+    // The "Avatar" GLB (`realistic`) is locked to Tiffany — its LiveKit
+    // transport is fixed to Tiffany server-side anyway, so the UI matches that.
+    // For the other variants the voice follows the apparent face gender unless
+    // the user has pinned a choice; `tavus` (null gender) keeps the picked voice
+    // so the caller can drive the Tavus replica face (Tiffany → Gloria, Matthew
+    // → Raj).
     const handleVariantChange = useCallback(
         (name: AvatarVariantName): void => {
             setAvatarVariant(name);
-            localStorage.setItem("avatar-variant-v2", name);
+            localStorage.setItem("avatar-variant-v3", name);
+
+            if (name === "realistic") {
+                if (voiceId !== "tiffany") {
+                    setVoiceId("tiffany");
+                    wsClientRef.current?.updateVoice("tiffany");
+                }
+                return;
+            }
 
             if (voicePinned) return;
             const gender = VARIANT_VOICE_GENDER[name];
@@ -400,6 +409,17 @@ export default function AvatarInterface(): JSX.Element {
         },
         [language, voiceId, voicePinned]
     );
+
+    // The "Avatar" GLB is locked to Tiffany. Enforce it here too, so anything
+    // that would otherwise move the voice off Tiffany while this variant is
+    // active (e.g. a language change picking that language's female voice) is
+    // snapped back.
+    useEffect(() => {
+        if (avatarVariant === "realistic" && voiceId !== "tiffany") {
+            setVoiceId("tiffany");
+            wsClientRef.current?.updateVoice("tiffany");
+        }
+    }, [avatarVariant, voiceId]);
 
     // --- LiveKit transcript + tool activity ---
     // Nova Sonic is speech-to-speech, so without these the transcript panel
@@ -1378,7 +1398,7 @@ export default function AvatarInterface(): JSX.Element {
                         language={language}
                         value={voiceId}
                         onChange={handleVoiceChange}
-                        disabled={isConnected}
+                        disabled={isConnected || avatarVariant === "realistic"}
                     />
                 </SpaceBetween>
 
@@ -1496,15 +1516,11 @@ export default function AvatarInterface(): JSX.Element {
                         )}
                         <div className="absolute bottom-2 left-2 flex gap-1">
                             {[
-                                {
-                                    name: "realistic" as const,
-                                    icon: <UserRound size={14} />,
-                                    label: "Advisor",
-                                },
                                 // The "Realistic" entry is the server-rendered
-                                // Tavus video avatar. It only appears when the
-                                // Tavus offer endpoint is configured; otherwise
-                                // the picker behaves exactly as before.
+                                // Tavus video avatar and the default. It only
+                                // appears when the Tavus offer endpoint is
+                                // configured; otherwise the picker falls back to
+                                // the GLB "Avatar".
                                 ...(tavusOfferUrl
                                     ? [
                                           {
@@ -1514,17 +1530,12 @@ export default function AvatarInterface(): JSX.Element {
                                           },
                                       ]
                                     : []),
+                                {
+                                    name: "realistic" as const,
+                                    icon: <UserRound size={14} />,
+                                    label: "Avatar",
+                                },
                                 { name: "robot" as const, icon: <Bot size={14} />, label: "Robot" },
-                                {
-                                    name: "blob" as const,
-                                    icon: <Circle size={14} />,
-                                    label: "Blob",
-                                },
-                                {
-                                    name: "crystal" as const,
-                                    icon: <Diamond size={14} />,
-                                    label: "Crystal",
-                                },
                             ].map(({ name, icon, label }) => (
                                 <button
                                     key={name}
