@@ -1,0 +1,25 @@
+# Event config — Gartner AI Platform 2026 demo
+# Marketing/promotional digital human for "Lone Star Global Bank"
+# (placeholder brand — rename freely). Dallas HQ near the Texas Stock
+# Exchange (TXSE), with global market access.
+# Set EVENT_CONFIG=aws-gartner-ai-platform-2026 to use this event.
+
+greeting: >-
+  Hi, welcome to Lone Star Global Bank — Texas roots, global markets.
+  I am your virtual banking concierge. I can walk you through our accounts,
+  retirement and investment services, and how we keep your money safe.
+  To get started, may I have your name and what brings you in today?
+
+content_items:
+  services_overview:
+    url: "/content/bank-services"
+    label: "Lone Star Global Bank — Services"
+  personal_banking:
+    url: "/content/personal-banking"
+    label: "Checking, Savings & Account Opening"
+  wealth_investments:
+    url: "/content/wealth-investments"
+    label: "Retirement & Global Investments"
+  fraud_security:
+    url: "/content/fraud-security"
+    label: "Fraud Detection & Account Security"

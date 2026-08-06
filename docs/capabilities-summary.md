@@ -10,6 +10,24 @@ section, and `capabilities-mapping.docx` for the full requirement-level detail.
 
 ---
 
+## Table of Contents
+
+- [1. Deep research agent](#1-deep-research-agent)
+    - [1.1 The agent itself](#11-the-agent-itself)
+    - [1.2 The lifecycle around it](#12-the-lifecycle-around-it)
+- [2. External customer AI assistant](#2-external-customer-ai-assistant)
+- [3. Customer agent — grounding, guardrails, DLP, reporting](#3-customer-agent--grounding-guardrails-dlp-reporting)
+- [4. Voice experience and the avatar](#4-voice-experience-and-the-avatar)
+- [5. Services used to build the solution](#5-services-used-to-build-the-solution)
+    - [Agent platform](#agent-platform)
+    - [Models](#models)
+    - [Data and knowledge](#data-and-knowledge)
+    - [Build and delivery](#build-and-delivery)
+    - [Third-party components, disclosed](#third-party-components-disclosed)
+- [6. Declared exceptions](#6-declared-exceptions)
+
+---
+
 ## 1. Deep research agent
 
 Gartner asks for the whole development lifecycle here, not just a finished agent.
@@ -36,23 +54,23 @@ Gartner asks for the whole development lifecycle here, not just a finished agent
 
 ### 1.2 The lifecycle around it
 
-| Gartner asks for       | AWS service                                                                                  |
-| ---------------------- | -------------------------------------------------------------------------------------------- |
-| IDE-based development  | Kiro — specs (requirements, design, tasks) and steering files                                |
-| Low-code development   | Amazon Bedrock AgentCore Harness — the agent as configuration                                |
-| High-code development  | Strands Agents SDK; export from harness to code                                              |
-| Graphical development  | AgentCore console; AWS Step Functions visual builder                                         |
-| Model catalog          | Amazon Bedrock model catalog and cross-Region inference profiles                             |
-| Testing and validation | Kiro-generated tests; AgentCore Evaluations                                                  |
-| Data preparation       | Amazon Bedrock Data Automation; Managed Knowledge Base ingestion                             |
-| Tracing                | AgentCore Observability; AWS X-Ray                                                           |
-| Evaluation             | AgentCore Evaluations — online, batch, user simulation                                       |
-| Debugging              | AgentCore Observability span trees; Agent Inspector                                          |
-| Agent operations       | Amazon CloudWatch dashboards; AgentCore Observability                                        |
-| Orchestration          | AgentCore Runtime; AgentCore Gateway; AWS Step Functions                                     |
-| Cost management        | CloudWatch cost attribution; AWS Budgets; resource tagging                                   |
-| Control processes      | AgentCore Policy (Cedar); Amazon Bedrock Guardrails; Kiro steering; evaluation release gates |
-| Deployment             | AWS CDK; AgentCore CLI; Amazon ECR; AWS CodeBuild; Amazon EKS and Helm for hybrid            |
+| Gartner asks for       | AWS service                                                                                                                                                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IDE-based development  | Kiro — specs (requirements, design, tasks) and steering files                                                                                                                                                           |
+| Low-code development   | Amazon Bedrock AgentCore Harness — the agent as configuration                                                                                                                                                           |
+| High-code development  | Strands Agents SDK; export from harness to code                                                                                                                                                                         |
+| Graphical development  | AgentCore console; AWS Step Functions visual builder                                                                                                                                                                    |
+| Model catalog          | Amazon Bedrock model catalog and cross-Region inference profiles                                                                                                                                                        |
+| Testing and validation | Kiro-generated tests; AgentCore Evaluations                                                                                                                                                                             |
+| Data preparation       | Amazon Bedrock Data Automation; Managed Knowledge Base ingestion                                                                                                                                                        |
+| Tracing                | AgentCore Observability; AWS X-Ray                                                                                                                                                                                      |
+| Evaluation             | AgentCore Evaluations — online, batch, user simulation                                                                                                                                                                  |
+| Debugging              | AgentCore Observability span trees; Agent Inspector                                                                                                                                                                     |
+| Agent operations       | Amazon CloudWatch dashboards; AgentCore Observability                                                                                                                                                                   |
+| Orchestration          | AgentCore Runtime; AgentCore Gateway; AWS Step Functions                                                                                                                                                                |
+| Cost management        | CloudWatch cost attribution; AWS Budgets; resource tagging                                                                                                                                                              |
+| Control processes      | AgentCore Policy (Cedar); Amazon Bedrock Guardrails; Kiro steering; evaluation release gates                                                                                                                            |
+| Deployment             | AWS CDK — stable L1 constructs in `aws-cdk-lib/aws-bedrockagentcore` for Runtime, Gateway and Memory; `DockerImageAsset` → Amazon ECR; AgentCore CLI for runtime versions and endpoints; Amazon EKS and Helm for hybrid |
 
 ---
 
@@ -146,21 +164,22 @@ Gartner asks for the whole development lifecycle here, not just a finished agent
 
 ### Build and delivery
 
-| Service                                                  | Role                                                                |
-| -------------------------------------------------------- | ------------------------------------------------------------------- |
-| Kiro                                                     | Spec-driven design, steering as governance-as-code, generated tests |
-| AWS CDK (TypeScript)                                     | All infrastructure as code                                          |
-| AgentCore CLI                                            | Scaffold, run locally, deploy, invoke                               |
-| AWS CloudFormation                                       | Deployment engine behind CDK                                        |
-| Amazon ECR, AWS CodeBuild                                | Container images for the agent runtimes                             |
-| Amazon ECS on AWS Fargate                                | The real-time voice worker (ARM64)                                  |
-| AWS Lambda                                               | Gateway tool implementations                                        |
-| Amazon API Gateway                                       | Token and feedback endpoints                                        |
-| Amazon Cognito                                           | Authentication and per-user identity                                |
-| AWS Secrets Manager, AWS Systems Manager Parameter Store | Credentials and runtime configuration                               |
-| Amazon CloudWatch, AWS X-Ray                             | Logs, metrics, dashboards, tracing                                  |
-| AWS WAF, AWS KMS                                         | Edge protection and encryption                                      |
-| Amazon CloudFront, Amazon S3                             | Frontend hosting                                                    |
+| Service                                                  | Role                                                                   |
+| -------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Kiro                                                     | Spec-driven design, steering as governance-as-code, generated tests    |
+| AWS CDK (TypeScript)                                     | All infrastructure as code, including the AgentCore control plane      |
+| AgentCore CLI                                            | Scaffold, run locally, invoke; runtime versions and endpoint cutover   |
+| AWS CloudFormation                                       | Deployment engine behind CDK                                           |
+| Amazon ECR                                               | ARM64 agent runtime images, built and pushed by CDK `DockerImageAsset` |
+| AWS CodeBuild                                            | Builds and deploys the React frontend at deploy time                   |
+| Amazon ECS on AWS Fargate                                | The real-time voice worker (ARM64)                                     |
+| AWS Lambda                                               | Gateway tool implementations                                           |
+| Amazon API Gateway                                       | Token and feedback endpoints                                           |
+| Amazon Cognito                                           | Authentication and per-user identity                                   |
+| AWS Secrets Manager, AWS Systems Manager Parameter Store | Credentials and runtime configuration                                  |
+| Amazon CloudWatch, AWS X-Ray                             | Logs, metrics, dashboards, tracing                                     |
+| AWS WAF, AWS KMS                                         | Edge protection and encryption                                         |
+| Amazon CloudFront, Amazon S3                             | Frontend hosting                                                       |
 
 ### Third-party components, disclosed
 

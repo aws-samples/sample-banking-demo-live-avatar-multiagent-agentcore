@@ -629,19 +629,24 @@ Each beat: **Screen** / **Talk track** (verbatim, ~150 wpm) / **Actions** / **Pr
 
 **Actions:**
 
-1. Show **CDK L2 constructs from `aws-cdk-lib/aws-bedrockagentcore`** — stable, not alpha — defining the runtime, gateway, memory and identity resources.
-2. Show the pipeline: container build → unit and property tests → **Evaluations gate** (fails the build if Faithfulness < 0.95 or Goal success rate < 0.90) → deploy.
-3. Deploy to a new **Runtime version**, cut the **endpoint** over, then **roll back** in one action and forward again.
-4. Show the **Step Functions `InvokeHarness` state** — the research agent inside a state machine with a human approval step and conditional routing.
-5. **Hybrid runtime — mandatory feature, do not skip.** Show the same agent container running on **Amazon EKS**, and the Helm chart that deploys it into Trinity's own on-premises cluster, calling the AgentCore control plane over **PrivateLink**. Name that **AgentCore Optimization and Evaluations work against agents running on Runtime, Lambda, EKS, or outside AWS entirely.**
+1. Show `lib/stacks/backend/index.ts` — the AgentCore control plane defined in CDK with **stable L1 constructs from `aws-cdk-lib/aws-bedrockagentcore`**: `CfnRuntime` (orchestrator and avatar), `CfnGateway` with one `CfnGatewayTarget` per tool, and `AWS::BedrockAgentCore::Memory` with its episodic, semantic and preference strategies. Name the choice: **stable L1 over the alpha L2** so the stack never takes a breaking change on a minor version bump — the code comment says exactly that.
+2. Show the **`DockerImageAsset` sitting next to the `CfnRuntime`** — the ARM64 agent image and the runtime that consumes it are the same construct scope and the same commit. `cdk deploy` builds the image, pushes it to ECR, provisions the runtime, and writes the ARN to Parameter Store and a stack output. One artifact, no console step.
+3. Show the pipeline: container build → unit and property tests → **Evaluations gate** (fails the build if Faithfulness < 0.95 or Goal success rate < 0.90) → deploy.
+4. Show the split of responsibility on screen: **CDK owns the resource, the AgentCore CLI owns the version lifecycle.** Publish a new **Runtime version**, cut the **endpoint** over, then **roll back** in one action and forward again. Say why it is split — `AgentRuntimeName` is create-only, so version pinning and endpoint cutover are control-plane operations, not a CloudFormation diff.
+5. Show the **Step Functions `InvokeHarness` state** — the research agent inside a state machine with a human approval step and conditional routing.
+6. **Hybrid runtime — mandatory feature, do not skip.** Show the same agent container running on **Amazon EKS**, and the Helm chart that deploys it into Trinity's own on-premises cluster, calling the AgentCore control plane over **PrivateLink**. Name that **AgentCore Optimization and Evaluations work against agents running on Runtime, Lambda, EKS, or outside AWS entirely.**
+
+> **Build status — items 3, 4 and 6 are not in the repository yet.** Only items 1, 2 and 5 are backed by code today (`lib/stacks/backend/index.ts`, `lib/stage.ts`). The CI/CD pipeline with the Evaluations gate, the runtime-version and endpoint-cutover flow, and the EKS + Helm hybrid path all still need building before this beat can be recorded. The only AWS CodeBuild project in the repo builds the React frontend via `@cdklabs/deploy-time-build`, not the agent images — those are built by CDK `DockerImageAsset`. Hybrid is a mandatory feature per `capabilities-mapping.md` V16, so item 6 cannot be downgraded to a slide.
 
 **Talk track:**
 
-> "Deployment. This is CDK, and these are stable level-two constructs in the main CDK library — runtime, gateway, memory, identity, all defined as code, reviewed in a pull request, deployed by a pipeline. For a bank, that's the difference between a demo and a system: there is no console click anywhere in our path to production.
+> "Deployment. This is CDK — the runtime, the gateway, the memory and its strategies, all defined as code in one file, reviewed in a pull request, deployed by a pipeline. We're on the stable level-one constructs in the main CDK library rather than the alpha level-two ones, deliberately: the alpha package still ships breaking changes on minor version bumps, and this stack has to be boring. For a bank, that's the difference between a demo and a system: there is no console click anywhere in our path to production.
+>
+> And notice what sits next to the runtime definition — the container asset. The ARM64 image and the runtime that consumes it are the same commit. One deploy builds the image, pushes it to ECR, provisions the runtime, and hands the ARN to the frontend. There is no step where a human carries an image tag from one place to another.
 >
 > The pipeline builds the container, runs the tests, and then hits an evaluation gate. If Faithfulness drops below ninety-five percent or goal success below ninety, the build fails. Quality is a release criterion, exactly like a failing test.
 >
-> New Runtime version, endpoint cut over, previous version still there. Rollback is one action — watch, and back.
+> Then the version lifecycle, and here the tools divide cleanly. CDK owns the resource; the AgentCore CLI owns the versions and the endpoints. New Runtime version, endpoint cut over, previous version still there. Rollback is one action — watch, and back. That's a control-plane operation rather than a template change, which is exactly what you want: rolling back a bad agent shouldn't require a CloudFormation deployment.
 >
 > And for workflows where the agent is one step among many, the harness is a Step Functions state. Here it sits between a human approval step and a conditional route, which is how our credit committee actually works. The agent doesn't have to own the whole process to be useful in it.
 >
@@ -649,7 +654,7 @@ Each beat: **Screen** / **Talk track** (verbatim, ~150 wpm) / **Actions** / **Pr
 >
 > And the operational capabilities follow it. Evaluations and optimization work against agents running on AgentCore Runtime, on Lambda, on EKS, or outside AWS entirely. Trinity has agents from a prior project running somewhere else, and I don't have to migrate them to start governing them. That's the difference between a platform and a destination."
 
-**Proves:** infrastructure as code with stable CDK constructs, CI/CD, evaluation quality gate, versioning and endpoints, rollback, workflow orchestration integration, **cloud and hybrid runtime deployment (mandatory feature)**, governance of externally-hosted agents, enterprise deployment discipline.
+**Proves:** infrastructure as code on stable CDK constructs, image build and runtime provisioning from one commit, CI/CD, evaluation quality gate, versioning and endpoints, rollback, workflow orchestration integration, **cloud and hybrid runtime deployment (mandatory feature)**, governance of externally-hosted agents, enterprise deployment discipline.
 
 #### 27:05 — Optimization and cost
 
