@@ -31,6 +31,10 @@ def create_app(args: argparse.Namespace):
 
 
 def main() -> None:
+    # These arguments mirror the Pipecat runner's own CLI. `_configure_server_app`
+    # reads several of them off the Namespace (transport, proxy, direct, folder,
+    # dialin, esp32, whatsapp, allowed_origins), so every one must be defined or
+    # the app setup raises AttributeError at startup.
     parser = argparse.ArgumentParser(description="Tavus Pipecat worker server")
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=7860)
@@ -42,7 +46,12 @@ def main() -> None:
         default="daily",
     )
     parser.add_argument("-x", "--proxy", type=str, default=None)
+    parser.add_argument("-d", "--direct", action="store_true", default=False)
+    parser.add_argument("-f", "--folder", type=str, default=None)
     parser.add_argument("-v", "--verbose", action="count", default=0)
+    parser.add_argument("--dialin", action="store_true", default=False)
+    parser.add_argument("--esp32", action="store_true", default=False)
+    parser.add_argument("--whatsapp", action="store_true", default=False)
     parser.add_argument("--allowed-origins", nargs="*", default=None)
     args = parser.parse_args()
 
