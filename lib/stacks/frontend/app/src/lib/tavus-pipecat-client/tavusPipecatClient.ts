@@ -66,6 +66,11 @@ export class TavusPipecatClient {
     private call: DailyCall | null = null;
     private audioEl: HTMLAudioElement | null = null;
     private signalledConnected = false;
+    // Per-role utterance counter. The worker keys transcripts only by role, so
+    // without this every user/agent turn would share one segmentId and overwrite
+    // the previous bubble. We give each utterance a unique segmentId and bump the
+    // counter once its final message arrives, so the next turn starts a new bubble.
+    private transcriptSeq: Record<string, number> = {};
 
     constructor(options: TavusPipecatOptions) {
         this.options = options;
@@ -153,6 +158,7 @@ export class TavusPipecatClient {
             }
         }
         this.signalledConnected = false;
+        this.transcriptSeq = {};
         this.options.onVideoTrack?.(null);
         this.options.onSpeakingChange?.(false);
         this.options.onConnectionState?.("disconnected");
@@ -189,6 +195,14 @@ export class TavusPipecatClient {
         if (!msg) return;
         const mapped = mapWorkerMessage(msg);
         if (mapped.kind === "transcript") {
+            // Make the segment id unique per utterance so successive turns are
+            // separate bubbles rather than overwriting each other. Streaming
+            // deltas of the current utterance keep the same id; the final
+            // message bumps the counter so the next turn is a fresh bubble.
+            const { role, isFinal } = mapped.update;
+            const seq = this.transcriptSeq[role] ?? 0;
+            mapped.update.segmentId = `tavus-${role}-${seq}`;
+            if (isFinal) this.transcriptSeq[role] = seq + 1;
             this.options.onTranscript?.(mapped.update);
             if (mapped.agentSpeaking !== null) {
                 this.options.onSpeakingChange?.(mapped.agentSpeaking);
