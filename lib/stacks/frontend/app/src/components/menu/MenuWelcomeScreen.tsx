@@ -2,7 +2,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
-import { UtensilsCrossed } from "lucide-react";
+import { Landmark } from "lucide-react";
 
 interface MenuWelcomeScreenProps {
     onExampleClick: (question: string) => void;
@@ -37,7 +37,7 @@ export default function MenuWelcomeScreen({ onExampleClick }: MenuWelcomeScreenP
             <SpaceBetween size="xl" direction="vertical" alignItems="center">
                 <div className="text-center">
                     <div className="flex items-center justify-center gap-3 mb-2">
-                        <UtensilsCrossed size={32} className="text-blue-600" />
+                        <Landmark size={32} className="text-blue-600" />
                         <Box variant="h1" fontSize="heading-xl" fontWeight="bold">
                             Services Catalog
                         </Box>

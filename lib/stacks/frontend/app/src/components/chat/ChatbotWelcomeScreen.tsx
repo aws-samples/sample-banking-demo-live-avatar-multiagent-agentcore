@@ -2,7 +2,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
-import { UtensilsCrossed, Clock, ShoppingBag } from "lucide-react";
+import { Landmark, Clock, ShoppingBag } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface ChatbotWelcomeScreenProps {
@@ -18,7 +18,7 @@ interface QuestionGroup {
 const QUESTION_GROUPS: QuestionGroup[] = [
     {
         title: "Products & Rates",
-        icon: UtensilsCrossed,
+        icon: Landmark,
         questions: [
             { label: "Savings", question: "What savings accounts do you offer?" },
             { label: "Checking", question: "Compare Everyday Checking and Premier Checking" },

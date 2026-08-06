@@ -19,7 +19,7 @@
  * either contradict itself or tell the user the product doesn't exist.
  */
 
-import { UtensilsCrossed, Globe2, Sparkles, Archive } from "lucide-react";
+import { Landmark, Globe2, Sparkles, Archive } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface PromptGroup {
@@ -31,7 +31,7 @@ export interface PromptGroup {
 export const PROMPT_GROUPS: PromptGroup[] = [
     {
         title: "Products & Rates",
-        icon: UtensilsCrossed,
+        icon: Landmark,
         prompts: [
             {
                 label: "Current rates",

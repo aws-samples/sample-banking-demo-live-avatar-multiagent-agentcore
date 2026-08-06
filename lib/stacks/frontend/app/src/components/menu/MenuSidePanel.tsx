@@ -5,7 +5,7 @@ import Box from "@cloudscape-design/components/box";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Button from "@cloudscape-design/components/button";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
-import { UtensilsCrossed } from "lucide-react";
+import { Landmark } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import MenuRecommendationCard from "@/components/restaurant/MenuRecommendationCard";
 
@@ -49,7 +49,7 @@ export default function MenuSidePanel(): JSX.Element {
                     }
                 >
                     <span className="inline-flex items-center gap-2">
-                        <UtensilsCrossed size={18} />
+                        <Landmark size={18} />
                         Services Catalog
                     </span>
                 </Header>
@@ -59,7 +59,7 @@ export default function MenuSidePanel(): JSX.Element {
                 {state.sections.length === 0 ? (
                     <Container>
                         <div className="flex flex-col items-center justify-center py-12 text-center">
-                            <UtensilsCrossed
+                            <Landmark
                                 size={40}
                                 className="mb-4"
                                 style={{ color: "var(--app-text-secondary)" }}
