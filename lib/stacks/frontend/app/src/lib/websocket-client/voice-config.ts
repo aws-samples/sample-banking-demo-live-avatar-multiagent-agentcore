@@ -37,8 +37,6 @@ export const LANGUAGES: LanguageOption[] = [
 export const VOICES: VoiceProfile[] = [
     { id: "tiffany", name: "Tiffany", language: "en-US", gender: "female" },
     { id: "matthew", name: "Matthew", language: "en-US", gender: "male" },
-    { id: "olivia", name: "Olivia", language: "en-US", gender: "female" },
-    { id: "amy", name: "Amy", language: "en-US", gender: "female" },
     { id: "lupe", name: "Lupe", language: "es-US", gender: "female" },
     { id: "carlos", name: "Carlos", language: "es-US", gender: "male" },
     { id: "ambre", name: "Ambre", language: "fr-FR", gender: "female" },

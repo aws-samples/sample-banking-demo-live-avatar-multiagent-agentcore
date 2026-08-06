@@ -33,6 +33,13 @@ import { mapWorkerMessage, parseWorkerMessage } from "./tavusMessages";
 export interface TavusPipecatOptions {
     /** Cognito ID token (auth.user.id_token) — same token feedbackService sends. */
     idToken: string;
+    /**
+     * Nova Sonic voice id chosen in the picker. Sent in the offer so the worker
+     * uses it for speech and picks the matching Tavus avatar face (e.g. the male
+     * voice "matthew" → Raj). Voice is chosen before connecting (the selector is
+     * disabled while connected), so it is fixed for the session.
+     */
+    voiceId?: string;
     /** The agent's remote avatar video track (or null when it goes away). */
     onVideoTrack?: (track: MediaStreamTrack | null) => void;
     /** Fires when the agent starts/stops speaking, for a speaking indicator. */
@@ -83,7 +90,9 @@ export class TavusPipecatClient {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${this.options.idToken}`,
                 },
-                body: JSON.stringify({ requestData: {} }),
+                body: JSON.stringify({
+                    requestData: this.options.voiceId ? { voiceId: this.options.voiceId } : {},
+                }),
             });
             if (!response.ok) {
                 const err = await response.json().catch(() => ({}));

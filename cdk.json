@@ -61,7 +61,11 @@
             "workerCpu": 1024,
             "workerMemory": 2048,
             "novaSonicVoiceId": "tiffany",
-            "personaId": "pipecat-stream"
+            "personaId": "pipecat-stream",
+            "replicaByVoice": {
+                "tiffany": "r3f427f43c9d",
+                "matthew": "rf8f3aa4b33e"
+            }
         },
 
         "@aws-cdk/aws-lambda:recognizeLayerVersion": true,

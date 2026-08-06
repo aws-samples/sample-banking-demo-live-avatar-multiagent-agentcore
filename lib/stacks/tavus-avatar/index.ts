@@ -204,6 +204,10 @@ export class TavusAvatar extends Stack {
                 MODEL_ID: models.avatar_sonic,
                 PERSONA: "friendly",
                 VOICE_ID: cfg.novaSonicVoiceId,
+                // Voice → Tavus replica map (non-sensitive resource ids), so the
+                // caller's chosen voice selects a matching avatar face. The
+                // worker falls back to the secret's TAVUS_REPLICA_ID otherwise.
+                TAVUS_REPLICA_BY_VOICE: JSON.stringify(cfg.replicaByVoice ?? {}),
                 LOGLEVEL: "INFO",
                 // The worker reads the Tavus/Daily credentials from this secret
                 // at startup via boto3 (see _load_tavus_secret). The secret is

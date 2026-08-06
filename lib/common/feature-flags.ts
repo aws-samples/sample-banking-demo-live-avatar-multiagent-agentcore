@@ -89,6 +89,14 @@ export interface TavusConfig {
      * API key are NOT here — they live only in Secrets Manager.
      */
     personaId?: string;
+    /**
+     * Nova Sonic voice id → Tavus replica id. Lets the caller's chosen voice
+     * pick a matching avatar face (female `tiffany` → Gloria, male `matthew` →
+     * Raj). Replica ids are non-sensitive Tavus resource identifiers, so they
+     * live here rather than in the secret; the worker still falls back to the
+     * secret's single `TAVUS_REPLICA_ID` for any voice not listed.
+     */
+    replicaByVoice?: Record<string, string>;
 }
 
 const DEFAULT_TAVUS_CONFIG: TavusConfig = {
@@ -96,6 +104,10 @@ const DEFAULT_TAVUS_CONFIG: TavusConfig = {
     workerMemory: 2048,
     novaSonicVoiceId: "tiffany",
     personaId: "pipecat-stream",
+    replicaByVoice: {
+        tiffany: "r3f427f43c9d",
+        matthew: "rf8f3aa4b33e",
+    },
 };
 
 export function getTavusConfig(node: Node): TavusConfig {

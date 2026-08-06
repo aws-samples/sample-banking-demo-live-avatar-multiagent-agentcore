@@ -22,6 +22,7 @@ COPY patterns/avatar-agent/system_prompt_augmenter.py .
 
 # Copy the worker modules.
 COPY patterns/tavus-pipecat-agent/scope.py .
+COPY patterns/tavus-pipecat-agent/voice_replica.py .
 COPY patterns/tavus-pipecat-agent/transcript_forwarders.py .
 COPY patterns/tavus-pipecat-agent/gateway_toolset.py .
 COPY patterns/tavus-pipecat-agent/tavus_pipecat_agent.py .

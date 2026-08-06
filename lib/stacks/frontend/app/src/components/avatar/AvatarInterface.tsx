@@ -1017,6 +1017,7 @@ export default function AvatarInterface(): JSX.Element {
             }
             const tavusClient = new TavusPipecatClient({
                 idToken: auth.user.id_token,
+                voiceId,
                 onVideoTrack: setAvatarVideoTrack,
                 onSpeakingChange: setTavusSpeaking,
                 onConnectionState: setConnectionState,

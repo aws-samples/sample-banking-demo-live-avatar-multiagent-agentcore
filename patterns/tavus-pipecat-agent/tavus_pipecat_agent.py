@@ -54,6 +54,7 @@ from pipecat.transports.daily.transport import DailyParams
 from transcript_forwarders import AgentTranscriptForwarder, UserTranscriptForwarder
 from utils.auth import get_gateway_access_token, get_secret
 from utils.ssm import get_ssm_parameter
+from voice_replica import resolve_replica_id
 
 REGION = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-2-sonic-v1:0")
@@ -135,26 +136,33 @@ def _tavus_creds_present() -> bool:
     return bool(os.environ.get("TAVUS_API_KEY") and os.environ.get("TAVUS_REPLICA_ID"))
 
 
-def _resolve_identity(runner_args: RunnerArguments) -> tuple[str, str]:
-    """Read the server-verified caller identity and persona from the offer body.
+def _resolve_identity(runner_args: RunnerArguments) -> tuple[str, str, str]:
+    """Read the server-verified caller identity, persona, and voice from the offer.
 
     The Cognito-authorized offer endpoint injects `user_id` (the verified `sub`)
-    and optional `persona` into the offer `requestData`; the browser never
-    supplies its own `user_id`. An empty `user_id` leaves scoped tools refusing
-    (fail-closed), matching the LiveKit path.
+    and optional `persona`/`voiceId` into the offer `requestData`; the browser
+    never supplies its own `user_id`. An empty `user_id` leaves scoped tools
+    refusing (fail-closed), matching the LiveKit path. The voice defaults to the
+    task's configured `VOICE_ID` when the caller sends none.
     """
     body = getattr(runner_args, "body", None) or {}
     if not isinstance(body, dict):
-        return "", DEFAULT_PERSONA
-    return body.get("user_id", "") or "", body.get("persona", DEFAULT_PERSONA) or DEFAULT_PERSONA
+        return "", DEFAULT_PERSONA, VOICE_ID
+    user_id = body.get("user_id", "") or ""
+    persona = body.get("persona", DEFAULT_PERSONA) or DEFAULT_PERSONA
+    voice_id = body.get("voiceId", "") or body.get("voice_id", "") or VOICE_ID
+    return user_id, persona, voice_id
 
 
 async def run_bot(transport, runner_args: RunnerArguments) -> None:
-    user_id, persona = _resolve_identity(runner_args)
+    user_id, persona, voice_id = _resolve_identity(runner_args)
+    replica_id = resolve_replica_id(voice_id)
     logger.info(
-        "[TAVUS] Session start: user_id={} persona={} model={} region={}",
+        "[TAVUS] Session start: user_id={} persona={} voice={} replica={} model={} region={}",
         user_id or "<unknown>",
         persona,
+        voice_id,
+        replica_id or "<none>",
         MODEL_ID,
         REGION,
     )
@@ -164,7 +172,7 @@ async def run_bot(transport, runner_args: RunnerArguments) -> None:
     async with aiohttp.ClientSession() as http, contextlib.AsyncExitStack() as stack:
         tavus = TavusVideoService(
             api_key=os.environ["TAVUS_API_KEY"],
-            replica_id=os.environ["TAVUS_REPLICA_ID"],
+            replica_id=replica_id,
             persona_id=os.environ.get("TAVUS_PERSONA_ID", "pipecat-stream"),
             session=http,
         )
@@ -215,7 +223,7 @@ async def run_bot(transport, runner_args: RunnerArguments) -> None:
             session_token=st,
             region=REGION,
             model=MODEL_ID,
-            voice_id=VOICE_ID,
+            voice_id=voice_id,
             system_instruction=system_prompt,
             tools=tools,
         )
