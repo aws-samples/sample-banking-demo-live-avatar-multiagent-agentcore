@@ -18,9 +18,17 @@ import uvicorn
 from loguru import logger
 from pipecat.runner.run import _configure_server_app
 from pipecat.runner.run import app as pipecat_app
+from tavus_pipecat_agent import _load_tavus_secret
 
 
 def create_app(args: argparse.Namespace):
+    # Load Tavus/Daily credentials into os.environ BEFORE the runner is wired up.
+    # Pipecat's Daily runner reads DAILY_API_KEY from os.environ inside the
+    # `/start` request handler (pipecat.runner.daily.configure), which runs
+    # before our per-session bot() — so the lazy load inside bot() is too late
+    # for the cloud/Daily path. Loading here makes the creds available for the
+    # whole process. bot() still calls it (idempotent) for the local path.
+    _load_tavus_secret()
     _configure_server_app(args)
 
     @pipecat_app.get("/health")
