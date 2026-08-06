@@ -113,7 +113,12 @@ export class TavusPipecatClient {
                 this.options.onError?.(new Error(ev?.errorMsg || "Daily error"))
             );
 
-            await call.join({ url: roomUrl, token: token || undefined });
+            // Tavus-hosted rooms are joined by URL alone; there is no token.
+            // daily-js rejects `token: undefined` ("token should be a string"),
+            // so only include the key when we actually have a token string.
+            const joinOptions: { url: string; token?: string } = { url: roomUrl };
+            if (token) joinOptions.token = token;
+            await call.join(joinOptions);
             // "connected" is fired on the first remote video track (see
             // handleTrackStarted), not here, so the UI waits for a real avatar.
         } catch (err) {

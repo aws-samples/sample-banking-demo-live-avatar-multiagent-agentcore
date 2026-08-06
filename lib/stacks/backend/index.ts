@@ -252,7 +252,20 @@ export class Backend extends Stack {
             { dir: "kb_search", handler: "handler.handler", timeout: 300, memory: 256 },
             { dir: "web_search", handler: "handler.handler", timeout: 300, memory: 256 },
             { dir: "pdf_generator", handler: "handler.handler", timeout: 900, memory: 512 },
-            { dir: "nova_canvas_generate", handler: "handler.handler", timeout: 300, memory: 512 },
+            {
+                dir: "nova_canvas_generate",
+                handler: "handler.handler",
+                timeout: 300,
+                memory: 512,
+                // Nova Canvas is LEGACY and refused by Bedrock here. Generate
+                // images with Stability SD3.5 Large, which this account can
+                // invoke in us-west-2 (cross-region). IAM below already allows
+                // bedrock:InvokeModel on "*", so the cross-region call is permitted.
+                extraEnv: {
+                    IMAGE_MODEL_ID: "stability.sd3-5-large-v1:0",
+                    IMAGE_MODEL_REGION: "us-west-2",
+                },
+            },
             { dir: "nova_canvas_edit", handler: "handler.handler", timeout: 300, memory: 512 },
             { dir: "nova_canvas_history", handler: "handler.handler", timeout: 60, memory: 128 },
             { dir: "nova_reel_generate", handler: "handler.handler", timeout: 300, memory: 256 },

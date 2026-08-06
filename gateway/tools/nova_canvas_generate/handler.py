@@ -12,16 +12,43 @@ import boto3
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-bedrock_runtime = boto3.client(
-    "bedrock-runtime",
-    region_name=os.environ.get("AWS_REGION", "us-east-1"),
-)
 s3_client = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 dynamodb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 
 IMAGES_BUCKET = os.environ.get("IMAGES_BUCKET", "")
 METADATA_TABLE = os.environ.get("METADATA_TABLE", "")
-NOVA_CANVAS_MODEL_ID = os.environ.get("NOVA_CANVAS_MODEL_ID", "amazon.nova-canvas-v1:0")
+
+# Text-to-image model. Amazon Nova Canvas (the former default) is marked LEGACY
+# and Bedrock refuses it in an account that has not invoked it for 30 days. The
+# active text-to-image models are Stability's Stable Image / SD3.5 family, which
+# in this account are available in us-west-2 (not us-east-1) — hence a dedicated
+# cross-region Bedrock client. Overridable via env for a future swap.
+IMAGE_MODEL_ID = os.environ.get("IMAGE_MODEL_ID", "stability.sd3-5-large-v1:0")
+IMAGE_MODEL_REGION = os.environ.get("IMAGE_MODEL_REGION", "us-west-2")
+
+bedrock_runtime = boto3.client("bedrock-runtime", region_name=IMAGE_MODEL_REGION)
+
+# Aspect ratios Stable Image / SD3.5 accept (they take an aspect_ratio, not
+# arbitrary width/height). We map the requested dimensions to the nearest one.
+_STABILITY_ASPECT_RATIOS = {
+    "1:1": 1.0,
+    "16:9": 16 / 9,
+    "9:16": 9 / 16,
+    "3:2": 3 / 2,
+    "2:3": 2 / 3,
+    "4:5": 4 / 5,
+    "5:4": 5 / 4,
+    "21:9": 21 / 9,
+    "9:21": 9 / 21,
+}
+
+
+def _nearest_aspect_ratio(width: int, height: int) -> str:
+    """Map requested width/height to the closest aspect ratio Stability accepts."""
+    if not width or not height:
+        return "1:1"
+    target = width / height
+    return min(_STABILITY_ASPECT_RATIOS, key=lambda k: abs(_STABILITY_ASPECT_RATIOS[k] - target))
 
 
 def _generate_image(
@@ -33,70 +60,43 @@ def _generate_image(
     session_id: str,
     user_id: str,
 ) -> str:
-    """Generate an image using Amazon Nova Canvas and save to S3."""
-    # Build request payload
+    """Generate an image using a Stability text-to-image model and save to S3."""
+    # Style is folded into the prompt (Stable Image has no separate style param).
+    text = f"{prompt}, {style} style" if style else prompt
+
+    # Stable Image / SD3.5 request schema (differs from Nova Canvas): a flat
+    # prompt with an aspect_ratio rather than explicit width/height.
     request_payload = {
-        "taskType": "TEXT_IMAGE",
-        "textToImageParams": {
-            "text": prompt,
-        },
-        "imageGenerationConfig": {
-            "width": width,
-            "height": height,
-            "numberOfImages": 1,
-            "quality": "premium",
-            "cfgScale": 7.5,
-        },
+        "prompt": text,
+        "mode": "text-to-image",
+        "aspect_ratio": _nearest_aspect_ratio(width, height),
+        "output_format": "png",
     }
-
-    # Add negative prompt if provided
     if negative_prompt:
-        request_payload["textToImageParams"]["negativeText"] = negative_prompt
+        request_payload["negative_prompt"] = negative_prompt
 
-    # Append style to prompt text if provided (style parameter has API issues)
-    if style:
-        request_payload["textToImageParams"]["text"] = f"{prompt}, {style} style"
+    logger.info(f"Generating image with {IMAGE_MODEL_ID} ({IMAGE_MODEL_REGION}): {prompt[:100]}...")
 
-    logger.info(f"Generating image with Nova Canvas: {prompt[:100]}...")
-
-    # Invoke the model.
-    #
-    # Nova Canvas is marked LEGACY by the provider. Bedrock refuses it outright
-    # in an account that has not invoked it for 30 days, with a
-    # ResourceNotFoundException whose message is easy to mistake for a missing
-    # resource or a typo in the model id. There is no drop-in replacement: as of
-    # Aug 2026 this account has no other text-to-image model (Titan Image is
-    # end-of-life, the Stability text-to-image ids are unavailable, and every
-    # active Stability model requires an input image). Re-enabling access is a
-    # console/support action, so the error is translated into something the
-    # operator can act on rather than left opaque.
-    try:
-        response = bedrock_runtime.invoke_model(
-            modelId=NOVA_CANVAS_MODEL_ID,
-            body=json.dumps(request_payload),
-            contentType="application/json",
-            accept="application/json",
-        )
-    except bedrock_runtime.exceptions.ResourceNotFoundException as e:
-        message = str(e)
-        if "Legacy" in message or "legacy" in message:
-            raise RuntimeError(
-                f"Image generation unavailable: Bedrock is refusing {NOVA_CANVAS_MODEL_ID} "
-                "because it is marked LEGACY and this account has not invoked it in the last "
-                "30 days. Re-enable access for the model in the Bedrock console (Model access), "
-                "or set NOVA_CANVAS_MODEL_ID to a text-to-image model this account can invoke. "
-                "Verify with: aws bedrock list-foundation-models --by-output-modality IMAGE"
-            ) from e
-        raise
+    response = bedrock_runtime.invoke_model(
+        modelId=IMAGE_MODEL_ID,
+        body=json.dumps(request_payload),
+        contentType="application/json",
+        accept="application/json",
+    )
 
     response_body = json.loads(response["body"].read().decode("utf-8"))
 
-    # Extract image data from response
-    image_data = None
-    if "images" in response_body and len(response_body["images"]) > 0:
-        image_data = response_body["images"][0]
-    elif "image" in response_body:
-        image_data = response_body["image"]
+    # Stable Image returns {"images": [b64], "seeds": [...], "finish_reasons": [...]}.
+    # A non-null finish_reason means the image was filtered (e.g. by content
+    # moderation) and no usable image was returned.
+    finish_reasons = response_body.get("finish_reasons") or []
+    if finish_reasons and finish_reasons[0]:
+        raise RuntimeError(
+            f"Image generation was filtered by the model (reason: {finish_reasons[0]}). Try rephrasing the prompt."
+        )
+
+    images = response_body.get("images") or []
+    image_data = images[0] if images else response_body.get("image")
 
     if not image_data:
         raise ValueError("No image generated in response")
@@ -165,7 +165,7 @@ def _generate_image(
                 "style": style,
                 "width": width,
                 "height": height,
-                "model": NOVA_CANVAS_MODEL_ID,
+                "model": IMAGE_MODEL_ID,
             },
         }
     )
