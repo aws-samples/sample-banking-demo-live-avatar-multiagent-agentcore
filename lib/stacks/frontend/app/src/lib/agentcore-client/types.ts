@@ -13,11 +13,18 @@ export type AgentId =
     | "planner"
     | "researcher"
     | "synthesizer"
+    | "evaluator"
     | "menu_designer"
     | "menu_pdf_writer";
 
 /** All pipeline phases (research + menu) */
-export type PipelinePhase = "planning" | "research" | "synthesis & report" | "design" | "export";
+export type PipelinePhase =
+    | "planning"
+    | "research"
+    | "synthesis & report"
+    | "evaluation"
+    | "design"
+    | "export";
 
 /** Research pipeline phases (backward-compatible alias) */
 export type ResearchPhase = PipelinePhase;

@@ -3,7 +3,14 @@ import { useChatStore, type ResearchSlot } from "@/stores/chatStore";
 const EMPTY: ResearchSlot = {
     activeAgent: null,
     completedPhases: [],
-    phaseProgress: { planning: 0, research: 0, "synthesis & report": 0, design: 0, export: 0 },
+    phaseProgress: {
+        planning: 0,
+        research: 0,
+        "synthesis & report": 0,
+        evaluation: 0,
+        design: 0,
+        export: 0,
+    },
     thinkingTraces: [],
     isActive: false,
 };

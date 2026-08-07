@@ -73,6 +73,7 @@ const initialState: ResearchState = {
         planning: 0,
         research: 0,
         "synthesis & report": 0,
+        evaluation: 0,
         design: 0,
         export: 0,
     },
@@ -104,7 +105,8 @@ function researchReducer(state: ResearchState, action: ResearchAction): Research
                     ...state.phaseProgress,
                     [action.phase]: 100,
                 },
-                isActive: action.phase !== "synthesis & report" && action.phase !== "export",
+                // Evaluation (research) and export (menu) are the terminal phases.
+                isActive: action.phase !== "evaluation" && action.phase !== "export",
             };
 
         case "PHASE_PROGRESS":

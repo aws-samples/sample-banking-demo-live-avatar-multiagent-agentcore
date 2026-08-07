@@ -7,16 +7,7 @@
  * layer is rebranded.
  */
 
-import {
-    BookOpen,
-    Boxes,
-    History,
-    LineChart,
-    Mic,
-    MessagesSquare,
-    Radar,
-    type LucideIcon,
-} from "lucide-react";
+import { Boxes, Mic, MessagesSquare, Radar, type LucideIcon } from "lucide-react";
 
 export const BRAND = {
     name: "Trinity Reserve",
@@ -29,117 +20,59 @@ export const BRAND = {
 } as const;
 
 /**
- * Experience catalog. `group` drives placement in the nav rail:
- *   research — the two deep-research pipelines
- *   advisory — customer-facing assistants
- *   library  — read-only corpora
+ * Experience catalog. The four experiences are shown as a flat list in the nav
+ * rail; each carries a short subtitle for the rail and a longer description
+ * that surfaces on the home page cards and behind the info icon on the rail.
  */
 export interface Experience {
     to: string;
     label: string;
     subtitle: string;
-    /** Longer copy for the home page cards. */
+    /** Longer copy for the home page cards and the nav rail's info popover. */
     description: string;
     /** The AWS capability this experience is chosen to showcase. */
     service: string;
     icon: LucideIcon;
-    group: "research" | "advisory" | "library";
 }
 
 export const EXPERIENCES: readonly Experience[] = [
     {
         to: "/research",
-        label: "Market Strategy",
+        label: "Deep Research Agent",
         subtitle: "Multi-agent · cited report",
-        // Accuracy note: this copy is user-facing and shows on camera, so it
-        // describes only what the code does. The pipeline is a sequential
-        // planner -> researcher -> synthesizer loop (_run_pipeline in
-        // orchestrator_agent.py), NOT parallel section agents, and no AgentCore
-        // Harness is provisioned anywhere in lib/. Do not reintroduce either
-        // claim without the implementation to back it.
         description:
-            "A planner decomposes the mandate into sub-questions, a researcher gathers evidence across web and internal sources, then a synthesizer produces a cited strategy report as PDF.",
+            "Refines your mandate with an LLM, breaks it into sub-questions, coordinates parallel research across web and internal sources with human-in-the-loop review, and delivers a comprehensive cited PDF report with imagery and a services chapter.",
         service: "AgentCore Runtime · Gateway",
         icon: Radar,
-        group: "research",
-    },
-    {
-        to: "/research-studio",
-        label: "Market Intelligence",
-        subtitle: "Any topic · jurisdiction-scoped",
-        // Accuracy note: the previous copy promised "an approved domain list and
-        // a published-date window". gateway/tools/web_search/handler.py applies
-        // neither — it is a Nova Web Grounding call with no filters. Domain and
-        // date governance are features of the AgentCore Web Search connector,
-        // which is not wired here. Restore that wording only alongside the
-        // connector target.
-        description:
-            "Open research on any subject, routed through the gateway as an MCP tool, with every finding carrying a resolvable source citation.",
-        service: "AgentCore Gateway · Nova Web Grounding",
-        icon: LineChart,
-        group: "research",
     },
     {
         to: "/menu",
-        label: "Services Catalog",
-        subtitle: "Products · generated imagery",
+        label: "AI Assistant",
+        subtitle: "Grounded · quality-controlled",
         description:
-            "Builds the client-facing product set — checking, savings, retirement, managed investing — with generated imagery and a print-ready disclosure document.",
+            "Turns the research report into a customer-facing services catalog with text, generated imagery and speech. Automatic quality control, human review, A/B model comparison and a continuous feedback loop are all wired in.",
         service: "Amazon Nova · Code Interpreter",
         icon: Boxes,
-        group: "advisory",
     },
     {
         to: "/chat",
-        label: "Client Advisor",
-        subtitle: "KYC · onboarding · guardrails",
+        label: "AI Agent",
+        subtitle: "RAG · KYC · guardrails",
         description:
-            "Opens accounts, screens eligibility, and answers product questions grounded in the strategy report — with deterministic policy in front of every tool call.",
+            "Opens accounts and answers product questions grounded in the strategy PDF via prompt engineering and RAG. Guardrails and DLP block off-topic and sensitive requests, and every run reports comprehensiveness, accuracy, latency and cost.",
         service: "AgentCore Policy · Guardrails",
         icon: MessagesSquare,
-        group: "advisory",
     },
     {
         to: "/avatar",
-        label: "Relationship Manager",
+        label: "Avatar/Digital Human",
         subtitle: "Live speech · multilingual",
         description:
             "Real-time speech-to-speech advisory with barge-in and tone control, grounded on the same corpus as the written channels.",
         service: "Amazon Nova Sonic",
         icon: Mic,
-        group: "advisory",
-    },
-    {
-        to: "/archive",
-        label: "Compliance Archive",
-        subtitle: "Semantic search · audit",
-        description:
-            "Semantic search across every report and disclosure the platform has produced, scoped to the requesting identity.",
-        service: "Amazon S3 Vectors",
-        icon: BookOpen,
-        group: "library",
-    },
-    {
-        to: "/history",
-        label: "Run History",
-        subtitle: "Past reports · re-signed links",
-        description:
-            "Every completed run, reopenable. Download links are signed per request from the stored S3 key rather than cached, so older reports keep working.",
-        service: "Amazon DynamoDB · Amazon S3",
-        icon: History,
-        group: "library",
     },
 ] as const;
-
-export const NAV_GROUPS: readonly { id: Experience["group"]; label: string }[] = [
-    { id: "research", label: "Research" },
-    { id: "advisory", label: "Advisory" },
-    { id: "library", label: "Library" },
-] as const;
-
-export function experiencesIn(group: Experience["group"]): Experience[] {
-    return EXPERIENCES.filter((e) => e.group === group);
-}
 
 /** Capability chips on the sign-in screen. */
 export const SIGN_IN_HIGHLIGHTS = [

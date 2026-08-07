@@ -16,6 +16,11 @@ const RESEARCH_PHASES: PhaseConfig[] = [
         label: "Synthesis & Report",
         description: "Synthesizing findings and generating PDF",
     },
+    {
+        phase: "evaluation",
+        label: "Evaluation",
+        description: "Scoring the report against the brief and evidence",
+    },
 ];
 
 interface PhaseConfig {
@@ -47,6 +52,7 @@ const DEFAULT_AGENT_TO_PHASE: Record<string, PipelinePhase> = {
     planner: "planning",
     researcher: "research",
     synthesizer: "synthesis & report",
+    evaluator: "evaluation",
 };
 
 export function ResearchProgressBar({

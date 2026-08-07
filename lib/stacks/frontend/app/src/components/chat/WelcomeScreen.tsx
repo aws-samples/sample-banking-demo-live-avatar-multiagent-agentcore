@@ -2,7 +2,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
-import { Search, FileText, Brain, ClipboardList } from "lucide-react";
+import { Search, FileText, Brain, ClipboardList, Gauge } from "lucide-react";
 
 interface WelcomeScreenProps {
     onExampleClick: (question: string) => void;
@@ -33,27 +33,19 @@ const STEPS = [
         description: "Generate a comprehensive PDF report with citations",
         icon: FileText,
     },
+    {
+        number: 5,
+        label: "Evaluate",
+        description: "Score the report against the brief and gathered evidence",
+        icon: Gauge,
+    },
 ];
 
 const EXAMPLE_QUESTIONS = [
     {
-        title: "High-Yield Savings",
+        title: "TXSE Bank Strategy",
         question:
-            "What are the top high-yield savings account trends among newly chartered US banks?",
-    },
-    {
-        title: "Wealth Management",
-        question:
-            "Analyze the competitive landscape for private client wealth management in Dallas, Texas",
-    },
-    {
-        title: "Deposit Strategy",
-        question:
-            "What technology solutions are retail banks using to grow deposits and improve client onboarding?",
-    },
-    {
-        title: "Rates & Markets",
-        question: "Compare certificate of deposit rate strategies across regional US banks",
+            "I have opened a new bank near the Texas Stock Exchange (TXSE) in Dallas, Texas. Please help me design a strategy and theme to operate the bank, including but not limited to know your customer (KYC), opening checking and savings accounts, providing retirement and investment services. In addition to the TXSE, the bank will also use the NYSE, Nasdaq, and the major stock exchanges in Europe. The strategy must include the ability to detect fraudulent accounts and transactions. Build a business plan, recommend the operating model, provide the staff recruitment requirements including salary, marketing and promotional strategies. Provide one best option rather than multiple choices. Based on the options, help me also generate a FAQ document for the customer to understand the details of the bank and its various services.",
     },
 ];
 
@@ -79,7 +71,7 @@ export function WelcomeScreen({ onExampleClick }: WelcomeScreenProps) {
                     >
                         How it works
                     </Box>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                         {STEPS.map((step) => {
                             const Icon = step.icon;
                             return (
@@ -114,14 +106,14 @@ export function WelcomeScreen({ onExampleClick }: WelcomeScreenProps) {
                 </div>
 
                 <div className="w-full">
-                    <Header variant="h2">Try an example question</Header>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                    <Header variant="h2">Try the demo prompt</Header>
+                    <div className="mt-4">
                         {EXAMPLE_QUESTIONS.map((item) => (
                             <button
                                 key={item.title}
                                 type="button"
                                 onClick={() => onExampleClick(item.question)}
-                                className="text-left cursor-pointer bg-transparent border-0 p-0"
+                                className="w-full text-left cursor-pointer bg-transparent border-0 p-0"
                             >
                                 <Container header={<Header variant="h3">{item.title}</Header>}>
                                     <Box variant="p" color="text-body-secondary">

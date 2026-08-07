@@ -111,11 +111,11 @@ export default function MenuPage(): JSX.Element {
     // divider can slide the full viewport width. The collapse button covers
     // the "snap shut" use case.
     const menuPanels = useMemo(() => {
-        const configs: ResizablePanelConfig[] = [{ id: "menu-main", defaultSize: 75, minSize: 5 }];
+        const configs: ResizablePanelConfig[] = [{ id: "menu-main", defaultSize: 68, minSize: 5 }];
         if (showSidebar) {
             configs.push({
                 id: "menu-sidebar",
-                defaultSize: sidebarCollapsed ? 5 : 25,
+                defaultSize: sidebarCollapsed ? 5 : 32,
                 minSize: 3,
             });
         }
@@ -142,7 +142,7 @@ export default function MenuPage(): JSX.Element {
             <div className="h-full w-full min-w-0">
                 <ChatInterface
                     mode="menu"
-                    title="Services Catalog"
+                    title="AI Assistant"
                     renderWelcome={(onExampleClick) => (
                         <MenuWelcomeScreen onExampleClick={onExampleClick} />
                     )}

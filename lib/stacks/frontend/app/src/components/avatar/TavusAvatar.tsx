@@ -33,6 +33,16 @@ export interface TavusAvatarProps {
 // connecting/connected — never while idle (disconnected).
 const TRACK_TIMEOUT_MS = 20_000;
 
+// AWS-branded backdrop for the Realistic avatar stage, matching the reference
+// app (gartner-ai-appdev-platforms-avatar-tavus): a deep-navy base with an
+// AWS-blue glow at the top and an AWS-green glow at the bottom. Shown behind the
+// pre-connect placeholder and as the stage around the live video.
+const AWS_BRANDED_BACKGROUND =
+    "radial-gradient(circle at top, rgba(41, 80, 200, 0.35), transparent 38%)," +
+    "linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 38%)," +
+    "radial-gradient(circle at bottom, rgba(123, 204, 163, 0.2), transparent 35%)," +
+    "linear-gradient(180deg, #09101d 0%, #060912 100%)";
+
 export default function TavusAvatar({
     videoTrack = null,
     isSpeaking = false,
@@ -74,7 +84,15 @@ export default function TavusAvatar({
     }, [videoTrack, isActive]);
 
     return (
-        <div className={className} style={{ width: "100%", height: "100%", position: "relative" }}>
+        <div
+            className={className}
+            style={{
+                width: "100%",
+                height: "100%",
+                position: "relative",
+                background: AWS_BRANDED_BACKGROUND,
+            }}
+        >
             <video
                 ref={videoRef}
                 autoPlay

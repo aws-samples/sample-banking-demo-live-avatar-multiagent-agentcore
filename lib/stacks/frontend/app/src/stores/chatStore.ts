@@ -31,10 +31,23 @@ export type ResearchAction =
 const INITIAL_RESEARCH: ResearchSlot = {
     activeAgent: null,
     completedPhases: [],
-    phaseProgress: { planning: 0, research: 0, "synthesis & report": 0, design: 0, export: 0 },
+    phaseProgress: {
+        planning: 0,
+        research: 0,
+        "synthesis & report": 0,
+        evaluation: 0,
+        design: 0,
+        export: 0,
+    },
     thinkingTraces: [],
     isActive: false,
 };
+
+// Terminal phases: once one of these ends, the pipeline is considered finished
+// and the live sidebar can stop treating the run as active. Evaluation is the
+// last research phase (it scores the finished report), so it — not
+// "synthesis & report" — closes out a research run.
+const TERMINAL_PHASES: ResearchPhase[] = ["evaluation", "export"];
 
 function reduceResearch(state: ResearchSlot, action: ResearchAction): ResearchSlot {
     switch (action.type) {
@@ -56,7 +69,7 @@ function reduceResearch(state: ResearchSlot, action: ResearchAction): ResearchSl
                     ? state.completedPhases
                     : [...state.completedPhases, action.phase],
                 phaseProgress: { ...state.phaseProgress, [action.phase]: 100 },
-                isActive: action.phase !== "synthesis & report" && action.phase !== "export",
+                isActive: !TERMINAL_PHASES.includes(action.phase),
             };
         case "PHASE_PROGRESS":
             return {

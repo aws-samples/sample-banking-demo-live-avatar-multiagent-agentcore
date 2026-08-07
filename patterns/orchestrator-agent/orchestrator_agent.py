@@ -326,6 +326,47 @@ The report JSON structure for the tool call:
 }
 """
 
+EVALUATION_PROMPT = """You are a Research Evaluation Agent. The report has already been written
+and delivered as a PDF. Your job is to score it — objectively and critically — against the
+original brief and the evidence that was actually gathered during the run. You are the quality
+gate, not a cheerleader: surface real gaps.
+
+You receive the original brief and the full synthesized report text (which includes its
+methodology). You may call gateway_kb_search to spot-check whether specific claims in the report
+are grounded in the knowledge base and prior data. Do NOT rewrite the report and do NOT generate a
+new PDF.
+
+Score the report on five dimensions, each 0-100:
+1. Alignment — does it answer every part of the brief? Penalize any requested deliverable that is
+   missing or only partially addressed (walk through the brief point by point).
+2. Comprehensiveness — depth and breadth across the required sections.
+3. Groundedness — are claims supported by the gathered evidence / KB rather than unsupported
+   assertion? Flag anything that reads as fabricated or uncited.
+4. Citations — are sources present, specific, and resolvable for the major claims?
+5. Coherence — structure, clarity, and internal consistency.
+
+Then compute an overall score as the rounded average.
+
+Output ONLY GitHub-flavored Markdown in exactly this shape (no preamble, no PDF tool call):
+
+## Evaluation Scorecard
+
+| Dimension | Score | Notes |
+|---|---|---|
+| Alignment with brief | NN/100 | one concise sentence |
+| Comprehensiveness | NN/100 | one concise sentence |
+| Groundedness | NN/100 | one concise sentence |
+| Citations | NN/100 | one concise sentence |
+| Coherence | NN/100 | one concise sentence |
+| **Overall** | **NN/100** | one-line verdict |
+
+**Brief coverage:** a short checklist mapping each requested deliverable to ✅ covered,
+⚠️ partial, or ❌ missing.
+
+**Top gaps & recommended fixes:** 2-4 bullets, each an actionable improvement.
+
+Keep the whole response under 400 words. Be specific and reference the brief."""
+
 # ---------------------------------------------------------------------------
 # Agent phase configuration
 # ---------------------------------------------------------------------------
@@ -1033,12 +1074,32 @@ GENERIC_RESEARCH_PHASES = [
     },
 ]
 
-GENERIC_EXECUTION_PHASES = [p for p in GENERIC_RESEARCH_PHASES if p["name"] != "planner"]
+# Evaluation phase — runs last, after the PDF exists, to score the report
+# against the brief and the gathered evidence. It streams a markdown scorecard;
+# it does not produce a PDF. Shared by both the Market Strategy and Market
+# Intelligence execution pipelines.
+EVALUATION_PHASE = {
+    "name": "evaluator",
+    "role": "evaluation",
+    "prompt": EVALUATION_PROMPT,
+    "estimated_duration": 60,
+    "thinking_budget": 4096,
+    "messages": [
+        "Re-reading the original brief...",
+        "Checking coverage of each deliverable...",
+        "Spot-checking claims against the knowledge base...",
+        "Scoring groundedness and citations...",
+        "Compiling the evaluation scorecard...",
+    ],
+}
+
+GENERIC_EXECUTION_PHASES = [p for p in GENERIC_RESEARCH_PHASES if p["name"] != "planner"] + [EVALUATION_PHASE]
 
 UI_EVENT_INTERVAL = 2
 
-# Execution-only phases (skip planner) for research_execute mode
-RESEARCH_EXECUTION_PHASES = [p for p in AGENT_PHASES if p["name"] != "planner"]
+# Execution-only phases (skip planner) for research_execute mode. Evaluation is
+# appended so it runs after the synthesizer has produced and delivered the PDF.
+RESEARCH_EXECUTION_PHASES = [p for p in AGENT_PHASES if p["name"] != "planner"] + [EVALUATION_PHASE]
 
 
 # ---------------------------------------------------------------------------
@@ -1153,6 +1214,9 @@ STATIC_PHASE_MAX_TURNS: dict[str, int] = {
     "synthesizer": 12,
     "pdf_writer": 12,
     "website_writer": 12,
+    # The evaluator spot-checks a few claims via kb_search then writes a compact
+    # scorecard — a small ceiling keeps its cost bounded.
+    "evaluator": 8,
 }
 DEFAULT_PHASE_MAX_TURNS = 20
 
@@ -2274,6 +2338,8 @@ async def _run_pipeline(
         agent_text = ""
         start_time = time.monotonic()
         tick = 0
+        tool_calls = 0
+        search_budget = phase.get("search_budget")
         _DONE = object()
         _HEARTBEAT = object()
         _ERROR = object()
@@ -2292,6 +2358,10 @@ async def _run_pipeline(
                 for block in msg.get("content", []):
                     if not isinstance(block, dict) or "toolResult" not in block:
                         continue
+                    # Count every completed tool call so the phase can drive its
+                    # progress bar off real work (e.g. searches against the
+                    # researcher's search_budget) rather than elapsed time alone.
+                    tq.put(("tool_call", None))
                     tr = block["toolResult"]
                     for part in tr.get("content", []):
                         text_val = part.get("text", "") if isinstance(part, dict) else ""
@@ -2392,8 +2462,42 @@ async def _run_pipeline(
                     phase_truncated_at = value
                     continue
 
+                # Count completed tool calls before computing progress so the
+                # work-based curve below reflects this call immediately.
+                if tag == "tool_call":
+                    tool_calls += 1
+
                 elapsed = time.monotonic() - start_time
-                progress = min(95, int((elapsed / estimated_duration) * 100))
+                # Progress that never freezes. The old formula hard-capped at
+                # 95% once elapsed reached the estimate, so a phase that runs
+                # longer than its estimate (common for the researcher, whose
+                # tool calls keep climbing) sat at 95% indefinitely and looked
+                # hung.
+                #
+                # Time curve: linear to 90% across the estimate, then creep from
+                # 90 toward 99 during overtime — closing the remaining gap the
+                # longer it runs. Always moves while the phase is alive but never
+                # claims 100% until the phase actually completes (the terminal
+                # "Complete" event sets 100).
+                if elapsed <= estimated_duration:
+                    time_progress = int((elapsed / estimated_duration) * 90)
+                else:
+                    overtime_ratio = (elapsed - estimated_duration) / estimated_duration
+                    time_progress = 90 + int(9 * (overtime_ratio / (overtime_ratio + 1)))
+
+                # Work curve: for phases with a search budget (the researcher),
+                # drive progress off the actual number of completed tool calls
+                # against that budget. This is the signal the user watches climb,
+                # so the bar tracks real work instead of a clock. Capped at 90%
+                # because the researcher still has to write findings up after its
+                # last search.
+                work_progress = 0
+                if search_budget:
+                    work_progress = int((tool_calls / search_budget) * 90)
+
+                # Take whichever is further along so a fast run advances by work
+                # and a slow, stalled-looking run still advances by time.
+                progress = min(99, max(time_progress, work_progress))
 
                 if tag == "pdf_url":
                     # Emit the presigned URL directly — bypasses LLM text relay
@@ -2408,7 +2512,11 @@ async def _run_pipeline(
                 elif tag is _HEARTBEAT:
                     yield {"data": "", "heartbeat": True}
 
-                    message_idx = min(tick, len(messages) - 1)
+                    # Cycle through the activity messages instead of clamping
+                    # to the last one. A long-running phase used to sit on the
+                    # final message forever, reinforcing the "stuck" look;
+                    # rotating keeps the card visibly alive while work continues.
+                    message_idx = tick % len(messages)
                     yield {
                         "_ui": {
                             "component": "AgentActivity",
@@ -2429,6 +2537,32 @@ async def _run_pipeline(
                         }
                     }
                     tick += 1
+                elif tag == "tool_call":
+                    # A tool call just completed — push a fresh progress update
+                    # between heartbeats so the bar advances with real work
+                    # (the count the user watches climb) rather than waiting for
+                    # the next 10s tick. The AgentActivity card is keyed per
+                    # agent on the frontend, so this updates in place.
+                    message_idx = tick % len(messages)
+                    yield {
+                        "_ui": {
+                            "component": "AgentActivity",
+                            "props": {
+                                "agent": agent_name,
+                                "phase": role,
+                                "progress": progress,
+                                "activity": messages[message_idx],
+                                "elapsed": round(elapsed),
+                                "done": False,
+                            },
+                        }
+                    }
+                    yield {
+                        "phase_progress": {
+                            "phase": role,
+                            "progress": progress,
+                        }
+                    }
                 elif tag == "text":
                     agent_text = value
 

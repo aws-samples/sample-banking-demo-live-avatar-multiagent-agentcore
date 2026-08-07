@@ -34,7 +34,7 @@ function ResearchSidebar({
 
     return (
         <div
-            className="w-80 lg:w-96 flex-none overflow-y-auto flex flex-col glass-panel-strong"
+            className="w-96 lg:w-[440px] xl:w-[500px] flex-none overflow-y-auto flex flex-col glass-panel-strong"
             style={{ borderLeft: "1px solid var(--glass-border)" }}
         >
             <div
@@ -69,7 +69,7 @@ export default function ResearchPage(): JSX.Element {
     return (
         <div className="flex h-full">
             <div className="flex-1 min-w-0">
-                <ChatInterface title="Market Strategy" />
+                <ChatInterface title="Deep Research Agent" />
             </div>
             {showSidebar && (
                 <ResearchSidebar

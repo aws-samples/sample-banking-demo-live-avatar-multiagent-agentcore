@@ -39,7 +39,7 @@ export default function MenuWelcomeScreen({ onExampleClick }: MenuWelcomeScreenP
                     <div className="flex items-center justify-center gap-3 mb-2">
                         <Landmark size={32} className="text-blue-600" />
                         <Box variant="h1" fontSize="heading-xl" fontWeight="bold">
-                            Services Catalog
+                            AI Assistant
                         </Box>
                     </div>
                     <Box variant="p" color="text-body-secondary" fontSize="heading-s">

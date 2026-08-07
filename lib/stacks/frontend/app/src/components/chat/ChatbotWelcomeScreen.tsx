@@ -48,7 +48,7 @@ export function ChatbotWelcomeScreen({ onExampleClick }: ChatbotWelcomeScreenPro
             <SpaceBetween size="xl" direction="vertical" alignItems="center">
                 <div className="text-center">
                     <Box variant="h1" fontSize="heading-xl" fontWeight="bold">
-                        Trinity Reserve Bank — Client Advisor
+                        Trinity Reserve Bank — AI Agent
                     </Box>
                     <Box variant="p" color="text-body-secondary" fontSize="heading-s">
                         Your personal banking assistant

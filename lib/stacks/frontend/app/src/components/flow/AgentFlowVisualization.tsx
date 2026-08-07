@@ -8,7 +8,6 @@ import {
     type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import Box from "@cloudscape-design/components/box";
 import { useResearchState } from "@/hooks/useResearchState";
 import { AGENT_PIPELINE, type PipelineAgent } from "@/components/chat/types";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
@@ -24,16 +23,18 @@ const DEFAULT_AGENT_TO_PHASE: Record<string, PipelinePhase> = {
     planner: "planning",
     researcher: "research",
     synthesizer: "synthesis & report",
+    evaluator: "evaluation",
     menu_designer: "design",
     menu_pdf_writer: "export",
 };
 
 const DEFAULT_DESCRIPTIONS: Record<string, string> = {
-    user: "Research query",
-    planner: "Decompose query",
-    researcher: "Collect findings",
+    user: "Research brief",
+    planner: "Decompose the brief",
+    researcher: "Gather evidence",
     synthesizer: "Synthesize & generate PDF",
-    menu_designer: "Design menu",
+    evaluator: "Score against brief & evidence",
+    menu_designer: "Design catalog",
     menu_pdf_writer: "Generate PDF",
 };
 
@@ -77,7 +78,7 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
         const builtNodes: Node<AgentNodeData>[] = pipelineOrder.map((id, i) => ({
             id,
             type: "agentNode",
-            position: { x: 0, y: i * 100 },
+            position: { x: 0, y: i * 118 },
             data: {
                 agentId: id,
                 label: id === "user" ? userLabel : (pipeline.find((a) => a.id === id)?.name ?? id),
@@ -137,12 +138,17 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
         ? (pipeline.find((a) => a.id === selectedNode)?.name ?? selectedNode)
         : "";
 
-    const flowHeight = Math.max(300, pipelineOrder.length * 100 + 100);
+    const flowHeight = Math.max(320, pipelineOrder.length * 118 + 90);
 
     return (
         <div
-            className="relative w-full rounded-lg border border-gray-200 bg-gray-50"
-            style={{ height: flowHeight }}
+            className="relative w-full overflow-hidden rounded-xl border"
+            style={{
+                height: flowHeight,
+                borderColor: "rgba(71,85,105,0.4)",
+                background:
+                    "linear-gradient(160deg, rgb(15,23,42) 0%, rgb(11,17,32) 55%, rgb(15,23,42) 100%)",
+            }}
         >
             <ReactFlow
                 nodes={nodes}
@@ -151,6 +157,7 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
                 edgeTypes={edgeTypes}
                 onNodeClick={onNodeClick}
                 fitView
+                fitViewOptions={{ padding: 0.18 }}
                 nodesDraggable={false}
                 nodesConnectable={false}
                 panOnDrag={false}
@@ -159,17 +166,19 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
                 zoomOnDoubleClick={false}
                 proOptions={{ hideAttribution: true }}
             >
-                <Background />
+                <Background gap={20} size={1} color="#1e293b" />
                 <Controls showInteractive={false} />
             </ReactFlow>
 
             {selectedNode && selectedNode !== "user" && (
-                <div className="absolute right-0 top-0 h-full w-72 overflow-y-auto border-l border-gray-200 bg-white p-3 shadow-lg">
+                <div className="absolute right-0 top-0 h-full w-72 overflow-y-auto border-l border-slate-700 bg-slate-900/95 p-3 shadow-lg backdrop-blur-sm">
                     <div className="mb-2 flex items-center justify-between">
-                        <Box variant="h4">{selectedLabel} Thinking</Box>
+                        <span className="text-sm font-semibold text-slate-100">
+                            {selectedLabel} Thinking
+                        </span>
                         <button
                             onClick={() => setSelectedNode(null)}
-                            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                         >
                             &times;
                         </button>
@@ -179,21 +188,19 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
                             {selectedTraces.map((trace, i) => (
                                 <div
                                     key={i}
-                                    className="border-b border-gray-100 pb-2 last:border-0"
+                                    className="border-b border-slate-800 pb-2 last:border-0"
                                 >
-                                    <div className="mb-0.5 text-[10px] text-gray-400">
+                                    <div className="mb-0.5 text-[10px] text-slate-500">
                                         {trace.timestamp.toLocaleTimeString()}
                                     </div>
-                                    <div className="[&_.markdown-body]:text-xs [&_.markdown-body]:leading-snug">
+                                    <div className="text-slate-200 [&_.markdown-body]:text-xs [&_.markdown-body]:leading-snug">
                                         <MarkdownRenderer content={trace.content} />
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <Box variant="p" color="text-body-secondary" fontSize="body-s">
-                            No thinking traces yet.
-                        </Box>
+                        <span className="text-xs text-slate-400">No thinking traces yet.</span>
                     )}
                 </div>
             )}

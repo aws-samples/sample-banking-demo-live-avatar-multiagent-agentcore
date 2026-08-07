@@ -1,13 +1,14 @@
 import { PropsWithChildren, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, Info } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { useModelSelector, AVAILABLE_MODELS } from "@/hooks/useModelSelector";
 import { resetKnowledgeBase } from "@/services/kbResetService";
-import { BRAND, NAV_GROUPS, experiencesIn } from "@/config/brand";
+import { BRAND, EXPERIENCES } from "@/config/brand";
 import TopNavigation from "@cloudscape-design/components/top-navigation";
 import Modal from "@cloudscape-design/components/modal";
+import Popover from "@cloudscape-design/components/popover";
 import Button from "@cloudscape-design/components/button";
 import Box from "@cloudscape-design/components/box";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -17,10 +18,10 @@ import Spinner from "@cloudscape-design/components/spinner";
 /**
  * Vertical navigation rail.
  *
- * Replaces the previous horizontal tab bar. Grouping the six experiences under
- * Research / Advisory / Library communicates the platform's shape at a glance,
- * which a flat row of tabs could not, and leaves the full width of the viewport
- * for the dense agent output.
+ * A flat list of the four experiences. Each row carries a subtitle for
+ * at-a-glance context and an info icon that opens a popover with the full
+ * description on click, so the rail stays compact but every experience is
+ * self-documenting.
  */
 function NavRail(): JSX.Element {
     const location = useLocation();
@@ -28,66 +29,92 @@ function NavRail(): JSX.Element {
     return (
         <nav
             aria-label="Primary"
-            className="flex w-[232px] shrink-0 flex-col gap-6 overflow-y-auto px-3 py-5"
+            className="flex w-[232px] shrink-0 flex-col gap-1 overflow-y-auto px-3 py-5"
             style={{
                 background: "var(--app-nav-bg)",
                 borderRight: "1px solid var(--app-border)",
             }}
         >
-            {NAV_GROUPS.map(({ id, label }) => (
-                <div key={id} className="flex flex-col gap-1">
-                    <p
-                        className="numeric px-3 pb-1 text-[9.5px] tracking-[0.16em] uppercase"
-                        style={{ color: "var(--app-text-muted)" }}
-                    >
-                        {label}
-                    </p>
+            <p
+                className="numeric px-3 pb-2 text-[9.5px] tracking-[0.16em] uppercase"
+                style={{ color: "var(--app-text-muted)" }}
+            >
+                Experiences
+            </p>
 
-                    {experiencesIn(id).map(({ to, label: itemLabel, subtitle, icon: Icon }) => {
-                        const active = location.pathname === to;
-                        return (
-                            <NavLink
-                                key={to}
-                                to={to}
-                                aria-current={active ? "page" : undefined}
-                                className="group relative flex items-start gap-2.5 rounded-[4px] px-3 py-2 no-underline transition-colors"
+            {EXPERIENCES.map(({ to, label: itemLabel, subtitle, description, icon: Icon }) => {
+                const active = location.pathname === to;
+                return (
+                    <div key={to} className="group relative flex items-stretch">
+                        <NavLink
+                            to={to}
+                            aria-current={active ? "page" : undefined}
+                            className="relative flex min-w-0 flex-1 items-start gap-2.5 rounded-[4px] px-3 py-2 no-underline transition-colors"
+                            style={{
+                                background: active
+                                    ? "var(--app-nav-item-active-bg)"
+                                    : "transparent",
+                                color: active
+                                    ? "var(--app-nav-item-active-text)"
+                                    : "var(--app-nav-item-text)",
+                            }}
+                        >
+                            {/* Brass indicator on the active item. */}
+                            <span
+                                aria-hidden
+                                className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full transition-opacity"
                                 style={{
-                                    background: active
-                                        ? "var(--app-nav-item-active-bg)"
-                                        : "transparent",
-                                    color: active
-                                        ? "var(--app-nav-item-active-text)"
-                                        : "var(--app-nav-item-text)",
+                                    background: "var(--brand-accent)",
+                                    opacity: active ? 1 : 0,
                                 }}
-                            >
-                                {/* Brass indicator on the active item. */}
+                            />
+                            <Icon
+                                size={15}
+                                className="mt-0.5 shrink-0"
+                                style={{ color: active ? "var(--brand-accent)" : undefined }}
+                            />
+                            <span className="flex min-w-0 flex-col leading-tight">
+                                <span className="text-[13px] font-medium">{itemLabel}</span>
                                 <span
-                                    aria-hidden
-                                    className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full transition-opacity"
-                                    style={{
-                                        background: "var(--brand-accent)",
-                                        opacity: active ? 1 : 0,
-                                    }}
-                                />
-                                <Icon
-                                    size={15}
-                                    className="mt-0.5 shrink-0"
-                                    style={{ color: active ? "var(--brand-accent)" : undefined }}
-                                />
-                                <span className="flex min-w-0 flex-col leading-tight">
-                                    <span className="text-[13px] font-medium">{itemLabel}</span>
-                                    <span
-                                        className="truncate text-[10.5px]"
-                                        style={{ color: "var(--app-text-muted)" }}
-                                    >
-                                        {subtitle}
-                                    </span>
+                                    className="truncate text-[10.5px]"
+                                    style={{ color: "var(--app-text-muted)" }}
+                                >
+                                    {subtitle}
                                 </span>
-                            </NavLink>
-                        );
-                    })}
-                </div>
-            ))}
+                            </span>
+                        </NavLink>
+
+                        {/* Info icon — click to open a popover with the full description.
+                            Sits outside the NavLink so clicking it doesn't route away. */}
+                        <span
+                            className="flex shrink-0 items-start pt-2.5 pr-1"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <Popover
+                                dismissButton={false}
+                                position="right"
+                                size="medium"
+                                triggerType="custom"
+                                header={itemLabel}
+                                content={
+                                    <Box variant="p" fontSize="body-s">
+                                        {description}
+                                    </Box>
+                                }
+                            >
+                                <button
+                                    type="button"
+                                    aria-label={`About ${itemLabel}`}
+                                    className="flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 opacity-60 transition-opacity hover:opacity-100"
+                                    style={{ color: "var(--app-text-muted)", cursor: "pointer" }}
+                                >
+                                    <Info size={13} />
+                                </button>
+                            </Popover>
+                        </span>
+                    </div>
+                );
+            })}
 
             <div className="mt-auto px-3">
                 <div className="rule mb-3" />

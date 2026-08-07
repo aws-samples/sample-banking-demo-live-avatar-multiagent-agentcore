@@ -3,14 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { Layers, X, ArrowRight } from "lucide-react";
 import { BRAND, EXPERIENCES } from "@/config/brand";
 
-/** Platform facts shown under the hero. Kept here so the copy has one home. */
-const PLATFORM_FACTS = [
-    { label: "AgentCore capabilities", value: "11" },
-    { label: "Gateway tools", value: "17" },
-    { label: "CDK stacks", value: "5" },
-    { label: "Idle cost", value: "$0" },
-] as const;
-
+/**
+ * Landing page.
+ *
+ * Framing note: Trinity Reserve is a *proposed* bank, not an operating one. The
+ * demo starts from a founder's brief and works it up — strategy, services,
+ * onboarding agent, advisor. The copy here deliberately says "design"/"proposed"
+ * and never implies live accounts or markets, because the earlier version read
+ * like an established institution, which it is not.
+ */
 export default function HomePage(): JSX.Element {
     const navigate = useNavigate();
     const [showArchitecture, setShowArchitecture] = useState(false);
@@ -18,25 +19,23 @@ export default function HomePage(): JSX.Element {
     return (
         <div className="flex min-h-screen flex-col" style={{ background: "var(--app-bg)" }}>
             {/* ── Hero ───────────────────────────────────────────────── */}
-            <div className="relative w-full" style={{ minHeight: 460 }}>
+            <div className="relative w-full" style={{ minHeight: 420 }}>
                 <img
                     src="/hero-cover.jpg"
                     alt=""
                     aria-hidden
                     className="absolute inset-0 h-full w-full object-cover"
-                    style={{ opacity: 0.55 }}
+                    style={{ opacity: 0.5 }}
                 />
                 <div
                     className="absolute inset-0"
                     style={{
                         background:
-                            "linear-gradient(105deg, rgba(6,9,13,0.96) 0%, rgba(6,9,13,0.82) 45%, rgba(6,9,13,0.55) 100%)",
+                            "linear-gradient(105deg, rgba(6,9,13,0.96) 0%, rgba(6,9,13,0.85) 50%, rgba(6,9,13,0.6) 100%)",
                     }}
                 />
 
-                {/* Left-aligned, editorial. Reads as a report cover rather than
-                    a marketing splash. */}
-                <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col justify-center px-8 py-20">
+                <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col justify-center px-8 py-24">
                     <div
                         className="animate-fade-in-up mb-6 h-[2px] w-12"
                         style={{ background: "var(--brand-accent)" }}
@@ -45,21 +44,22 @@ export default function HomePage(): JSX.Element {
                         className="numeric animate-fade-in-up mb-4 text-[11px] tracking-[0.2em] uppercase"
                         style={{ color: "rgba(200,162,74,0.9)" }}
                     >
-                        {BRAND.tagline} &nbsp;·&nbsp; {BRAND.location}
+                        AI banking blueprint &nbsp;·&nbsp; {BRAND.location}
                     </p>
                     <h1
                         className="font-display animate-fade-in-up mb-5 max-w-3xl text-white"
-                        style={{ fontSize: "clamp(2.6rem, 5.4vw, 4.2rem)", lineHeight: 1.04 }}
+                        style={{ fontSize: "clamp(2.4rem, 5vw, 3.8rem)", lineHeight: 1.05 }}
                     >
-                        {BRAND.legalName}
+                        Design a bank, from brief to launch plan.
                     </h1>
                     <p
                         className="animate-fade-in-up mb-9 max-w-2xl text-[17px] leading-relaxed"
-                        style={{ color: "rgba(255,255,255,0.72)" }}
+                        style={{ color: "rgba(255,255,255,0.74)" }}
                     >
-                        Six AI experiences on one platform — deep research, product design, client
-                        onboarding and live advisory — built on Amazon Bedrock AgentCore with
-                        grounding, guardrails, policy and evaluations wired in from the start.
+                        {BRAND.name} is a <em>proposed</em> bank. Start with a founder&apos;s brief
+                        and this platform works it up — a cited strategy, a services catalog, an
+                        onboarding agent and a live advisor. Nothing here is a live institution;
+                        every customer, account and figure is generated.
                     </p>
 
                     <div className="animate-fade-in-up flex flex-wrap items-center gap-3">
@@ -68,7 +68,7 @@ export default function HomePage(): JSX.Element {
                             className="flex cursor-pointer items-center gap-2 rounded-[4px] px-6 py-3 text-[15px] font-semibold transition-opacity hover:opacity-90"
                             style={{ background: "var(--brand-accent)", color: "#0a0d12" }}
                         >
-                            Begin research
+                            Start with a brief
                             <ArrowRight size={16} />
                         </button>
                         <button
@@ -84,54 +84,21 @@ export default function HomePage(): JSX.Element {
                         </button>
                     </div>
                 </div>
-
-                {/* Platform facts strip along the base of the hero. */}
-                <div
-                    className="relative z-10 border-t"
-                    style={{
-                        borderColor: "rgba(255,255,255,0.1)",
-                        background: "rgba(6,9,13,0.6)",
-                    }}
-                >
-                    <dl className="mx-auto flex max-w-6xl flex-wrap gap-x-12 gap-y-3 px-8 py-4">
-                        {PLATFORM_FACTS.map(({ label, value }) => (
-                            <div key={label} className="flex items-baseline gap-2">
-                                <dd
-                                    className="numeric text-[15px] font-semibold"
-                                    style={{ color: "var(--brand-accent)" }}
-                                >
-                                    {value}
-                                </dd>
-                                <dt
-                                    className="text-[11px] tracking-wide"
-                                    style={{ color: "rgba(255,255,255,0.5)" }}
-                                >
-                                    {label}
-                                </dt>
-                            </div>
-                        ))}
-                    </dl>
-                </div>
             </div>
 
             {/* ── Experience catalog ─────────────────────────────────── */}
-            <div className="mx-auto w-full max-w-6xl flex-1 px-8 py-16">
-                <div className="mb-10 flex items-end justify-between gap-6">
-                    <div>
-                        <h2
-                            className="font-display text-[26px]"
-                            style={{ color: "var(--app-text)" }}
-                        >
-                            Experiences
-                        </h2>
-                        <p className="mt-1 text-sm" style={{ color: "var(--app-text-secondary)" }}>
-                            Each one exercises a different part of the platform.
-                        </p>
-                    </div>
+            <div className="mx-auto w-full max-w-5xl flex-1 px-8 py-16">
+                <div className="mb-8">
+                    <h2 className="font-display text-[24px]" style={{ color: "var(--app-text)" }}>
+                        Four stages, one platform
+                    </h2>
+                    <p className="mt-1 text-sm" style={{ color: "var(--app-text-secondary)" }}>
+                        Work through them in order, or jump to any stage.
+                    </p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-px sm:grid-cols-2 lg:grid-cols-3">
-                    {EXPERIENCES.map(({ icon: Icon, label, description, service, to }) => (
+                <div className="grid grid-cols-1 gap-px sm:grid-cols-2">
+                    {EXPERIENCES.map(({ icon: Icon, label, description, service, to }, i) => (
                         <div
                             key={to}
                             role="button"
@@ -153,7 +120,15 @@ export default function HomePage(): JSX.Element {
                             }}
                         >
                             <div className="flex items-center justify-between">
-                                <Icon size={20} style={{ color: "var(--brand-accent)" }} />
+                                <div className="flex items-center gap-3">
+                                    <span
+                                        className="numeric text-[11px] tabular-nums"
+                                        style={{ color: "var(--app-text-muted)" }}
+                                    >
+                                        0{i + 1}
+                                    </span>
+                                    <Icon size={20} style={{ color: "var(--brand-accent)" }} />
+                                </div>
                                 <ArrowRight
                                     size={15}
                                     className="opacity-0 transition-opacity group-hover:opacity-60"

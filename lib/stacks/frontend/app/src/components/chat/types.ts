@@ -44,6 +44,7 @@ export const AGENT_PIPELINE: PipelineAgent[] = [
     { id: "planner", name: "Planner", color: "#0972d3" },
     { id: "researcher", name: "Researcher", color: "#5f61e6" },
     { id: "synthesizer", name: "Synthesizer & Report", color: "#539d43" },
+    { id: "evaluator", name: "Evaluator", color: "#c8a24a" },
 ];
 
 /** Catalog agent pipeline colors for visualization */

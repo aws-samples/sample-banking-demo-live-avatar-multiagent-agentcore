@@ -50,7 +50,7 @@ export default function MenuSidePanel(): JSX.Element {
                 >
                     <span className="inline-flex items-center gap-2">
                         <Landmark size={18} />
-                        Services Catalog
+                        AI Assistant
                     </span>
                 </Header>
             </div>
