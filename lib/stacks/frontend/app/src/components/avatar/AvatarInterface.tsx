@@ -38,7 +38,6 @@ import TalkingHeadAvatar from "./TalkingHeadAvatar";
 import TavusAvatar from "./TavusAvatar";
 import { useAudioPlayer, AudioPlayerControls } from "./AudioPlayer";
 import { MarkdownRenderer } from "../chat/MarkdownRenderer";
-import { KbSearchResultCard } from "../chat/KbSearchResultCard";
 import PdfViewer from "../viewer/PdfViewer";
 import {
     AvatarWebSocketClient,
@@ -63,6 +62,7 @@ import { getAWSCredentials } from "@/lib/auth/credentials";
 import { createPCMProcessorUrl, arrayBufferToBase64 } from "@/lib/websocket-client/audio-utils";
 import AvatarTextInput from "./AvatarTextInput";
 import AvatarSuggestedPrompts from "./AvatarSuggestedPrompts";
+import AvatarServicesCatalog, { useAvatarCatalog, findActiveItem } from "./AvatarServicesCatalog";
 import AvatarPromptsDialog from "./AvatarPromptsDialog";
 import ToolCallCard from "./ToolCallCard";
 import { useAuth } from "react-oidc-context";
@@ -78,7 +78,6 @@ type TranscriptSegment =
           input?: string;
           output?: string;
       }
-    | { kind: "kb"; resultJson: string }
     | { kind: "website"; url: string; title?: string; s3_key?: string }
     | { kind: "pdf"; url: string; title?: string }
     | { kind: "link"; url: string; label: string; toolName: string };
@@ -161,6 +160,11 @@ export default function AvatarInterface(): JSX.Element {
     const [sessionSeconds, setSessionSeconds] = useState(0);
     const [interruptCount, setInterruptCount] = useState(0);
     const [pdfPreview, setPdfPreview] = useState<PdfPreviewData | null>(null);
+    // Services-catalog panel: the item the avatar is currently discussing.
+    // Derived (not stored) from the transcript — the most recent assistant turn
+    // that names a catalog item wins, so the highlight tracks what is being said
+    // and persists through follow-ups that don't repeat the name.
+    const catalogSections = useAvatarCatalog();
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [showPromptEditor, setShowPromptEditor] = useState(false);
     const [systemPrompt, setSystemPrompt] = useState(() => {
@@ -189,7 +193,6 @@ export default function AvatarInterface(): JSX.Element {
     // --- Smart auto-scroll state ---
     const [isUserScrolling, setIsUserScrolling] = useState(false);
     const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-    const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastMessageCountRef = useRef(0);
 
     // --- LiveKit (WebRTC) transport — gated behind VITE_LIVEKIT_TOKEN_URL.
@@ -287,6 +290,22 @@ export default function AvatarInterface(): JSX.Element {
         return () => clearTimeout(timer);
     }, [isPlaying]);
 
+    // The catalog item the avatar is discussing — the most recent assistant
+    // turn that names one. Derived, so no effect/state churn.
+    const activeCatalogItem = useMemo(() => {
+        for (let i = transcript.length - 1; i >= 0; i--) {
+            const entry = transcript[i];
+            if (entry.role !== "assistant") continue;
+            const text = entry.segments
+                .filter((s) => s.kind === "text")
+                .map((s) => (s.kind === "text" ? s.content : ""))
+                .join(" ");
+            const found = findActiveItem(text, catalogSections);
+            if (found) return found;
+        }
+        return null;
+    }, [transcript, catalogSections]);
+
     // --- Smart auto-scroll ---
     useEffect(() => {
         if (!isUserScrolling && transcriptEndRef.current) {
@@ -319,25 +338,22 @@ export default function AvatarInterface(): JSX.Element {
             const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
 
             if (!nearBottom) {
+                // The user scrolled up to examine the transcript, tool calls,
+                // etc. Stop auto-scrolling and leave them where they are —
+                // do NOT auto-resume on a timer, which used to yank them back
+                // to the bottom every couple of seconds mid-read. They return
+                // via the scroll-to-bottom button or by scrolling down again.
                 setIsUserScrolling(true);
-                if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-                // Auto-resume scroll after 2s idle
-                scrollTimeoutRef.current = setTimeout(() => {
-                    setIsUserScrolling(false);
-                    setShowScrollToBottom(false);
-                }, 2000);
             } else {
                 setIsUserScrolling(false);
                 setShowScrollToBottom(false);
                 lastMessageCountRef.current = transcript.length;
-                if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
             }
         };
 
         el.addEventListener("scroll", handleScroll, { passive: true });
         return () => {
             el.removeEventListener("scroll", handleScroll);
-            if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
         };
     }, [transcript.length]);
 
@@ -754,24 +770,9 @@ export default function AvatarInterface(): JSX.Element {
                                         },
                                     ]);
                                 }
-                                // Show KB search results inline in transcript (same pattern as Chat)
-                                if (message.toolName!.includes("kb_search")) {
-                                    const kbResultStr =
-                                        typeof message.toolResult === "string"
-                                            ? message.toolResult
-                                            : JSON.stringify(resultData);
-                                    console.log("[Avatar KB Debug] toolInvocation kb_search", {
-                                        resultPreview: kbResultStr.substring(0, 300),
-                                    });
-                                    setTranscript((prev) => [
-                                        ...prev,
-                                        {
-                                            role: "assistant",
-                                            segments: [{ kind: "kb", resultJson: kbResultStr }],
-                                            timestamp: new Date().toISOString(),
-                                        },
-                                    ]);
-                                }
+                                // kb_search renders via its ToolCallCard; no
+                                // separate KB result card (it only ever showed
+                                // "No matching documents" for this result shape).
                                 // Show website result as a card
                                 if (
                                     message.toolName!.includes("website_generator") &&
@@ -891,27 +892,9 @@ export default function AvatarInterface(): JSX.Element {
                         });
                     }
 
-                    // Show KB search results inline in transcript (same pattern as Chat)
-                    // Backend now sends unwrapped toolResult (clean JSON string, not MCP wrapper)
-                    if (message.toolName?.includes("kb_search") && message.toolResult) {
-                        // Pass the result string directly to KbSearchResultCard,
-                        // same as Chat's tool renderer system does
-                        const resultStr =
-                            typeof message.toolResult === "string"
-                                ? message.toolResult
-                                : JSON.stringify(message.toolResult);
-                        console.log("[Avatar KB Debug] toolResult kb_search", {
-                            resultPreview: resultStr.substring(0, 300),
-                        });
-                        setTranscript((prev) => [
-                            ...prev,
-                            {
-                                role: "assistant",
-                                segments: [{ kind: "kb", resultJson: resultStr }],
-                                timestamp: new Date().toISOString(),
-                            },
-                        ]);
-                    }
+                    // kb_search renders via its ToolCallCard (marked done
+                    // above); the separate KB result card was removed because it
+                    // only ever read "No matching documents" for this shape.
 
                     // Show website result as a clickable card
                     if (message.toolName?.includes("website_generator") && message.toolResult) {
@@ -1363,14 +1346,21 @@ export default function AvatarInterface(): JSX.Element {
         // a thin strip on 4K displays where the transcript column has lots
         // of room to expand into.
         const configs: ResizablePanelConfig[] = [
-            { id: "avatar-canvas", defaultSize: 50, minSize: 40 },
-            { id: "avatar-transcript", defaultSize: 50, minSize: 25 },
+            { id: "avatar-canvas", defaultSize: 42, minSize: 32 },
+            { id: "avatar-transcript", defaultSize: 34, minSize: 22 },
         ];
         if (pdfPreview) {
-            configs[0].defaultSize = 40;
-            configs[0].minSize = 30;
+            // PDF is the deeper "locate the menu" view — it takes the third
+            // column, and the catalog panel steps aside to avoid a 4-column
+            // squeeze.
+            configs[0].defaultSize = 38;
+            configs[0].minSize = 28;
             configs[1].defaultSize = 30;
-            configs.push({ id: "avatar-pdf", defaultSize: 30, minSize: 20 });
+            configs.push({ id: "avatar-pdf", defaultSize: 32, minSize: 20 });
+        } else {
+            // Persistent services catalog: shows the item the avatar is
+            // discussing and switches it as the conversation moves.
+            configs.push({ id: "avatar-catalog", defaultSize: 24, minSize: 16 });
         }
         const total = configs.reduce((s, c) => s + c.defaultSize, 0);
         return configs.map((c) => ({ ...c, defaultSize: (c.defaultSize / total) * 100 }));
@@ -1466,7 +1456,7 @@ export default function AvatarInterface(): JSX.Element {
                 // Bump the save id to invalidate old (narrow) layouts saved
                 // before the 50/50 default — on 4K screens the prior saved
                 // widths left the avatar canvas cramped.
-                autoSaveId="avatar-v2"
+                autoSaveId="avatar-v3"
                 direction="horizontal"
                 panels={avatarPanels}
                 className="avatar-page__main"
@@ -1660,17 +1650,6 @@ export default function AvatarInterface(): JSX.Element {
                                                         </div>
                                                     );
                                                 }
-                                                if (seg.kind === "kb") {
-                                                    return (
-                                                        <KbSearchResultCard
-                                                            key={j}
-                                                            name="kb_search"
-                                                            args=""
-                                                            status="complete"
-                                                            result={seg.resultJson}
-                                                        />
-                                                    );
-                                                }
                                                 if (seg.kind === "website") {
                                                     return (
                                                         <div
@@ -1788,8 +1767,11 @@ export default function AvatarInterface(): JSX.Element {
                     {/* Media results are shown inline in the transcript — no separate sidebar */}
                 </div>
 
-                {/* PDF Viewer column (conditionally shown) */}
-                {pdfPreview && (
+                {/* Third column: PDF viewer when previewing a document, otherwise
+                    the persistent services catalog. Exactly one is present so the
+                    panel config (avatar-pdf | avatar-catalog) always matches the
+                    rendered children. */}
+                {pdfPreview ? (
                     <div className="avatar-page__pdf-col">
                         <div className="avatar-page__pdf-header">
                             <h3 className="text-sm font-medium text-gray-700">
@@ -1808,6 +1790,17 @@ export default function AvatarInterface(): JSX.Element {
                                 title={pdfPreview.filename || "Document"}
                             />
                         </div>
+                    </div>
+                ) : (
+                    <div
+                        className="h-full w-full min-w-0 glass-panel-strong"
+                        style={{ borderLeft: "1px solid var(--glass-border)" }}
+                    >
+                        <AvatarServicesCatalog
+                            activeItemName={activeCatalogItem}
+                            onSelect={handleSendText}
+                            disabled={!isConnected}
+                        />
                     </div>
                 )}
             </ResizablePanelLayout>

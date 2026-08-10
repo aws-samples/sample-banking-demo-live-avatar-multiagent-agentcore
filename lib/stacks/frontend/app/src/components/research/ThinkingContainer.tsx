@@ -8,6 +8,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { AGENT_PIPELINE, type PipelineAgent } from "@/components/chat/types";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import type { AgentId } from "@/lib/agentcore-client/types";
+import { ServiceChips } from "@/components/common/ServiceChips";
 
 const HEARTBEAT_MESSAGES: Partial<Record<AgentId, string[]>> = {
     planner: [
@@ -64,19 +65,25 @@ function AgentHeader({
     name,
     color,
     isActive,
+    tools,
 }: {
     name: string;
     color: string;
     isActive: boolean;
+    /** Tool keys this agent called, rendered as AWS-service chips. */
+    tools: string[];
 }) {
     return (
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-2">
             <span
                 className="inline-block h-3 w-3 rounded-full"
                 style={{ backgroundColor: color }}
             />
             <span>{name}</span>
             {isActive && <Badge color="blue">Active</Badge>}
+            {/* Services this step exercised, so the header answers "what did
+                this actually call?" without expanding the section. */}
+            <ServiceChips tools={tools} max={4} size="sm" />
         </span>
     );
 }
@@ -175,6 +182,7 @@ export function ThinkingContainer({
                                 name={agent.name}
                                 color={agent.color}
                                 isActive={isActive}
+                                tools={Object.keys(state.toolsByAgent[agent.id] ?? {})}
                             />
                         }
                     >

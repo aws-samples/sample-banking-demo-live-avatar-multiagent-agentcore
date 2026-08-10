@@ -8,11 +8,25 @@ function getApiUrl(): string {
     return base ? `${base}feedback` : "";
 }
 
+/** Where a signal originated, so the loop dashboard can slice by signal type. */
+export type FeedbackSource = "catalog_rating" | "chat_rating" | "edit" | "ab_test";
+
+export interface FeedbackMetadata {
+    source?: FeedbackSource;
+    /** Model that produced the accepted text (A/B winners). */
+    model?: string;
+    /** Catalog item / service the signal is about. */
+    itemName?: string;
+    /** Experience the signal came from, e.g. "menu". */
+    experience?: string;
+}
+
 export interface FeedbackPayload {
     sessionId: string;
     message: string;
     feedbackType: "positive" | "negative";
     comment?: string;
+    metadata?: FeedbackMetadata;
 }
 
 export interface FeedbackResponse {

@@ -24,9 +24,9 @@ import {
 } from "@/services/reportHistoryService";
 
 const PIPELINE_LABELS: Record<string, string> = {
-    strategy_research: "Market Strategy",
+    strategy_research: "Deep Research Agent",
     market_research: "Market Intelligence",
-    services: "Services Catalog",
+    services: "AI Assistant",
 };
 
 function formatWhen(iso: string): string {
@@ -88,7 +88,7 @@ export default function HistoryPage(): JSX.Element {
             <SpaceBetween size="m">
                 <Header
                     variant="h1"
-                    description="Every completed run. Links are re-signed each time this page loads, so older reports keep opening."
+                    description="The latest Deep Research Agent and AI Assistant output. Links are re-signed each time this page loads, so older reports keep opening instead of expiring into an access error."
                     actions={
                         <Button
                             iconSvg={<RefreshCw size={16} />}
@@ -99,7 +99,7 @@ export default function HistoryPage(): JSX.Element {
                         </Button>
                     }
                 >
-                    Run History
+                    Latest Reports
                 </Header>
 
                 {error && (

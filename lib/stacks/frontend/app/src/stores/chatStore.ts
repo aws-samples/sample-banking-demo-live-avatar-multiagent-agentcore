@@ -13,11 +13,22 @@ export interface ThinkingTrace {
     timestamp: Date;
 }
 
+/**
+ * Tool calls attributed to the agent that made them, as
+ * `{ [agentId]: { [toolName]: callCount } }`.
+ *
+ * Attribution (rather than one flat list) is what lets each node in the flow
+ * diagram show the AWS services *that step* exercised, instead of a single
+ * undifferentiated tally for the whole run.
+ */
+export type ToolsByAgent = Record<string, Record<string, number>>;
+
 export interface ResearchSlot {
     activeAgent: AgentId | null;
     completedPhases: ResearchPhase[];
     phaseProgress: Record<ResearchPhase, number>;
     thinkingTraces: ThinkingTrace[];
+    toolsByAgent: ToolsByAgent;
     isActive: boolean;
 }
 
@@ -26,6 +37,7 @@ export type ResearchAction =
     | { type: "AGENT_END"; agent: AgentId; phase: ResearchPhase }
     | { type: "PHASE_PROGRESS"; phase: ResearchPhase; progress: number }
     | { type: "THINKING"; agent: AgentId; content: string }
+    | { type: "TOOL_CALL"; agent: AgentId; tool: string }
     | { type: "RESET" };
 
 const INITIAL_RESEARCH: ResearchSlot = {
@@ -40,6 +52,7 @@ const INITIAL_RESEARCH: ResearchSlot = {
         export: 0,
     },
     thinkingTraces: [],
+    toolsByAgent: {},
     isActive: false,
 };
 
@@ -84,8 +97,21 @@ function reduceResearch(state: ResearchSlot, action: ResearchAction): ResearchSl
                     { agent: action.agent, content: action.content, timestamp: new Date() },
                 ],
             };
+        case "TOOL_CALL": {
+            const forAgent = state.toolsByAgent[action.agent] ?? {};
+            return {
+                ...state,
+                toolsByAgent: {
+                    ...state.toolsByAgent,
+                    [action.agent]: {
+                        ...forAgent,
+                        [action.tool]: (forAgent[action.tool] ?? 0) + 1,
+                    },
+                },
+            };
+        }
         case "RESET":
-            return { ...INITIAL_RESEARCH };
+            return { ...INITIAL_RESEARCH, toolsByAgent: {} };
         default:
             return state;
     }
@@ -249,6 +275,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                     return { menuState: { ...st, pdfUrl: (action.url as string) ?? null } };
                 case "SET_GENERATING":
                     return { menuState: { ...st, isGenerating: action.isGenerating as boolean } };
+                case "UPDATE_ITEM": {
+                    // Human-in-the-loop edit: patch a single catalog item by id.
+                    const id = action.id as string;
+                    const updates = action.updates as Partial<MenuSection["items"][number]>;
+                    const sections = st.sections.map((sec) => ({
+                        ...sec,
+                        items: sec.items.map((item) =>
+                            item.id === id ? { ...item, ...updates } : item
+                        ),
+                    }));
+                    return { menuState: { ...st, sections } };
+                }
                 case "SET_LAST_ITEM_IMAGE": {
                     const sections = [...st.sections].map((sec) => ({
                         ...sec,

@@ -18,7 +18,6 @@
 /** Segments this module can produce. Mirrors TranscriptSegment in AvatarInterface. */
 export type ToolArtifact =
     | { kind: "media"; mediaType: "image" | "video"; url: string; toolName: string }
-    | { kind: "kb"; resultJson: string }
     | { kind: "website"; url: string; title?: string; s3_key?: string }
     | { kind: "pdf"; url: string; title?: string }
     | { kind: "link"; url: string; label: string; toolName: string };
@@ -128,10 +127,12 @@ function parseRecord(raw: string): ToolRecord | null {
 export function extractToolArtifacts(toolName: string, rawOutput: string): ToolArtifact[] {
     if (!rawOutput) return [];
 
-    // Knowledge-base results are handed to the card as-is: it renders the
-    // result set itself, so parsing here would only risk disagreeing with it.
+    // kb_search produces no artifact of its own: the tool call already renders
+    // in the transcript via ToolCallCard, which shows the query and result.
+    // The dedicated KB result card only ever read "No matching documents" for
+    // the voice agent's result shape, so it was removed as pure noise.
     if (toolName.includes("kb_search")) {
-        return [{ kind: "kb", resultJson: rawOutput }];
+        return [];
     }
 
     const record = parseRecord(rawOutput);

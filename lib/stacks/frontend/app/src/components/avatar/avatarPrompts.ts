@@ -6,12 +6,18 @@
  * a presenter still needs the same reference mid-conversation. Two copies would
  * drift, and a prompt that drifts here is worse than a cosmetic bug — see below.
  *
- * Each group maps to a backend capability the Nova Sonic agent can actually
- * execute with the Gateway tools it has access to:
- *   - Products & Rates → gateway_kb_search (pipeline=services) + baked-in facts
- *   - Multilingual    → Nova Sonic native multilingual voice
- *   - Create          → gateway_nova_canvas_generate + gateway_website_generator
- *   - Research Recall → gateway_kb_search across the user-selected pipelines
+ * These map to the Avatar/Digital Human's baseline requirement: a photorealistic,
+ * multilingual marketing & promotion assistant for the bank's services, grounded
+ * in the step-2 services catalog, able to show/switch the item it is discussing,
+ * and with demonstrable guardrails. Each group targets one of those:
+ *   - Why choose us   → marketing/promotion pitch, grounded via gateway_kb_search
+ *                       (services catalog) + baked-in facts
+ *   - Show a service  → gateway_kb_search (pipeline=services); renders the catalog
+ *                       card / opens the catalog PDF, and re-queries (switches the
+ *                       item shown) on each new product asked about
+ *   - Multilingual    → Nova Sonic native multilingual voice + persona tone
+ *   - Test guardrails → an out-of-scope question the avatar should decline,
+ *                       demonstrating the guardrail is effective
  *
  * Every product named in a prompt must exist in BANK_FACTS
  * (patterns/avatar-agent/persona_prompts.py). The persona prompt forbids
@@ -19,7 +25,7 @@
  * either contradict itself or tell the user the product doesn't exist.
  */
 
-import { Landmark, Globe2, Sparkles, Archive } from "lucide-react";
+import { Sparkles, Landmark, Globe2, ShieldAlert } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface PromptGroup {
@@ -30,16 +36,33 @@ export interface PromptGroup {
 
 export const PROMPT_GROUPS: PromptGroup[] = [
     {
-        title: "Products & Rates",
+        title: "Why choose us",
+        icon: Sparkles,
+        prompts: [
+            {
+                label: "Why bank with us",
+                prompt: "Why should I choose Trinity Reserve for my savings and everyday banking?",
+            },
+            {
+                label: "What stands out",
+                prompt: "What makes your High-Yield Savings and managed investing stand out?",
+            },
+        ],
+    },
+    {
+        // Grounding + "show the item it is discussing, and change it per question":
+        // each of these triggers a services kb_search that surfaces the catalog
+        // card / PDF, and asking about a different product swaps what's shown.
+        title: "Show me a service",
         icon: Landmark,
         prompts: [
             {
-                label: "Current rates",
-                prompt: "What is the High-Yield Savings APY?",
+                label: "High-Yield Savings",
+                prompt: "Show me the details of the High-Yield Savings account",
             },
             {
-                label: "Compare accounts",
-                prompt: "Compare Everyday Checking and High-Yield Savings",
+                label: "Switch the item",
+                prompt: "Now show me the Everyday Checking account instead",
             },
         ],
     },
@@ -49,7 +72,7 @@ export const PROMPT_GROUPS: PromptGroup[] = [
         prompts: [
             {
                 label: "Español",
-                prompt: "¿Qué cuentas de ahorro ofrecen?",
+                prompt: "¿Por qué debería abrir una cuenta de ahorros con ustedes?",
             },
             {
                 label: "Open an IRA",
@@ -58,30 +81,18 @@ export const PROMPT_GROUPS: PromptGroup[] = [
         ],
     },
     {
-        title: "Create",
-        icon: Sparkles,
+        // Demonstrates the guardrail: these are outside the bank's scope and the
+        // avatar should politely decline rather than answer.
+        title: "Test guardrails",
+        icon: ShieldAlert,
         prompts: [
             {
-                label: "Generate an image",
-                prompt: "Create an image representing a premium savings account",
+                label: "Off-topic (declined)",
+                prompt: "What's the weather forecast in Paris this weekend?",
             },
             {
-                label: "Build a website",
-                prompt: "Build a one-page landing site for our High-Yield Savings account",
-            },
-        ],
-    },
-    {
-        title: "Research recall",
-        icon: Archive,
-        prompts: [
-            {
-                label: "Past reports",
-                prompt: "Summarize the last research report I generated",
-            },
-            {
-                label: "Cross-report",
-                prompt: "What common themes appear across my research library?",
+                label: "Out of scope (declined)",
+                prompt: "Give me medical advice about my headache",
             },
         ],
     },

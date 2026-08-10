@@ -5,8 +5,11 @@ import {
     ResearchProgressBar,
     type ProgressBarConfig,
 } from "@/components/research/ResearchProgressBar";
-import { ThinkingContainer } from "@/components/research/ThinkingContainer";
 import MenuWelcomeScreen from "@/components/menu/MenuWelcomeScreen";
+import CatalogStudio from "@/components/menu/CatalogStudio";
+import ContinuousFeedbackLoop from "@/components/menu/ContinuousFeedbackLoop";
+import PipelineRunReport from "@/components/research/PipelineRunReport";
+import { SAMPLE_PROMPTS } from "@/config/samplePrompts";
 import { useToolRenderer } from "@/hooks/useToolRenderer";
 import { CanvasResultCard } from "@/components/chat/structured/CanvasResultCard";
 import { MENU_PIPELINE } from "@/components/chat/types";
@@ -94,7 +97,9 @@ function MenuPipelineSidebar({
             <div className="flex flex-col gap-4 p-4">
                 <ResearchProgressBar mode={MODE} config={MENU_PROGRESS_CONFIG} />
                 <AgentFlowVisualization mode={MODE} config={MENU_FLOW_CONFIG} />
-                <ThinkingContainer mode={MODE} pipeline={MENU_PIPELINE} />
+                <PipelineRunReport mode={MODE} />
+                <CatalogStudio />
+                <ContinuousFeedbackLoop />
             </div>
         </div>
     );
@@ -111,11 +116,11 @@ export default function MenuPage(): JSX.Element {
     // divider can slide the full viewport width. The collapse button covers
     // the "snap shut" use case.
     const menuPanels = useMemo(() => {
-        const configs: ResizablePanelConfig[] = [{ id: "menu-main", defaultSize: 68, minSize: 5 }];
+        const configs: ResizablePanelConfig[] = [{ id: "menu-main", defaultSize: 56, minSize: 5 }];
         if (showSidebar) {
             configs.push({
                 id: "menu-sidebar",
-                defaultSize: sidebarCollapsed ? 5 : 32,
+                defaultSize: sidebarCollapsed ? 5 : 44,
                 minSize: 3,
             });
         }
@@ -143,6 +148,7 @@ export default function MenuPage(): JSX.Element {
                 <ChatInterface
                     mode="menu"
                     title="AI Assistant"
+                    samplePrompts={SAMPLE_PROMPTS.menu}
                     renderWelcome={(onExampleClick) => (
                         <MenuWelcomeScreen onExampleClick={onExampleClick} />
                     )}

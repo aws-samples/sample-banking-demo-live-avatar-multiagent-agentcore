@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 import { ConciergeFlowDiagram } from "./ConciergeFlowDiagram";
 import { ToolActivityTimeline } from "./ToolActivityTimeline";
+import { RunReport } from "./RunReport";
 
 interface ConciergeFlowSidebarProps {
     onClose: () => void;
@@ -97,7 +98,11 @@ export function ConciergeFlowSidebar({ onClose }: ConciergeFlowSidebarProps) {
                 <ConciergeFlowDiagram />
             </div>
 
-            <div className="h-[35%] min-h-[120px] flex-none overflow-y-auto">
+            <div className="flex-none">
+                <RunReport />
+            </div>
+
+            <div className="h-[30%] min-h-[110px] flex-none overflow-y-auto">
                 {events.length === 0 ? <EmptyState /> : <ToolActivityTimeline />}
             </div>
         </motion.aside>

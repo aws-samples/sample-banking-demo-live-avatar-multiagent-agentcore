@@ -1,6 +1,8 @@
 import { FormEvent, KeyboardEvent, useRef, useEffect } from "react";
 import Button from "@cloudscape-design/components/button";
-import { Loader2Icon } from "lucide-react";
+import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
+import { Loader2Icon, Lightbulb } from "lucide-react";
+import type { SamplePrompt } from "@/config/samplePrompts";
 
 interface ChatInputProps {
     input: string;
@@ -8,6 +10,10 @@ interface ChatInputProps {
     handleSubmit: (e: FormEvent) => void;
     isLoading: boolean;
     className?: string;
+    /** Sample prompts for the always-available picker. Hidden when empty. */
+    samplePrompts?: SamplePrompt[];
+    /** Fires the chosen sample prompt (defaults to filling the input). */
+    onPickSample?: (question: string) => void;
 }
 
 export function ChatInput({
@@ -16,6 +22,8 @@ export function ChatInput({
     handleSubmit,
     isLoading,
     className = "",
+    samplePrompts,
+    onPickSample,
 }: ChatInputProps): JSX.Element {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,8 +50,33 @@ export function ChatInput({
         }
     };
 
+    const hasSamples = !!samplePrompts && samplePrompts.length > 0;
+
     return (
         <div className={`p-4 w-full ${className}`}>
+            {hasSamples && (
+                <div className="mb-2 flex justify-end">
+                    <ButtonDropdown
+                        expandableGroups
+                        disabled={isLoading}
+                        items={samplePrompts.map((p, i) => ({
+                            id: String(i),
+                            text: p.label,
+                            description: p.question,
+                        }))}
+                        onItemClick={({ detail }) => {
+                            const picked = samplePrompts[Number(detail.id)];
+                            if (!picked) return;
+                            if (onPickSample) onPickSample(picked.question);
+                            else setInput(picked.question);
+                        }}
+                    >
+                        <span className="inline-flex items-center gap-1.5">
+                            <Lightbulb size={14} /> Sample prompts
+                        </span>
+                    </ButtonDropdown>
+                </div>
+            )}
             <form
                 onSubmit={handleSubmit}
                 className="flex space-x-2 w-full items-end rounded-xl p-3"

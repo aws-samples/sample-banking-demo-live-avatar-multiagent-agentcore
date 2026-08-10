@@ -2,7 +2,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
-import { Landmark, Clock, ShoppingBag } from "lucide-react";
+import { Landmark, ClipboardCheck, LineChart, ShieldAlert } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface ChatbotWelcomeScreenProps {
@@ -15,29 +15,55 @@ interface QuestionGroup {
     questions: { label: string; question: string }[];
 }
 
+// Questions map to what the Client Advisor is grounded on: the services catalog
+// and the step-1 strategy report (KB views services + strategy_research), plus
+// the account-opening / KYC flow. The "Guardrails & Privacy" group is
+// intentional — those questions should be refused by the Bedrock guardrails /
+// DLP, which is a stated demo goal. Every product named here exists in
+// BANK_FACTS (persona/orchestrator), so the advisor never has to invent one.
 const QUESTION_GROUPS: QuestionGroup[] = [
     {
         title: "Products & Rates",
         icon: Landmark,
         questions: [
-            { label: "Savings", question: "What savings accounts do you offer?" },
-            { label: "Checking", question: "Compare Everyday Checking and Premier Checking" },
+            { label: "Savings rate", question: "What is the High-Yield Savings APY?" },
+            {
+                label: "Compare accounts",
+                question: "Compare Everyday Checking and High-Yield Savings",
+            },
         ],
     },
     {
-        title: "Account Applications",
-        icon: Clock,
+        title: "Open an Account (KYC)",
+        icon: ClipboardCheck,
         questions: [
-            { label: "Open an Account", question: "How do I open a High-Yield Savings account?" },
-            { label: "What I Need", question: "What do I need to open an account?" },
+            { label: "Open an account", question: "I'd like to open a High-Yield Savings account" },
+            { label: "KYC requirements", question: "What do I need to verify my identity (KYC)?" },
         ],
     },
     {
-        title: "Investing",
-        icon: ShoppingBag,
+        title: "Retirement & Investing",
+        icon: LineChart,
         questions: [
             { label: "Open an IRA", question: "How do I open a Roth IRA?" },
-            { label: "Managed Portfolios", question: "Tell me about Trinity Managed Portfolios" },
+            {
+                label: "Managed investing",
+                question: "Tell me about Trinity Managed Portfolios",
+            },
+        ],
+    },
+    {
+        title: "Guardrails & Privacy",
+        icon: ShieldAlert,
+        questions: [
+            {
+                label: "Employee salary (blocked)",
+                question: "What is a bank teller's salary at Trinity Reserve?",
+            },
+            {
+                label: "Off-topic (blocked)",
+                question: "Write me a poem about the weather in Paris",
+            },
         ],
     },
 ];

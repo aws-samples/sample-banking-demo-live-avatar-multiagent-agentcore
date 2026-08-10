@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
     ReactFlow,
     Background,
@@ -14,7 +14,9 @@ import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { CustomAgentNode } from "./CustomAgentNode";
 import { CustomEdge } from "./CustomEdge";
 import type { AgentNodeData, NodeStatus } from "./flow-types";
+import { AGENT_COLORS, AGENT_ICONS } from "./flow-types";
 import type { AgentId, PipelinePhase } from "@/lib/agentcore-client/types";
+import { ServicePlaneLegend, ToolServiceList } from "@/components/common/ServiceChips";
 
 const nodeTypes = { agentNode: CustomAgentNode };
 const edgeTypes = { agentEdge: CustomEdge };
@@ -78,13 +80,20 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
         const builtNodes: Node<AgentNodeData>[] = pipelineOrder.map((id, i) => ({
             id,
             type: "agentNode",
-            position: { x: 0, y: i * 118 },
+            position: { x: 0, y: i * 132 },
             data: {
                 agentId: id,
                 label: id === "user" ? userLabel : (pipeline.find((a) => a.id === id)?.name ?? id),
                 status: getNodeStatus(id),
                 description: descriptions[id] ?? "",
                 thinkingCount: traceCountByAgent[id] ?? 0,
+                toolCounts: state.toolsByAgent[id] ?? {},
+                // Stagger the entrance animation down the pipeline so the graph
+                // assembles top-to-bottom instead of popping in all at once.
+                orderIndex: i,
+                // Clicking a service chip opens the same side panel as clicking
+                // the node, so there is one place to read a step's detail.
+                onInspect: () => setSelectedNode(id),
             },
             draggable: false,
         }));
@@ -109,7 +118,12 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
                 source: sourceId,
                 target: targetId,
                 type: "agentEdge",
-                data: { status: edgeStatus },
+                // The active edge takes the downstream stage's accent so the
+                // travelling pulse visibly carries that stage's identity.
+                data: {
+                    status: edgeStatus,
+                    accent: AGENT_COLORS[targetId as AgentId] ?? "#4a9eff",
+                },
             };
         });
 
@@ -119,6 +133,7 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
         state.completedPhases,
         state.isActive,
         state.thinkingTraces,
+        state.toolsByAgent,
         pipelineOrder,
         pipeline,
         agentToPhase,
@@ -138,70 +153,274 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
         ? (pipeline.find((a) => a.id === selectedNode)?.name ?? selectedNode)
         : "";
 
-    const flowHeight = Math.max(320, pipelineOrder.length * 118 + 90);
+    const selectedToolCounts = selectedNode ? (state.toolsByAgent[selectedNode] ?? {}) : {};
+
+    // Structured metadata for the enlarged step inspector.
+    const selectedPhase = selectedNode ? agentToPhase[selectedNode] : undefined;
+    const selectedStatus: NodeStatus =
+        selectedPhase && state.completedPhases.includes(selectedPhase)
+            ? "completed"
+            : state.activeAgent === selectedNode
+              ? "active"
+              : "pending";
+    const selectedDescription = selectedNode ? (descriptions[selectedNode] ?? "") : "";
+    const selectedIcon = selectedNode ? AGENT_ICONS[selectedNode as AgentId | "user"] : undefined;
+    const selectedAccent = selectedNode
+        ? (AGENT_COLORS[selectedNode as AgentId] ?? "#94a3b8")
+        : "#94a3b8";
+    const selectedToolTotal = Object.values(selectedToolCounts).reduce((a, b) => a + b, 0);
+
+    const statusMeta: Record<NodeStatus, { label: string; color: string }> = {
+        active: { label: "Active", color: "#4a9eff" },
+        completed: { label: "Complete", color: "#4fd1a5" },
+        pending: { label: "Pending", color: "#94a3b8" },
+    };
+
+    const inspectorOpen = !!selectedNode && selectedNode !== "user";
+
+    // Escape closes the enlarged inspector. Listener is registered from the
+    // effect and calls setState from its callback (not synchronously).
+    useEffect(() => {
+        if (!inspectorOpen) return;
+        const onKey = (e: KeyboardEvent): void => {
+            if (e.key === "Escape") setSelectedNode(null);
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [inspectorOpen]);
+
+    // Tall enough for large, legible nodes but capped so `fitView` shows the
+    // whole workflow at once instead of overflowing the panel — the run report
+    // and other rail content sit just below it in the scroll.
+    const flowHeight = Math.min(Math.max(420, pipelineOrder.length * 120 + 90), 560);
 
     return (
         <div
             className="relative w-full overflow-hidden rounded-xl border"
             style={{
-                height: flowHeight,
                 borderColor: "rgba(71,85,105,0.4)",
                 background:
                     "linear-gradient(160deg, rgb(15,23,42) 0%, rgb(11,17,32) 55%, rgb(15,23,42) 100%)",
             }}
         >
-            <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={nodeTypes}
-                edgeTypes={edgeTypes}
-                onNodeClick={onNodeClick}
-                fitView
-                fitViewOptions={{ padding: 0.18 }}
-                nodesDraggable={false}
-                nodesConnectable={false}
-                panOnDrag={false}
-                zoomOnScroll={false}
-                zoomOnPinch={false}
-                zoomOnDoubleClick={false}
-                proOptions={{ hideAttribution: true }}
-            >
-                <Background gap={20} size={1} color="#1e293b" />
-                <Controls showInteractive={false} />
-            </ReactFlow>
-
-            {selectedNode && selectedNode !== "user" && (
-                <div className="absolute right-0 top-0 h-full w-72 overflow-y-auto border-l border-slate-700 bg-slate-900/95 p-3 shadow-lg backdrop-blur-sm">
-                    <div className="mb-2 flex items-center justify-between">
-                        <span className="text-sm font-semibold text-slate-100">
-                            {selectedLabel} Thinking
-                        </span>
-                        <button
-                            onClick={() => setSelectedNode(null)}
-                            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            {/* Header: run state, status key, and the affordance that makes the
+                step inspector discoverable — without it the enlarged popout is
+                hidden behind an undiscoverable click. */}
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-3 py-2">
+                <div className="flex items-center gap-2">
+                    <span
+                        className={`inline-block h-2 w-2 rounded-full ${
+                            state.isActive ? "animate-pulse bg-emerald-400" : "bg-slate-600"
+                        }`}
+                        aria-hidden
+                    />
+                    <span className="text-xs font-semibold text-slate-100">Agent Workflow</span>
+                    <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                        {state.isActive ? "Live" : "Idle"}
+                    </span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                    {(
+                        [
+                            ["active", "Active"],
+                            ["completed", "Done"],
+                            ["pending", "Pending"],
+                        ] as const
+                    ).map(([key, label]) => (
+                        <span
+                            key={key}
+                            className="inline-flex items-center gap-1 text-[9.5px] text-slate-400"
                         >
-                            &times;
-                        </button>
-                    </div>
-                    {selectedTraces.length > 0 ? (
-                        <div className="space-y-2">
-                            {selectedTraces.map((trace, i) => (
+                            <span
+                                aria-hidden
+                                className="h-1.5 w-1.5 rounded-full"
+                                style={{ background: statusMeta[key].color }}
+                            />
+                            {label}
+                        </span>
+                    ))}
+                </div>
+            </div>
+
+            <div className="relative w-full" style={{ height: flowHeight }}>
+                <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    nodeTypes={nodeTypes}
+                    edgeTypes={edgeTypes}
+                    onNodeClick={onNodeClick}
+                    fitView
+                    fitViewOptions={{ padding: 0.18 }}
+                    nodesDraggable={false}
+                    nodesConnectable={false}
+                    panOnDrag={false}
+                    zoomOnScroll={false}
+                    zoomOnPinch={false}
+                    zoomOnDoubleClick={false}
+                    // Let wheel events bubble to the sidebar's scroll container.
+                    // ReactFlow otherwise captures the wheel over the pane, which
+                    // trapped scrolling on the diagram and left the panel content
+                    // below it (lower nodes, the run report) unreachable.
+                    preventScrolling={false}
+                    proOptions={{ hideAttribution: true }}
+                >
+                    <Background gap={20} size={1} color="#1e293b" />
+                    <Controls showInteractive={false} />
+                </ReactFlow>
+
+                {/* Discoverability hint for the step inspector. */}
+                <div className="pointer-events-none absolute bottom-2 right-2 rounded-full border border-slate-700/70 bg-slate-950/70 px-2.5 py-1 text-[9.5px] text-slate-400 backdrop-blur-sm">
+                    Click a step for details
+                </div>
+            </div>
+
+            {inspectorOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`${selectedLabel} step detail`}
+                >
+                    <div
+                        className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+                        onClick={() => setSelectedNode(null)}
+                        aria-hidden
+                    />
+                    <div className="relative z-10 flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+                        {/* Header: identity + live status */}
+                        <div
+                            className="flex items-start justify-between gap-3 border-b border-slate-800 px-5 py-4"
+                            style={{
+                                background: `linear-gradient(135deg, ${selectedAccent}1f, transparent)`,
+                            }}
+                        >
+                            <div className="flex items-center gap-3">
                                 <div
-                                    key={i}
-                                    className="border-b border-slate-800 pb-2 last:border-0"
+                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                                    style={{
+                                        background: `${selectedAccent}1f`,
+                                        border: `1px solid ${selectedAccent}55`,
+                                    }}
                                 >
-                                    <div className="mb-0.5 text-[10px] text-slate-500">
-                                        {trace.timestamp.toLocaleTimeString()}
-                                    </div>
-                                    <div className="text-slate-200 [&_.markdown-body]:text-xs [&_.markdown-body]:leading-snug">
-                                        <MarkdownRenderer content={trace.content} />
-                                    </div>
+                                    {selectedIcon ? (
+                                        <img
+                                            src={selectedIcon}
+                                            alt=""
+                                            className="h-6 w-6 object-contain"
+                                        />
+                                    ) : null}
                                 </div>
-                            ))}
+                                <div>
+                                    <div className="text-lg font-semibold text-slate-100">
+                                        {selectedLabel}
+                                    </div>
+                                    {selectedDescription && (
+                                        <div className="text-xs text-slate-400">
+                                            {selectedDescription}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span
+                                    className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                                    style={{
+                                        color: statusMeta[selectedStatus].color,
+                                        background: `${statusMeta[selectedStatus].color}1a`,
+                                        border: `1px solid ${statusMeta[selectedStatus].color}55`,
+                                    }}
+                                >
+                                    <span
+                                        className="h-1.5 w-1.5 rounded-full"
+                                        style={{ background: statusMeta[selectedStatus].color }}
+                                    />
+                                    {statusMeta[selectedStatus].label}
+                                </span>
+                                <button
+                                    onClick={() => setSelectedNode(null)}
+                                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                                    aria-label="Close step detail"
+                                >
+                                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="none">
+                                        <path
+                                            d="M5 5l10 10M15 5L5 15"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
-                    ) : (
-                        <span className="text-xs text-slate-400">No thinking traces yet.</span>
-                    )}
+
+                        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+                            {/* Structured metadata */}
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                {[
+                                    { label: "Phase", value: selectedPhase ?? "—" },
+                                    { label: "Status", value: statusMeta[selectedStatus].label },
+                                    { label: "Tool calls", value: String(selectedToolTotal) },
+                                    {
+                                        label: "Activity steps",
+                                        value: String(selectedTraces.length),
+                                    },
+                                ].map((m) => (
+                                    <div
+                                        key={m.label}
+                                        className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2"
+                                    >
+                                        <div className="text-[10px] uppercase tracking-wide text-slate-500">
+                                            {m.label}
+                                        </div>
+                                        <div className="mt-0.5 truncate text-sm font-semibold capitalize text-slate-100">
+                                            {m.value}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Tools & AWS services this step exercised */}
+                            <section>
+                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                    Tools &amp; AWS Services
+                                </div>
+                                <ToolServiceList toolCounts={selectedToolCounts} />
+                                <div className="mt-3 border-t border-slate-800 pt-2">
+                                    <ServicePlaneLegend />
+                                </div>
+                            </section>
+
+                            {/* Activity & output — the streamed reasoning/output
+                                for this step, now the primary reading surface. */}
+                            <section>
+                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                    Activity &amp; Output
+                                </div>
+                                {selectedTraces.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {selectedTraces.map((trace, i) => (
+                                            <div
+                                                key={i}
+                                                className="rounded-lg border border-slate-800 bg-slate-950/40 p-3"
+                                            >
+                                                <div className="mb-1 text-[10px] text-slate-500">
+                                                    {trace.timestamp.toLocaleTimeString()}
+                                                </div>
+                                                <div className="text-slate-200 [&_.markdown-body]:text-sm [&_.markdown-body]:leading-relaxed">
+                                                    <MarkdownRenderer content={trace.content} />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-slate-400">
+                                        No activity captured for this step yet. It will populate as
+                                        the step runs.
+                                    </p>
+                                )}
+                            </section>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

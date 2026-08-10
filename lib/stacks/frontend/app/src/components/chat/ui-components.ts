@@ -1,9 +1,11 @@
 import type { ComponentType } from "react";
 import { AgentActivityCard } from "./AgentActivityCard";
 import { BrowserSessionNotice } from "./BrowserSessionNotice";
+import { CatalogQualityReportCard } from "./CatalogQualityReportCard";
 import { PdfDeliveryCard } from "./PdfDeliveryCard";
 import { PdfDownloadLinkCard } from "./PdfDownloadLinkCard";
 import { ResearchPlanCard } from "./ResearchPlanCard";
+import { ServicesCatalogCard } from "./ServicesCatalogCard";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyComponent = ComponentType<any>;
@@ -17,9 +19,11 @@ type AnyComponent = ComponentType<any>;
 const UI_COMPONENTS: Record<string, AnyComponent> = {
     AgentActivity: AgentActivityCard,
     BrowserSessionNotice,
+    CatalogQualityReport: CatalogQualityReportCard,
     PdfDelivery: PdfDeliveryCard,
     PdfDownloadLink: PdfDownloadLinkCard,
     ResearchPlan: ResearchPlanCard,
+    ServicesCatalog: ServicesCatalogCard,
 };
 
 /** Look up a generative UI component by name. */

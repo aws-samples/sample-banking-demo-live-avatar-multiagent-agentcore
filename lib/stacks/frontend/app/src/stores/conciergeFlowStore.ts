@@ -22,12 +22,28 @@ interface ConciergeFlowState {
     events: ToolEvent[];
     /** Currently running tool name (null when idle). */
     activeTool: string | null;
+    /** Wall-clock start of the current/last run (ms epoch), null before first run. */
+    runStartedAt: number | null;
+    /** Wall-clock end of the last completed run (ms epoch), null while running. */
+    runEndedAt: number | null;
+    /**
+     * Real spend committed via AgentCore Payments, or null when the run bought
+     * nothing / payments are disabled. Distinct from the report's estimated
+     * inference cost.
+     */
+    paymentSpend: { spent: string; budget: string; currency: string; sessions: number } | null;
 
     // actions
     runtimeStart(): void;
     runtimeEnd(): void;
     toolStart(toolUseId: string, name: string): void;
     toolEnd(toolUseId: string): void;
+    setPaymentSpend(spend: {
+        spent: string;
+        budget: string;
+        currency: string;
+        sessions: number;
+    }): void;
     reset(): void;
 }
 
@@ -37,9 +53,21 @@ export const useConciergeFlowStore = create<ConciergeFlowState>((set) => ({
     callCounts: {},
     events: [],
     activeTool: null,
+    runStartedAt: null,
+    runEndedAt: null,
+    paymentSpend: null,
 
-    runtimeStart: () => set({ runtimeActive: true }),
-    runtimeEnd: () => set({ runtimeActive: false, activeTool: null }),
+    setPaymentSpend: (spend) => set({ paymentSpend: spend }),
+
+    runtimeStart: () =>
+        set({
+            runtimeActive: true,
+            runStartedAt: Date.now(),
+            runEndedAt: null,
+            // Clear last run's spend so a new run never shows a stale figure.
+            paymentSpend: null,
+        }),
+    runtimeEnd: () => set({ runtimeActive: false, activeTool: null, runEndedAt: Date.now() }),
 
     toolStart: (toolUseId, name) =>
         set((s) => {
@@ -76,5 +104,8 @@ export const useConciergeFlowStore = create<ConciergeFlowState>((set) => ({
             callCounts: {},
             events: [],
             activeTool: null,
+            runStartedAt: null,
+            runEndedAt: null,
+            paymentSpend: null,
         }),
 }));

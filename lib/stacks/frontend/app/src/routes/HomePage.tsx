@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layers, X, ArrowRight } from "lucide-react";
-import { BRAND, EXPERIENCES } from "@/config/brand";
+import { BRAND, STAGE_EXPERIENCES, AUDIENCE_META } from "@/config/brand";
 
 /**
  * Landing page.
@@ -93,69 +93,91 @@ export default function HomePage(): JSX.Element {
                         Four stages, one platform
                     </h2>
                     <p className="mt-1 text-sm" style={{ color: "var(--app-text-secondary)" }}>
-                        Work through them in order, or jump to any stage.
+                        The first two stages are internal, for employees. The last two are external,
+                        for customers, with guardrails and DLP enforced.
                     </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-px sm:grid-cols-2">
-                    {EXPERIENCES.map(({ icon: Icon, label, description, service, to }, i) => (
-                        <div
-                            key={to}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => navigate(to)}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") navigate(to);
-                            }}
-                            className="group flex cursor-pointer flex-col gap-3 p-6 transition-colors"
-                            style={{
-                                background: "var(--app-surface)",
-                                outline: "1px solid var(--app-border)",
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.background = "var(--app-surface-raised)";
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.background = "var(--app-surface)";
-                            }}
-                        >
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <span
-                                        className="numeric text-[11px] tabular-nums"
-                                        style={{ color: "var(--app-text-muted)" }}
-                                    >
-                                        0{i + 1}
-                                    </span>
-                                    <Icon size={20} style={{ color: "var(--brand-accent)" }} />
+                    {STAGE_EXPERIENCES.map(
+                        ({ icon: Icon, label, description, service, to, audience }, i) => (
+                            <div
+                                key={to}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => navigate(to)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") navigate(to);
+                                }}
+                                className="group flex cursor-pointer flex-col gap-3 p-6 transition-colors"
+                                style={{
+                                    background: "var(--app-surface)",
+                                    outline: "1px solid var(--app-border)",
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = "var(--app-surface-raised)";
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = "var(--app-surface)";
+                                }}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span
+                                            className="numeric text-[11px] tabular-nums"
+                                            style={{ color: "var(--app-text-muted)" }}
+                                        >
+                                            0{i + 1}
+                                        </span>
+                                        <Icon size={20} style={{ color: "var(--brand-accent)" }} />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {/* Audience badge — the brief requires the
+                                        platform to serve internal and external
+                                        customers with the right guardrails, so
+                                        the boundary is stated on every card. */}
+                                        <span
+                                            className="numeric rounded-full px-2 py-0.5 text-[9.5px] tracking-[0.1em] uppercase"
+                                            style={{
+                                                color:
+                                                    audience === "internal"
+                                                        ? "var(--app-text-secondary)"
+                                                        : "var(--brand-accent)",
+                                                border: "1px solid var(--app-border)",
+                                            }}
+                                            title={AUDIENCE_META[audience].blurb}
+                                        >
+                                            {audience === "internal" ? "Internal" : "External"}
+                                        </span>
+                                        <ArrowRight
+                                            size={15}
+                                            className="opacity-0 transition-opacity group-hover:opacity-60"
+                                            style={{ color: "var(--app-text-secondary)" }}
+                                        />
+                                    </div>
                                 </div>
-                                <ArrowRight
-                                    size={15}
-                                    className="opacity-0 transition-opacity group-hover:opacity-60"
-                                    style={{ color: "var(--app-text-secondary)" }}
-                                />
-                            </div>
 
-                            <h3
-                                className="text-[15px] font-semibold"
-                                style={{ color: "var(--app-text)" }}
-                            >
-                                {label}
-                            </h3>
-                            <p
-                                className="flex-1 text-[13px] leading-relaxed"
-                                style={{ color: "var(--app-text-secondary)" }}
-                            >
-                                {description}
-                            </p>
-                            <p
-                                className="numeric text-[10px] tracking-[0.1em] uppercase"
-                                style={{ color: "var(--app-text-muted)" }}
-                            >
-                                {service}
-                            </p>
-                        </div>
-                    ))}
+                                <h3
+                                    className="text-[15px] font-semibold"
+                                    style={{ color: "var(--app-text)" }}
+                                >
+                                    {label}
+                                </h3>
+                                <p
+                                    className="flex-1 text-[13px] leading-relaxed"
+                                    style={{ color: "var(--app-text-secondary)" }}
+                                >
+                                    {description}
+                                </p>
+                                <p
+                                    className="numeric text-[10px] tracking-[0.1em] uppercase"
+                                    style={{ color: "var(--app-text-muted)" }}
+                                >
+                                    {service}
+                                </p>
+                            </div>
+                        )
+                    )}
                 </div>
 
                 <p className="mt-10 text-xs" style={{ color: "var(--app-text-muted)" }}>

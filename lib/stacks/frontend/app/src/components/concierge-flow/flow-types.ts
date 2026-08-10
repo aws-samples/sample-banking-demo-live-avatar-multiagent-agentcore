@@ -184,7 +184,7 @@ export const CORE_NODE_META: Record<
         label: "Bedrock Guardrails",
         rawName: "bedrock-guardrails",
         description:
-            "Content, topic, and word policy enforcement applied at the model invocation level for the chatbot mode. Blocks disallowed prompts and filters unsafe responses.",
+            "Content, topic, word, and PII/DLP policy enforcement applied at the model invocation level for the chatbot mode. Blocks off-topic prompts (e.g. politics), refuses confidential data such as employee salaries, and redacts sensitive identifiers (SSN, card, bank account) in both prompts and responses.",
     },
     knowledge_base: {
         label: "Knowledge Base",

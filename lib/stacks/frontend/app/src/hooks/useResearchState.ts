@@ -12,6 +12,7 @@ const EMPTY: ResearchSlot = {
         export: 0,
     },
     thinkingTraces: [],
+    toolsByAgent: {},
     isActive: false,
 };
 

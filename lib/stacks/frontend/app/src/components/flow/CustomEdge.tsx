@@ -2,6 +2,8 @@ import { BaseEdge, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
 
 interface CustomEdgeData {
     status: "pending" | "active" | "completed";
+    /** Downstream stage accent; the active edge is drawn in this color. */
+    accent?: string;
 }
 
 export function CustomEdge({
@@ -25,6 +27,7 @@ export function CustomEdge({
     });
 
     const status = data?.status ?? "pending";
+    const accent = data?.accent ?? "#4a9eff";
 
     if (status === "active") {
         const gradId = `agent-edge-grad-${id}`;
@@ -39,10 +42,21 @@ export function CustomEdge({
                         x2={targetX}
                         y2={targetY}
                     >
-                        <stop offset="0%" stopColor="#4a9eff" stopOpacity="0.25" />
-                        <stop offset="100%" stopColor="#4a9eff" stopOpacity="1" />
+                        <stop offset="0%" stopColor={accent} stopOpacity="0.2" />
+                        <stop offset="100%" stopColor={accent} stopOpacity="1" />
                     </linearGradient>
                 </defs>
+                {/* Soft glow underlay so the live edge reads as energized. */}
+                <BaseEdge
+                    id={`${id}-glow`}
+                    path={edgePath}
+                    style={{
+                        stroke: accent,
+                        strokeWidth: 6,
+                        opacity: 0.18,
+                        filter: "blur(2px)",
+                    }}
+                />
                 <BaseEdge
                     id={`${id}-base`}
                     path={edgePath}
@@ -58,7 +72,7 @@ export function CustomEdge({
                         strokeLinecap: "round",
                     }}
                 />
-                <circle r="3.5" fill="#4a9eff">
+                <circle r="3.5" fill={accent}>
                     <animateMotion dur="1.4s" repeatCount="indefinite" path={edgePath} />
                 </circle>
             </>

@@ -86,6 +86,18 @@ export const parseStrandsChunk: ChunkParser = (line, callback) => {
             return;
         }
 
+        // AgentCore Payments: actual spend committed for the run.
+        if (json.payment_spend) {
+            callback({
+                type: "payment_spend",
+                spent: String(json.payment_spend.spent ?? "0"),
+                budget: String(json.payment_spend.budget ?? "0"),
+                currency: String(json.payment_spend.currency ?? "USD"),
+                sessions: Number(json.payment_spend.sessions ?? 0),
+            });
+            return;
+        }
+
         // Text streaming (may include _agent field from orchestrator)
         if (typeof json.data === "string") {
             const event: { type: "text"; content: string; _agent?: AgentId } = {

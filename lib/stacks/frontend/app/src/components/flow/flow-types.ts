@@ -35,5 +35,11 @@ export interface AgentNodeData {
     status: NodeStatus;
     description: string;
     thinkingCount?: number;
+    /** Tool key → call count for this step, used to render AWS-service chips. */
+    toolCounts?: Record<string, number>;
+    /** Position in the pipeline, used to stagger the node entrance animation. */
+    orderIndex?: number;
+    /** Opens the step inspector. Absent for steps with nothing to inspect. */
+    onInspect?: () => void;
     [key: string]: unknown;
 }

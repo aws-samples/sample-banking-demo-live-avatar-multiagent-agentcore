@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { useModelSelector, AVAILABLE_MODELS } from "@/hooks/useModelSelector";
 import { resetKnowledgeBase } from "@/services/kbResetService";
-import { BRAND, EXPERIENCES } from "@/config/brand";
+import { BRAND, AUDIENCE_META, AUDIENCE_ORDER, experiencesByAudience } from "@/config/brand";
 import TopNavigation from "@cloudscape-design/components/top-navigation";
 import Modal from "@cloudscape-design/components/modal";
 import Popover from "@cloudscape-design/components/popover";
@@ -18,10 +18,13 @@ import Spinner from "@cloudscape-design/components/spinner";
 /**
  * Vertical navigation rail.
  *
- * A flat list of the four experiences. Each row carries a subtitle for
- * at-a-glance context and an info icon that opens a popover with the full
- * description on click, so the rail stays compact but every experience is
- * self-documenting.
+ * Experiences are grouped under "Internal · Employees" and
+ * "External · Customers" headers, because the brief requires the platform to
+ * serve both audiences with the appropriate guardrails — the grouping makes
+ * that boundary (and the guardrail posture that follows from it) visible.
+ * Each row carries a subtitle for at-a-glance context and an info icon that
+ * opens a popover with the full description on click, so the rail stays
+ * compact but every experience is self-documenting.
  */
 function NavRail(): JSX.Element {
     const location = useLocation();
@@ -35,85 +38,98 @@ function NavRail(): JSX.Element {
                 borderRight: "1px solid var(--app-border)",
             }}
         >
-            <p
-                className="numeric px-3 pb-2 text-[9.5px] tracking-[0.16em] uppercase"
-                style={{ color: "var(--app-text-muted)" }}
-            >
-                Experiences
-            </p>
-
-            {EXPERIENCES.map(({ to, label: itemLabel, subtitle, description, icon: Icon }) => {
-                const active = location.pathname === to;
-                return (
-                    <div key={to} className="group relative flex items-stretch">
-                        <NavLink
-                            to={to}
-                            aria-current={active ? "page" : undefined}
-                            className="relative flex min-w-0 flex-1 items-start gap-2.5 rounded-[4px] px-3 py-2 no-underline transition-colors"
-                            style={{
-                                background: active
-                                    ? "var(--app-nav-item-active-bg)"
-                                    : "transparent",
-                                color: active
-                                    ? "var(--app-nav-item-active-text)"
-                                    : "var(--app-nav-item-text)",
-                            }}
-                        >
-                            {/* Brass indicator on the active item. */}
-                            <span
-                                aria-hidden
-                                className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full transition-opacity"
-                                style={{
-                                    background: "var(--brand-accent)",
-                                    opacity: active ? 1 : 0,
-                                }}
-                            />
-                            <Icon
-                                size={15}
-                                className="mt-0.5 shrink-0"
-                                style={{ color: active ? "var(--brand-accent)" : undefined }}
-                            />
-                            <span className="flex min-w-0 flex-col leading-tight">
-                                <span className="text-[13px] font-medium">{itemLabel}</span>
-                                <span
-                                    className="truncate text-[10.5px]"
-                                    style={{ color: "var(--app-text-muted)" }}
+            {AUDIENCE_ORDER.flatMap((audience) => {
+                const items = experiencesByAudience(audience);
+                if (items.length === 0) return [];
+                const meta = AUDIENCE_META[audience];
+                return [
+                    <p
+                        key={`hdr-${audience}`}
+                        className="numeric px-3 pt-3 pb-2 text-[9.5px] tracking-[0.16em] uppercase first:pt-0"
+                        style={{ color: "var(--app-text-muted)" }}
+                        title={meta.blurb}
+                    >
+                        {meta.label}
+                    </p>,
+                    ...items.map(({ to, label: itemLabel, subtitle, description, icon: Icon }) => {
+                        const active = location.pathname === to;
+                        return (
+                            <div key={to} className="group relative flex items-stretch">
+                                <NavLink
+                                    to={to}
+                                    aria-current={active ? "page" : undefined}
+                                    className="relative flex min-w-0 flex-1 items-start gap-2.5 rounded-[4px] px-3 py-2 no-underline transition-colors"
+                                    style={{
+                                        background: active
+                                            ? "var(--app-nav-item-active-bg)"
+                                            : "transparent",
+                                        color: active
+                                            ? "var(--app-nav-item-active-text)"
+                                            : "var(--app-nav-item-text)",
+                                    }}
                                 >
-                                    {subtitle}
-                                </span>
-                            </span>
-                        </NavLink>
+                                    {/* Brass indicator on the active item. */}
+                                    <span
+                                        aria-hidden
+                                        className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full transition-opacity"
+                                        style={{
+                                            background: "var(--brand-accent)",
+                                            opacity: active ? 1 : 0,
+                                        }}
+                                    />
+                                    <Icon
+                                        size={15}
+                                        className="mt-0.5 shrink-0"
+                                        style={{
+                                            color: active ? "var(--brand-accent)" : undefined,
+                                        }}
+                                    />
+                                    <span className="flex min-w-0 flex-col leading-tight">
+                                        <span className="text-[13px] font-medium">{itemLabel}</span>
+                                        <span
+                                            className="truncate text-[10.5px]"
+                                            style={{ color: "var(--app-text-muted)" }}
+                                        >
+                                            {subtitle}
+                                        </span>
+                                    </span>
+                                </NavLink>
 
-                        {/* Info icon — click to open a popover with the full description.
+                                {/* Info icon — click to open a popover with the full description.
                             Sits outside the NavLink so clicking it doesn't route away. */}
-                        <span
-                            className="flex shrink-0 items-start pt-2.5 pr-1"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <Popover
-                                dismissButton={false}
-                                position="right"
-                                size="medium"
-                                triggerType="custom"
-                                header={itemLabel}
-                                content={
-                                    <Box variant="p" fontSize="body-s">
-                                        {description}
-                                    </Box>
-                                }
-                            >
-                                <button
-                                    type="button"
-                                    aria-label={`About ${itemLabel}`}
-                                    className="flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 opacity-60 transition-opacity hover:opacity-100"
-                                    style={{ color: "var(--app-text-muted)", cursor: "pointer" }}
+                                <span
+                                    className="flex shrink-0 items-start pt-2.5 pr-1"
+                                    onClick={(e) => e.stopPropagation()}
                                 >
-                                    <Info size={13} />
-                                </button>
-                            </Popover>
-                        </span>
-                    </div>
-                );
+                                    <Popover
+                                        dismissButton={false}
+                                        position="right"
+                                        size="medium"
+                                        triggerType="custom"
+                                        header={itemLabel}
+                                        content={
+                                            <Box variant="p" fontSize="body-s">
+                                                {description}
+                                            </Box>
+                                        }
+                                    >
+                                        <button
+                                            type="button"
+                                            aria-label={`About ${itemLabel}`}
+                                            className="flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 opacity-60 transition-opacity hover:opacity-100"
+                                            style={{
+                                                color: "var(--app-text-muted)",
+                                                cursor: "pointer",
+                                            }}
+                                        >
+                                            <Info size={13} />
+                                        </button>
+                                    </Popover>
+                                </span>
+                            </div>
+                        );
+                    }),
+                ];
             })}
 
             <div className="mt-auto px-3">

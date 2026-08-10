@@ -164,6 +164,13 @@ function ConciergeFlowInner() {
         const gatewayActive =
             !!activeTool && !["save_memory", "recall_memories"].includes(activeTool);
 
+        // Tool count is derived from the nodes actually rendered below. It used
+        // to be hardcoded ("16 tools") and had drifted out of step with both the
+        // diagram and the tool catalogue, so the label contradicted the picture.
+        const gatewayToolCount = TOOL_NAMES.filter(
+            (t) => !["save_memory", "recall_memories"].includes(t)
+        ).length;
+
         ns.push({
             id: "gateway",
             type: "conciergeNode",
@@ -171,7 +178,7 @@ function ConciergeFlowInner() {
             data: {
                 id: "gateway",
                 label: "AgentCore Gateway",
-                sublabel: "MCP · 16 tools",
+                sublabel: `MCP · ${gatewayToolCount} tools`,
                 icon: ICON("gateway"),
                 category: "core",
                 activity: gatewayActive ? "active" : anyToolCalled ? "completed" : "idle",

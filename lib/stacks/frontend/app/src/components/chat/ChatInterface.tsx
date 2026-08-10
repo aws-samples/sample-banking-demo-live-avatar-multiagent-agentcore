@@ -19,6 +19,7 @@ import ResizablePanelLayout, {
 import { submitFeedback } from "@/services/feedbackService";
 import { useAuth } from "react-oidc-context";
 import Alert from "@cloudscape-design/components/alert";
+import type { SamplePrompt } from "@/config/samplePrompts";
 
 interface ChatInterfaceProps {
     /** Render prop for custom welcome screen. Receives onExampleClick to wire up example cards. */
@@ -29,6 +30,8 @@ interface ChatInterfaceProps {
     title?: string;
     /** When true, shows the live AgentCore flow sidebar toggle in the header. */
     enableFlowSidebar?: boolean;
+    /** Sample prompts for the always-available picker in the input row. */
+    samplePrompts?: SamplePrompt[];
 }
 
 export default function ChatInterface({
@@ -36,6 +39,7 @@ export default function ChatInterface({
     mode,
     title,
     enableFlowSidebar,
+    samplePrompts,
 }: ChatInterfaceProps): JSX.Element {
     const [input, setInput] = useState("");
     const [flowOpen, setFlowOpen] = useState(false);
@@ -49,6 +53,7 @@ export default function ChatInterface({
         messages,
         sendMessage,
         executeResearchPlan,
+        exportCatalog,
         isLoading,
         error,
         clearError,
@@ -99,6 +104,7 @@ export default function ChatInterface({
                     message: messageContent,
                     feedbackType,
                     comment: comment || undefined,
+                    metadata: { source: "chat_rating" },
                 },
                 idToken
             );
@@ -118,13 +124,22 @@ export default function ChatInterface({
                 // Route to generic_research_execute when in generic_research mode
                 const modeOverride =
                     mode === "generic_research" ? "generic_research_execute" : undefined;
-                executeResearchPlan(plan, query, modeOverride);
+                executeResearchPlan(
+                    plan,
+                    query,
+                    modeOverride,
+                    payload.paymentBudgetUsd as string | undefined
+                );
+            } else if (action === "menu_export") {
+                // The reviewed catalog — including edits and applied A/B
+                // variants — continues into the export phases.
+                exportCatalog(payload.catalog as Record<string, unknown>);
             } else if (action === "start_over") {
                 startNewChat();
                 setInput("");
             }
         },
-        [executeResearchPlan, startNewChat, mode]
+        [executeResearchPlan, exportCatalog, startNewChat, mode]
     );
 
     const handleNewChat = (): void => {
@@ -217,6 +232,8 @@ export default function ChatInterface({
                                     setInput={setInput}
                                     handleSubmit={handleSubmit}
                                     isLoading={isLoading}
+                                    samplePrompts={samplePrompts}
+                                    onPickSample={handleExampleClick}
                                 />
                             </div>
                         </div>
@@ -243,6 +260,8 @@ export default function ChatInterface({
                                     setInput={setInput}
                                     handleSubmit={handleSubmit}
                                     isLoading={isLoading}
+                                    samplePrompts={samplePrompts}
+                                    onPickSample={handleExampleClick}
                                 />
                             </div>
                         </div>

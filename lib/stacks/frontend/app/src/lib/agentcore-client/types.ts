@@ -54,6 +54,18 @@ export type StreamEvent =
      * forever on the failed phase instead of reporting the error.
      */
     | { type: "stream_error"; message: string }
+    /**
+     * Real spend committed via AgentCore Payments for this run. Distinct from
+     * the run report's estimated inference cost — this figure comes from the
+     * payment session, not from per-unit assumptions.
+     */
+    | {
+          type: "payment_spend";
+          spent: string;
+          budget: string;
+          currency: string;
+          sessions: number;
+      }
     | { type: "_ui"; component: string; props: Record<string, unknown> };
 
 /** Callback invoked with each stream event */

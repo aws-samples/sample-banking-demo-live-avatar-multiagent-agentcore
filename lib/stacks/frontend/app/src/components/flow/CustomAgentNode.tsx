@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import type { AgentNodeData } from "./flow-types";
 import { AGENT_COLORS, AGENT_ICONS } from "./flow-types";
 import type { AgentId } from "@/lib/agentcore-client/types";
+import { ServiceChips } from "@/components/common/ServiceChips";
 
 type AgentNode = Node<AgentNodeData>;
 
@@ -39,6 +40,8 @@ export function CustomAgentNode({ data }: NodeProps<AgentNode>) {
     const thinkingCount = (data.thinkingCount as number) ?? 0;
     const active = data.status === "active";
     const completed = data.status === "completed";
+    const toolCounts = data.toolCounts ?? {};
+    const tools = Object.keys(toolCounts);
 
     return (
         <>
@@ -49,9 +52,13 @@ export function CustomAgentNode({ data }: NodeProps<AgentNode>) {
             />
 
             <motion.div
-                initial={{ opacity: 0, scale: 0.85 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.25 }}
+                initial={{ opacity: 0, y: 12, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{
+                    duration: 0.3,
+                    delay: Math.min(((data.orderIndex as number) ?? 0) * 0.08, 0.6),
+                    ease: "easeOut",
+                }}
                 className="relative min-w-[210px] rounded-xl border px-3.5 py-3 backdrop-blur-sm transition-all duration-300"
                 style={{
                     borderColor: active
@@ -128,6 +135,15 @@ export function CustomAgentNode({ data }: NodeProps<AgentNode>) {
                         <StatusBadge status={data.status} accent={accent} />
                     </div>
                 </div>
+
+                {/* AWS services this step actually exercised. Only rendered once
+                    the step has called something, so the diagram stays quiet
+                    until there is real activity to show. */}
+                {tools.length > 0 && (
+                    <div className="mt-2 border-t border-slate-700/50 pt-2">
+                        <ServiceChips tools={tools} onClick={data.onInspect} />
+                    </div>
+                )}
             </motion.div>
 
             <Handle

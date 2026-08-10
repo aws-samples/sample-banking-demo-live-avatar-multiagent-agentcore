@@ -9,13 +9,14 @@ import { useChatStore } from "@/stores/chatStore";
 import type { ResearchAction } from "@/stores/chatStore";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
+import { normalizeToolName } from "@/components/concierge-flow/flow-types";
 
 export type { ResearchAction };
 
 export interface UseChatEngineOptions {
     onResearchEvent?: (action: ResearchAction) => void;
     /** Agent mode sent in the payload */
-    mode?: "research" | "chatbot" | "menu" | "generic_research" | "archive_chat";
+    mode?: "research" | "chatbot" | "menu" | "generic_research" | "archive_chat" | "menu_export";
 }
 
 export interface UseChatEngineReturn {
@@ -24,8 +25,12 @@ export interface UseChatEngineReturn {
     executeResearchPlan: (
         plan: Record<string, unknown>,
         query: string,
-        modeOverride?: string
+        modeOverride?: string,
+        /** Approved spend ceiling (USD) for paid premium data, if any. */
+        paymentBudgetUsd?: string
     ) => Promise<void>;
+    /** Continue the catalog pipeline with the user-approved catalog. */
+    exportCatalog: (catalog: Record<string, unknown>) => Promise<void>;
     isLoading: boolean;
     error: string | null;
     clearError: () => void;
@@ -200,6 +205,16 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                 useConciergeFlowStore
                                     .getState()
                                     .toolStart(event.toolUseId, event.name);
+                                // Attribute the call to whichever pipeline agent
+                                // is currently running, so each node in the flow
+                                // diagram can show the services *it* exercised.
+                                if (activePhaseRef) {
+                                    researchDispatch({
+                                        type: "TOOL_CALL",
+                                        agent: activePhaseRef.agent,
+                                        tool: normalizeToolName(event.name),
+                                    });
+                                }
                                 updateMessage();
                                 break;
                             }
@@ -250,6 +265,41 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                         .setScreenshot(p.image as string);
                                     break;
                                 }
+                                // Services Catalog: populate the store (the side
+                                // panel and the avatar read from it) and then
+                                // FALL THROUGH so the review card also renders
+                                // inline in the chat. The interactive controls
+                                // live on that card, not in the side panel.
+                                if (event.component === "ServicesCatalog") {
+                                    const p = event.props as {
+                                        sections?: {
+                                            name?: string;
+                                            items?: Record<string, unknown>[];
+                                        }[];
+                                    };
+                                    const mapped = (p.sections ?? []).map((sec, si) => ({
+                                        category: sec.name ?? `Section ${si + 1}`,
+                                        items: (sec.items ?? []).map((it, ii) => ({
+                                            id: `${si}-${ii}`,
+                                            name: String(it.name ?? ""),
+                                            description: String(it.description ?? ""),
+                                            price: String(it.price ?? ""),
+                                            category: sec.name ?? `Section ${si + 1}`,
+                                            dietary: Array.isArray(it.dietary)
+                                                ? (it.dietary as string[])
+                                                : undefined,
+                                            imageUrl:
+                                                (it.image_url as string) ??
+                                                (it.imageUrl as string) ??
+                                                undefined,
+                                        })),
+                                    }));
+                                    useChatStore
+                                        .getState()
+                                        .dispatchMenu({ type: "SET_SECTIONS", sections: mapped });
+                                    // No `break` — the generic handler below
+                                    // pushes it as an inline chat segment.
+                                }
                                 const uiKey = `ui-${(event.props.agent as string) || event.component}`;
                                 const existingIdx = segments.findIndex(
                                     (s) => s.type === "ui" && s.key === uiKey
@@ -266,6 +316,15 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                     segments.push(uiSeg);
                                 }
                                 updateMessage();
+                                break;
+                            }
+                            case "payment_spend": {
+                                useConciergeFlowStore.getState().setPaymentSpend({
+                                    spent: event.spent,
+                                    budget: event.budget,
+                                    currency: event.currency,
+                                    sessions: event.sessions,
+                                });
                                 break;
                             }
                             case "agent_phase": {
@@ -402,21 +461,55 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
         async (
             plan: Record<string, unknown>,
             query: string,
-            modeOverride?: string
+            modeOverride?: string,
+            paymentBudgetUsd?: string
         ): Promise<void> => {
             if (!client) return;
 
             useChatStore.getState().setError(storeKey, null);
 
-            // Add a user message showing the plan was approved
+            // Approving the plan is also the payment authorization — the spend
+            // ceiling the user accepted travels with the approval, so the
+            // backend never has to infer a budget.
             const approvalMessage: Message = {
                 role: "user",
-                content: "Approved research plan. Starting execution...",
+                content: paymentBudgetUsd
+                    ? `Approved research plan (paid data budget $${paymentBudgetUsd}). Starting execution...`
+                    : "Approved research plan. Starting execution...",
                 timestamp: new Date().toISOString(),
             };
 
             useChatStore.getState().setMessages(storeKey, (prev) => [...prev, approvalMessage]);
-            await _streamResponse(query, modeOverride || "research_execute", { plan });
+            const extra: Record<string, unknown> = { plan };
+            if (paymentBudgetUsd) {
+                extra.payment_budget_usd = paymentBudgetUsd;
+            }
+            await _streamResponse(query, modeOverride || "research_execute", extra);
+        },
+        [client, _streamResponse, storeKey]
+    );
+
+    /**
+     * Continue the Services Catalog pipeline after the user reviewed it.
+     *
+     * The catalog passed here is whatever the user approved — including any
+     * descriptions they edited or A/B variants they applied — so the exported
+     * PDF and website match exactly what they signed off on.
+     */
+    const exportCatalog = useCallback(
+        async (catalog: Record<string, unknown>): Promise<void> => {
+            if (!client) return;
+            useChatStore.getState().setError(storeKey, null);
+
+            const approvalMessage: Message = {
+                role: "user",
+                content: "Approved the services catalog. Exporting...",
+                timestamp: new Date().toISOString(),
+            };
+            useChatStore.getState().setMessages(storeKey, (prev) => [...prev, approvalMessage]);
+            await _streamResponse("Export the approved services catalog.", "menu_export", {
+                catalog,
+            });
         },
         [client, _streamResponse, storeKey]
     );
@@ -435,6 +528,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
         messages,
         sendMessage,
         executeResearchPlan,
+        exportCatalog,
         isLoading,
         error,
         clearError,
