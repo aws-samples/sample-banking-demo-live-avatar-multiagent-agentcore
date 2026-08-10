@@ -82,30 +82,42 @@ def _sanitize_pipelines(pipelines) -> list[str]:
     return cleaned
 
 
-def _build_filter(user_id: str, pipelines: list[str]) -> dict | None:
+def _build_filter(user_id: str, pipelines: list[str], report_ids: list[str] | None = None) -> dict | None:
     """Compose the Bedrock vectorSearchConfiguration filter.
 
-    Shapes:
-    - Neither: None (returns all docs).
-    - user_id only: equals on user_id.
-    - pipelines only (len 1): equals on pipeline.
-    - pipelines only (len 2+): in on pipeline.
-    - Both: andAll of user_id equals + pipeline equals/in.
-    """
-    user_clause: dict | None = None
-    if user_id:
-        user_clause = {"equals": {"key": "user_id", "value": user_id}}
+    Clauses are ANDed together when more than one applies:
+    - user_id:    equals (tenant isolation)
+    - pipelines:  equals for one, `in` for several (logical corpus)
+    - report_ids: equals for one, `in` for several (pin to specific run(s))
 
-    pipeline_clause: dict | None = None
+    `report_ids` is what pins the AI Assistant to a single research run. Note
+    the S3 Vectors caveat: a filter clause is only evaluated against documents
+    that HAVE the key, so documents ingested before `report_id` was stamped pass
+    through it. They must be re-ingested for the pin to be airtight.
+    """
+    clauses: list[dict] = []
+
+    if user_id:
+        clauses.append({"equals": {"key": "user_id", "value": user_id}})
+
     if pipelines:
         if len(pipelines) == 1:
-            pipeline_clause = {"equals": {"key": "pipeline", "value": pipelines[0]}}
+            clauses.append({"equals": {"key": "pipeline", "value": pipelines[0]}})
         else:
-            pipeline_clause = {"in": {"key": "pipeline", "value": pipelines}}
+            clauses.append({"in": {"key": "pipeline", "value": pipelines}})
 
-    if user_clause and pipeline_clause:
-        return {"andAll": [user_clause, pipeline_clause]}
-    return user_clause or pipeline_clause
+    cleaned_reports = [r.strip() for r in (report_ids or []) if isinstance(r, str) and r.strip()]
+    if cleaned_reports:
+        if len(cleaned_reports) == 1:
+            clauses.append({"equals": {"key": "report_id", "value": cleaned_reports[0]}})
+        else:
+            clauses.append({"in": {"key": "report_id", "value": cleaned_reports}})
+
+    if not clauses:
+        return None
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"andAll": clauses}
 
 
 def _empty_result(query: str, reason: str) -> str:
@@ -131,6 +143,7 @@ def _retrieve_and_generate(
     max_results: int,
     user_id: str = "",
     pipelines: list[str] | None = None,
+    report_ids: list[str] | None = None,
 ) -> str:
     """Query Bedrock Knowledge Base using Retrieve.
 
@@ -163,7 +176,7 @@ def _retrieve_and_generate(
     # write sidecars without user_id (see gateway/tools/kb_ingest/handler.py),
     # but pre-existing / manually-uploaded docs may still leak.
     # See docs/kb-isolation.md for mitigation runbook.
-    composed_filter = _build_filter(user_id, pipelines)
+    composed_filter = _build_filter(user_id, pipelines, report_ids)
     if composed_filter:
         vector_config["filter"] = composed_filter
     else:
@@ -289,6 +302,12 @@ def handler(event, context):
             max_results = event.get("max_results", 5)
             user_id = event.get("user_id", "")
             pipelines = event.get("pipelines", [])
+            # Optional pin to specific research run(s). Injected by
+            # PipelineScopeHook, never chosen by the model.
+            report_ids = event.get("report_ids", []) or []
+            if not isinstance(report_ids, list):
+                logger.warning("kb_search: report_ids must be a list, got %r", type(report_ids).__name__)
+                report_ids = []
             archive_mode = bool(event.get("archive_mode", False))
 
             if not query:
@@ -317,7 +336,9 @@ def handler(event, context):
                 )
                 return {"content": [{"type": "text", "text": _empty_result(query, "caller-scope-required")}]}
 
-            result = _retrieve_and_generate(knowledge_base_id, query, max_results, user_id, pipelines)
+            result = _retrieve_and_generate(
+                knowledge_base_id, query, max_results, user_id, pipelines, report_ids
+            )
             return {"content": [{"type": "text", "text": result}]}
         else:
             return {"error": f"This Lambda only supports 'kb_search', received: {tool_name}"}

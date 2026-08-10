@@ -1,5 +1,33 @@
 # Knowledge Base Isolation — Invariants, Threat Model, and Runbook
 
+> **⚠️ One-time migration required: `report_id` run pinning**
+>
+> The AI Assistant is now pinned to a single deep-research run so its catalog
+> cannot be grounded in a semantic blend of every past run (two runs can
+> recommend contradictory rates; mixing them produced a catalog that read as one
+> coherent report but was not).
+>
+> Pinning works by a new `report_id` metadata attribute, written by
+> `pdf_generator` into the PDF's S3 metadata and copied by `kb_ingest` into the
+> `.metadata.json` sidecar.
+>
+> **Documents ingested before this change carry no `report_id`.** Because S3
+> Vectors only evaluates a filter clause against documents that *have* the key,
+> those documents **pass** a `report_id` filter rather than being excluded by it
+> — exactly the pass-through behaviour described in the threat model below. Until
+> they are re-ingested, older runs can still bleed into the catalog.
+>
+> **Runbook — run once after deploying this change:**
+>
+> 1. Confirm the current reports are expendable (all demo data is synthetic).
+> 2. Reset the Knowledge Base via the in-app control, or
+>    `POST {FEEDBACK_API_URL}kb-reset` with a Cognito bearer token.
+> 3. Re-run the Deep Research Agent. The new PDF is stamped with a `report_id`,
+>    and every subsequent run is pinnable.
+>
+> `kb_ingest` logs a warning naming any object it ingests without a
+> `report_id`, so a missed migration is visible in CloudWatch rather than silent.
+
 The demo advertises three logical Knowledge Base views (`strategy_research`,
 `market_research`, `services`) sharing a single physical S3-Vectors-backed Bedrock
 Knowledge Base, with per-user tenant isolation layered on top. That

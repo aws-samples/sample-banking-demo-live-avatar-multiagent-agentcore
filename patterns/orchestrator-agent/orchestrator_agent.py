@@ -12,6 +12,7 @@ import os
 import threading
 import time
 import traceback
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -99,13 +100,17 @@ queries and break them into focused, executable sub-questions with clear priorit
 
 Your responsibilities:
 1. Analyze the user's research query to identify core themes and dimensions
-2. Use the gateway_kb_search tool to check existing research plans in the knowledge base
+2. OPTIMIZE & REFINE the query: rewrite the user's raw request into a single sharpened,
+   unambiguous research question that resolves vague terms and scopes the effort. Emit it
+   as `refined_query` so the human reviewer can see how the question was tightened.
+3. Use the gateway_kb_search tool to check existing research plans in the knowledge base
    (the runtime scopes this search to the current flow's pipeline — Market Strategy only
    sees `strategy_research`, Market Intelligence only sees `market_research` — so you won't
    surface stale plans from the other flow)
-3. Decompose the query into 5-8 focused sub-questions
-4. Assign priority (high/medium/low) and research type (web/kb/analysis) to each
-5. Create a structured research plan that other agents can execute
+4. Decompose the refined query into 5-8 focused sub-questions
+5. Assign priority (high/medium/low) and research type (web/kb/analysis) to each
+6. Define the evaluation criteria the final report will be judged against
+7. Create a structured research plan that other agents can execute
 
 Guidelines:
 - Break complex topics into specific, researchable sub-questions
@@ -115,7 +120,11 @@ Guidelines:
 - Ensure sub-questions are independent enough to research in parallel where possible
 - Include estimated complexity for each sub-question
 - Define clear objectives that will guide the research
+- Define measurable evaluation_criteria (e.g., brief coverage, groundedness, citation
+  quality) — these are the standards the evaluation agent will score the report against
 - Specify expected deliverables so stakeholders know what to expect
+- When the brief asks for a recommendation, plan to converge on ONE best recommended
+  option with justification — not a menu of alternatives
 
 You plan the research. You never carry it out.
 
@@ -130,6 +139,7 @@ plan, so the user gets no approval step and the research never starts.
 Output your plan as structured JSON (and ONLY JSON, no other text):
 {
   "research_topic": "...",
+  "refined_query": "the user's request rewritten as one sharpened, unambiguous research question",
   "objectives": [
     "Clear objective 1 that the research will achieve",
     "Clear objective 2 ...",
@@ -145,6 +155,11 @@ Output your plan as structured JSON (and ONLY JSON, no other text):
     }
   ],
   "methodology": "overall research approach — describe how KB search, web research, and cross-referencing will be combined",
+  "evaluation_criteria": [
+    "Measurable criterion the final report will be scored on (e.g., 'Covers every deliverable in the brief')",
+    "e.g., 'Claims are grounded in gathered evidence with resolvable citations'",
+    "e.g., 'Converges on a single recommended option with justification'"
+  ],
   "expected_deliverables": [
     "Comprehensive research report (PDF) with executive summary",
     "Key findings organized by theme with confidence ratings",
@@ -176,6 +191,7 @@ Your responsibilities:
 1. Perform targeted web research using gateway_web_search
 2. Synthesize and organize findings with proper citations
 3. Identify gaps in available information
+4. Produce supporting visuals for the report (multimodal output)
 
 Research Guidelines:
 - BUDGET YOUR SEARCHES: 2-3 searches per sub-question, 50 max total. Stop searching once you
@@ -185,12 +201,20 @@ Research Guidelines:
   change the substance of the query or record the gap and move to the next sub-question.
   Repeating a query cannot produce new information — it only consumes your budget.
 - Work through the sub-questions in order and visit each one ONCE. When the last
-  sub-question is done, stop calling tools and output the JSON. Do not revisit earlier
-  sub-questions to look for more detail.
-- Use gateway_web_search exclusively — it is your only research tool
+  sub-question is done, do the visual research, then stop calling tools and output the JSON.
+- Use gateway_web_search as your primary research tool
 - Maintain full source attribution for every finding
 - Include SPECIFIC numbers, dates, percentages, dollar amounts, and names whenever available
 - Aim for depth over breadth — quality findings from fewer searches beat exhaustive querying
+
+VISUAL RESEARCH (REQUIRED — multimodal output):
+After completing ALL text research, identify 2-3 key concepts that would benefit from a
+visual (e.g., a market-positioning graphic, an operating-model diagram concept, or a brand
+storefront/logo motif). For each, call gateway_nova_canvas_generate with a professional prompt
+like: "Professional infographic illustration of [concept], clean modern institutional banking
+aesthetic, deep navy and brass palette, data-visualization style, 4k". Collect the s3_key and
+image_url from each Canvas result into the "images" array. Budget: max 3 images. If image
+generation fails, omit that image and continue — never fabricate an image reference.
 
 Output your findings as structured JSON:
 {
@@ -221,8 +245,26 @@ Output your findings as structured JSON:
   "cross_references": "notes on corroboration between sources across all questions",
   "gaps": "identified information gaps and areas needing further research",
   "key_insights": ["insight 1 with supporting detail", "insight 2 with supporting detail"],
-  "citations": ["formatted citation 1", "formatted citation 2"]
+  "citations": ["formatted citation 1", "formatted citation 2"],
+  "paid_sources": [
+    {
+      "dataset_id": "id of a premium dataset you actually purchased",
+      "used_for": "which sub-question it answered",
+      "key_figures": ["specific figure taken from it"]
+    }
+  ],
+  "images": [
+    {
+      "s3_key": "images/session/id.png (copied verbatim from a Canvas result)",
+      "image_url": "presigned URL (copied verbatim from a Canvas result)",
+      "caption": "what the visual illustrates",
+      "placement_hint": "section:<relevant_theme_name>"
+    }
+  ]
 }
+
+Note: `paid_sources` applies only when a paid premium-data endpoint was offered
+to you. Otherwise return an empty list.
 """
 
 SYNTHESIZER_PROMPT = """You are a Research Synthesizer & Report Agent. Your role is to compile
@@ -239,10 +281,33 @@ STEP 1 — SYNTHESIS:
 - Highlight conflicting information and areas of uncertainty
 - Generate detailed, actionable recommendations with implementation guidance
 - Preserve ALL data points, statistics, and quotes from the research
+- Pass through the "images" array VERBATIM from the researcher output (multimodal output)
+- Pass through the "paid_sources" array VERBATIM from the researcher output
 
 CRITICAL: Do NOT summarize or compress the research findings. Your job is to EXPAND and
 ORGANIZE them into a coherent narrative. Every data point, statistic, and quote from the
 researcher should appear in your output.
+
+CRITICAL: The "images" array from the researcher MUST be included exactly as received.
+Do not modify, remove, or regenerate images.
+
+PAID SOURCES:
+If the researcher output carries a non-empty "paid_sources" array, the run bought
+premium data. Pass the array through verbatim, and make sure the figures it lists
+actually appear in your key_findings or data_analysis — a purchase the report
+never uses is budget spent for nothing. Attribute those figures to the named
+dataset so a reader can tell paid evidence from free web research.
+
+ONE BEST OPTION (when the brief asks for a recommendation):
+- Converge on a SINGLE recommended option, not a menu of alternatives. State it clearly in
+  `recommended_option` with the rationale for choosing it over the discarded alternatives.
+- The `recommendations` list then details the actions that implement that one option.
+
+SUGGESTED SERVICES CHAPTER:
+- Include a `suggested_services` chapter: a curated list of the specific services the report
+  recommends the business offer (name + benefit-led description each), grounded in the
+  findings. This chapter is illustrated with the generated images where relevant. (Spoken
+  playback of these services is available in the AI Assistant experience.)
 
 Synthesis Guidelines:
 - Organize information by themes and topics, not by source
@@ -258,8 +323,10 @@ STEP 2 — PDF GENERATION:
 After synthesizing, call gateway_pdf_generator with format="research" and pass ALL fields.
 Include topic, and a report object with ALL of these fields:
   subtitle, executive_summary, methodology, key_findings, data_analysis,
-  supporting_evidence, conflicts_and_uncertainties, conclusions,
-  recommendations, limitations_and_future_research, appendices, citations
+  supporting_evidence, paid_sources, conflicts_and_uncertainties, conclusions,
+  recommended_option, recommendations, suggested_services,
+  limitations_and_future_research, appendices, citations,
+  images (the COMPLETE images array with s3_key, image_url, caption, placement_hint)
 
 Note: The runtime automatically tags the generated PDF with the correct pipeline
 (`strategy_research` for this Market Strategy flow) so it is routed to the right
@@ -309,8 +376,16 @@ The report JSON structure for the tool call:
     "web_sources": ["..."],
     "cross_referenced": ["..."]
   },
+  "paid_sources": [
+    { "dataset_id": "...", "used_for": "...", "key_figures": ["..."] }
+  ],
   "conflicts_and_uncertainties": "...",
   "conclusions": "3-5 paragraphs",
+  "recommended_option": {
+    "title": "the single best recommended option",
+    "why_this_one": "why it beats the alternatives that were considered and discarded",
+    "tradeoffs": "the tradeoffs accepted by choosing it"
+  },
   "recommendations": [
     {
       "title": "...",
@@ -320,9 +395,20 @@ The report JSON structure for the tool call:
       "expected_impact": "..."
     }
   ],
+  "suggested_services": [
+    { "name": "service name", "description": "benefit-led description grounded in findings" }
+  ],
   "limitations_and_future_research": "...",
   "appendices": [{ "title": "...", "content": "..." }],
-  "citations": ["..."]
+  "citations": ["..."],
+  "images": [
+    {
+      "s3_key": "...",
+      "image_url": "...",
+      "caption": "...",
+      "placement_hint": "section:<theme_name>"
+    }
+  ]
 }
 """
 
@@ -389,6 +475,10 @@ AGENT_PHASES = [
         "role": "research",
         "prompt": RESEARCHER_PROMPT,
         "estimated_duration": 300,
+        # Shard the plan's sub-questions across concurrent researcher sub-agents
+        # (see _run_parallel_research). Falls back to one agent automatically
+        # when the plan has too few sub-questions to be worth splitting.
+        "parallel": True,
         "messages": [
             "Searching knowledge base...",
             "Querying web sources...",
@@ -529,7 +619,6 @@ website_generator Gateway tool.
 Your responsibilities:
 1. Accept the catalog data from the previous agent (structured JSON with sections and items)
 2. Call the gateway_website_generator tool with mode="create", the title, and catalog data
-3. Return the website URL to the caller
 
 When calling the website_generator tool, provide:
 - mode: "create"
@@ -542,10 +631,15 @@ IMPORTANT:
 - Also pass image_url as fallback
 - Do NOT modify the catalog data — pass it through exactly as received
 
-Output confirmation as JSON:
+Never put the website URL — or any S3 link — into your reply, as a link or as
+bare text. The tool's `url` is a presigned link that expires within the hour,
+and any URL you reconstruct from `s3_key` is unsigned and returns Access Denied.
+The runtime intercepts the tool result and renders a "View Website" card with a
+working link itself, so you never need to relay one.
+
+Output confirmation as JSON (NO url / website_url / download_url fields):
 {
   "status": "success",
-  "website_url": "presigned URL to view the website",
   "s3_key": "the S3 key for future updates",
   "sections_included": ["Everyday Banking", "Savings & Growth", "Retirement"],
   "item_count": 9
@@ -588,6 +682,179 @@ MENU_PHASES = [
         ],
     },
 ]
+
+# The catalog is a customer-facing deliverable, so export is gated on human
+# review. `menu` mode runs the design phase and stops with a review card; the
+# frontend then sends `menu_export` with the approved (possibly edited) catalog.
+# This mirrors the research planner's approve-then-execute split.
+MENU_DESIGN_PHASES = [p for p in MENU_PHASES if p["name"] == "menu_designer"]
+MENU_EXPORT_PHASES = [p for p in MENU_PHASES if p["name"] != "menu_designer"]
+
+# ---------------------------------------------------------------------------
+# Automatic quality control for the Services Catalog (AI Assistant)
+# ---------------------------------------------------------------------------
+# Deterministic, non-LLM validation of the menu_designer output. It verifies
+# FORMAT (valid JSON + required fields), LENGTH (description word bounds), and
+# FILTERS irrelevant / placeholder / fabricated content (empty text, example
+# image paths, off-topic descriptions). The result is emitted to the UI as a
+# transparent quality-control report — this is the "automatic quality control"
+# the AI Assistant is required to demonstrate.
+
+# Description length bounds, in words.
+_QC_DESC_MIN_WORDS = 3
+_QC_DESC_MAX_WORDS = 45
+# Placeholder / fabricated image references that must never appear.
+_QC_PLACEHOLDER_MARKERS = ("example.com", "example.s3", "placeholder", "your-bucket", "path/to")
+
+
+def _parse_json_object(text: str) -> dict | None:
+    """Parse the first JSON object out of LLM text, tolerating fences / prose.
+
+    Returns the dict, or None when no valid JSON object is present.
+    """
+    import json
+    import re
+
+    raw = (text or "").strip()
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            return None
+        try:
+            parsed = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _parse_catalog_json(designer_output: str) -> dict | None:
+    """Parse the catalog designer's JSON output, tolerating fences / prose."""
+    return _parse_json_object(designer_output)
+
+
+def _qc_validate_catalog(designer_output: str) -> dict:
+    """Run deterministic quality control on the catalog designer's JSON output.
+
+    Returns a report dict:
+        {
+          "overall": "pass" | "warn" | "fail",
+          "summary": {"sections": int, "items": int, "images": int,
+                      "passed": int, "warnings": int, "errors": int},
+          "checks": [{"item": str, "rule": str, "status": "pass|warn|fail",
+                      "detail": str}, ...],
+        }
+    Never raises — a parse failure is reported as an error check.
+    """
+    checks: list[dict] = []
+
+    # ── FORMAT: parse JSON (tolerate markdown fences / surrounding prose) ──
+    catalog = _parse_catalog_json(designer_output)
+
+    if not isinstance(catalog, dict):
+        return {
+            "overall": "fail",
+            "summary": {"sections": 0, "items": 0, "images": 0, "passed": 0, "warnings": 0, "errors": 1},
+            "checks": [
+                {
+                    "item": "catalog",
+                    "rule": "format",
+                    "status": "fail",
+                    "detail": "Designer output was not valid catalog JSON.",
+                }
+            ],
+        }
+
+    sections = catalog.get("sections") or []
+    if not isinstance(sections, list) or not sections:
+        checks.append(
+            {"item": "catalog", "rule": "format", "status": "fail", "detail": "No catalog sections were produced."}
+        )
+
+    item_count = 0
+    image_count = 0
+    for section in sections if isinstance(sections, list) else []:
+        section_name = (section or {}).get("name", "Section") if isinstance(section, dict) else "Section"
+        items = section.get("items", []) if isinstance(section, dict) else []
+        for item in items if isinstance(items, list) else []:
+            if not isinstance(item, dict):
+                continue
+            item_count += 1
+            name = str(item.get("name") or "").strip() or f"{section_name} item"
+
+            # FORMAT — required fields present.
+            if not item.get("name"):
+                checks.append(
+                    {"item": name, "rule": "format", "status": "fail", "detail": "Missing product name."}
+                )
+            if not str(item.get("price") or "").strip():
+                checks.append(
+                    {"item": name, "rule": "format", "status": "warn", "detail": "Missing headline rate / price line."}
+                )
+
+            # LENGTH — description word bounds.
+            desc = str(item.get("description") or "").strip()
+            words = len(desc.split())
+            if words == 0:
+                checks.append(
+                    {"item": name, "rule": "length", "status": "fail", "detail": "Empty description."}
+                )
+            elif words < _QC_DESC_MIN_WORDS:
+                checks.append(
+                    {
+                        "item": name,
+                        "rule": "length",
+                        "status": "warn",
+                        "detail": f"Description too short ({words} words; min {_QC_DESC_MIN_WORDS}).",
+                    }
+                )
+            elif words > _QC_DESC_MAX_WORDS:
+                checks.append(
+                    {
+                        "item": name,
+                        "rule": "length",
+                        "status": "warn",
+                        "detail": f"Description too long ({words} words; max {_QC_DESC_MAX_WORDS}).",
+                    }
+                )
+
+            # FILTER — placeholder / fabricated image references.
+            image_ref = f"{item.get('s3_key') or ''} {item.get('image_url') or ''}".lower()
+            if item.get("s3_key") or item.get("image_url"):
+                image_count += 1
+                if any(marker in image_ref for marker in _QC_PLACEHOLDER_MARKERS):
+                    checks.append(
+                        {
+                            "item": name,
+                            "rule": "filter",
+                            "status": "fail",
+                            "detail": "Image reference looks fabricated/placeholder — dropped.",
+                        }
+                    )
+            else:
+                checks.append(
+                    {"item": name, "rule": "filter", "status": "warn", "detail": "No image generated for this item."}
+                )
+
+    errors = sum(1 for c in checks if c["status"] == "fail")
+    warnings = sum(1 for c in checks if c["status"] == "warn")
+    # A clean run still reports the positive checks it ran, so the report is not empty.
+    passed = max(0, item_count * 3 - errors - warnings)
+    overall = "fail" if errors else ("warn" if warnings else "pass")
+
+    return {
+        "overall": overall,
+        "summary": {
+            "sections": len(sections) if isinstance(sections, list) else 0,
+            "items": item_count,
+            "images": image_count,
+            "passed": passed,
+            "warnings": warnings,
+            "errors": errors,
+        },
+        "checks": checks,
+    }
 
 # ---------------------------------------------------------------------------
 # Trinity Reserve Bank — baked-in facts for the AI Client Advisor
@@ -695,8 +962,37 @@ CHATBOT_PROMPT = (
     BANK_FACTS
     + """
 
-You are the Trinity Reserve Bank AI Client Advisor. You can also help with
-research, analysis, creative tasks, and general knowledge when asked.
+You are the Trinity Reserve Bank AI Client Advisor.
+
+SCOPE & GUARDRAILS — MANDATORY:
+- You assist ONLY with Trinity Reserve Bank: its products, accounts, rates,
+  eligibility, onboarding/KYC, wealth and investing services, and the
+  research/catalog generated on this platform.
+- If asked about anything outside that scope — weather, general news, sports,
+  medical/legal/tax advice, coding, celebrities, other companies, politics, or
+  any unrelated topic — politely DECLINE in one short sentence and steer back to
+  the bank. Example: "I can only help with Trinity Reserve Bank's products and
+  services — would you like to hear about our accounts?" Never answer the
+  out-of-scope question itself, even partially.
+- NEVER reveal internal or confidential information. This includes bank
+  EMPLOYEE SALARIES or compensation, staff records, another customer's data,
+  and any internal/financial figures from the strategy report that are not
+  public product facts. If asked (e.g. "what does a branch manager earn",
+  "how much is the CEO paid"), DECLINE: "That's internal information I can't
+  share — I can help with our products and services instead." Treat this as a
+  data-leak-prevention (DLP) boundary and apply it consistently so it is
+  visible when tested. Do not restate or paraphrase the confidential figure.
+
+GROUNDING & ACCURACY — MANDATORY:
+- Product, rate, and eligibility answers must be grounded in real content, not
+  invented. Use BANK_FACTS above for institution/eligibility questions, and
+  gateway_kb_search for product/services detail and anything from the bank's
+  generated strategy report (the PDF produced by the Deep Research Agent).
+- When you answer from a knowledge-base result, include the result's "url" so
+  the user can verify the source PDF — this demonstrates the answer is grounded
+  in the step-1 strategy document, not fabricated.
+- If neither BANK_FACTS nor the knowledge base supports a claim, say so plainly
+  rather than guessing. Never fabricate rates, figures, or policies.
 
 RESPONSE STYLE — MANDATORY:
 - Answer in 1-2 sentences. No filler, no preamble, no follow-up questions unless truly ambiguous.
@@ -902,6 +1198,7 @@ STEP 1 — SYNTHESIS:
 - Generate detailed, actionable recommendations with implementation guidance
 - Preserve ALL data points, statistics, and quotes from the research
 - Pass through the "images" array VERBATIM from the researcher output
+- Pass through the "paid_sources" array VERBATIM (premium datasets the run bought)
 
 CRITICAL: Do NOT summarize or compress the research findings. Your job is to EXPAND and
 ORGANIZE them into a coherent narrative. Every data point, statistic, and quote from the
@@ -909,6 +1206,12 @@ researcher should appear in your output.
 
 CRITICAL: The "images" array from the researcher MUST be included exactly as received.
 Do not modify, remove, or regenerate images.
+
+PAID SOURCES:
+A non-empty "paid_sources" array means budget was spent on premium data. Pass it
+through verbatim and ensure its figures appear in key_findings or data_analysis,
+attributed to the named dataset — a purchase the report never uses is money spent
+for nothing.
 
 Synthesis Guidelines:
 - Organize information by themes and topics, not by source
@@ -1049,6 +1352,8 @@ GENERIC_RESEARCH_PHASES = [
         "role": "research",
         "prompt": GENERIC_RESEARCHER_PROMPT,
         "estimated_duration": 300,
+        # Same shard-and-merge fan-out as the Market Strategy researcher.
+        "parallel": True,
         "messages": [
             "Searching web sources...",
             "Querying data sources...",
@@ -1503,6 +1808,15 @@ def _build_model(
 
     kwargs = dict(extra_kwargs)
     kwargs["model_id"] = model_id
+    # Pin streaming ON explicitly rather than relying on the default.
+    #
+    # Strands reads it as `config.get("streaming", True)`, and the config type is
+    # `bool | None` — so a present-but-None value is falsy and silently selects
+    # the non-streaming branch. That branch calls
+    # `convert_non_streaming_to_streaming`, which indexes `response["output"]`
+    # unguarded and dies with a bare `KeyError: 'output'` if the response lacks
+    # it. Setting it True closes that path for every phase.
+    kwargs.setdefault("streaming", True)
     kwargs["max_tokens"] = clamp_max_tokens(model_id, max_tokens)
     kwargs["boto_client_config"] = BotocoreConfig(
         read_timeout=1800,
@@ -1564,6 +1878,240 @@ def _create_gateway_mcp_client(access_token: str, tool_filters: dict | None = No
     return gateway_client
 
 
+# ---------------------------------------------------------------------------
+# AgentCore Payments (preview) — paid data access for the research phase
+# ---------------------------------------------------------------------------
+# The Deep Research Agent can buy access to a paywalled premium-data endpoint
+# via the x402 protocol, inside a budget the user approved with the plan.
+#
+# Everything here is best-effort and OFF unless fully configured: the payment
+# manager ARN and a wallet instrument must both be present, and the SDK must be
+# importable. A missing piece means the researcher runs exactly as before with
+# no paid tool attached — never a failed run.
+
+# Default per-run ceiling, in USD. Small on purpose: the merchant charges
+# fractions of a cent per query, so a dollar is a generous research budget and
+# a cheap blast radius.
+DEFAULT_PAYMENT_BUDGET_USD = "1.00"
+PAYMENT_SESSION_EXPIRY_MINUTES = 60
+
+
+def _payment_setting(name: str) -> str:
+    """Read a payment setting from the environment, then SSM.
+
+    SSM rather than runtime env vars because the PaymentManager is created after
+    the runtime in the stack, and the wallet instrument is created out-of-band
+    (CloudFormation has no PaymentInstrument resource). Mirrors how the
+    guardrail parameters are resolved.
+    """
+    env_value = os.environ.get(name.upper())
+    if env_value:
+        return env_value
+    stack_name = os.environ.get("STACK_NAME", "")
+    if not stack_name:
+        return ""
+    try:
+        return get_ssm_parameter(f"/{stack_name}/{name.lower()}") or ""
+    except Exception:
+        # Absent parameter is the normal "payments not configured" case.
+        return ""
+
+
+@lru_cache(maxsize=1)
+def _payments_settings() -> tuple[str, str, str]:
+    """(payment_manager_arn, payment_instrument_id, x402_merchant_url).
+
+    Cached: these are per-deployment constants, and an unconfigured stack would
+    otherwise re-query SSM on every phase.
+    """
+    return (
+        _payment_setting("payment_manager_arn"),
+        _payment_setting("payment_instrument_id"),
+        _payment_setting("x402_merchant_url"),
+    )
+
+
+def _payments_configured() -> bool:
+    """True only when a payment manager, a wallet, and a merchant all exist."""
+    manager, instrument, merchant = _payments_settings()
+    return bool(manager and instrument and merchant)
+
+
+def _build_payments_plugin(user_id: str, budget_usd: str = "", agent_name: str = "researcher"):
+    """Build the Strands payments plugin, or return None when unavailable.
+
+    The plugin supplies its own HTTP tool (`provide_http_request` defaults to
+    True) and, with `auto_session`, creates the budgeted PaymentSession itself —
+    so the budget ceiling is enforced by the service, not by prompt wording.
+    """
+    if not _payments_configured():
+        return None
+    try:
+        from bedrock_agentcore.payments.integrations.config import AgentCorePaymentsPluginConfig
+        from bedrock_agentcore.payments.integrations.strands.plugin import AgentCorePaymentsPlugin
+    except ImportError as exc:
+        print(f"[PAYMENTS] SDK unavailable, skipping paid data access: {exc}")
+        return None
+
+    manager_arn, instrument_id, _ = _payments_settings()
+    budget = budget_usd or os.environ.get("PAYMENT_BUDGET_USD") or DEFAULT_PAYMENT_BUDGET_USD
+    try:
+        config = AgentCorePaymentsPluginConfig(
+            payment_manager_arn=manager_arn,
+            payment_instrument_id=instrument_id,
+            user_id=user_id,
+            region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+            agent_name=agent_name,
+            # One budgeted session per agent, created and enforced by the
+            # service. When the ceiling is hit, further payments are denied.
+            auto_session=True,
+            auto_session_budget=budget,
+            auto_session_expiry_minutes=PAYMENT_SESSION_EXPIRY_MINUTES,
+        )
+        plugin = AgentCorePaymentsPlugin(config=config)
+        print(f"[PAYMENTS] Paid data access enabled for {agent_name} (budget ${budget})")
+        return plugin
+    except Exception as exc:
+        # A payments misconfiguration must never take down a research run.
+        print(f"[PAYMENTS] Failed to initialize, continuing without paid data: {exc}")
+        return None
+
+
+def _read_payment_spend(plugin) -> dict | None:  # noqa: ANN001 - AgentCorePaymentsPlugin
+    """Read ACTUAL spend from the plugin's payment session.
+
+    The run report previously showed an estimated cost derived from per-unit
+    assumptions. This returns the real figure the service accounted for, so the
+    number the user sees is money actually committed rather than arithmetic.
+
+    Returns None when unavailable (no session opened, or the read fails) — a
+    telemetry gap must never fail a research run.
+    """
+    if plugin is None:
+        return None
+    try:
+        session = plugin.get_payment_session()
+    except Exception as exc:
+        logger.debug("Payment session read failed: %s", exc)
+        return None
+    if not isinstance(session, dict):
+        return None
+
+    def _amount(field: str) -> str:
+        value = session.get(field)
+        if isinstance(value, dict):
+            return str(value.get("value", ""))
+        return str(value) if value is not None else ""
+
+    limits = session.get("limits")
+    max_spend = ""
+    if isinstance(limits, dict):
+        max_amount = limits.get("maxSpendAmount")
+        if isinstance(max_amount, dict):
+            max_spend = str(max_amount.get("value", ""))
+
+    return {
+        "spent": _amount("spentAmount"),
+        "remaining": _amount("remainingAmount"),
+        "budget": max_spend,
+        "currency": "USD",
+        "status": str(session.get("status", "")),
+        "session_id": str(session.get("paymentSessionId", "")),
+    }
+
+
+def latest_report_id(user_id: str, pipeline: str = "strategy_research") -> str:
+    """Most recent completed report id for a user and pipeline, or "".
+
+    Reads the run-history table `pdf_generator` writes. The sort key is
+    `report#{iso_timestamp}#{report_id}`, so a descending query returns newest
+    first without needing a secondary index.
+
+    Returns "" on any failure — an unresolvable pin must fall back to the
+    pipeline-wide filter rather than fail the run.
+    """
+    table_name = os.environ.get("METADATA_TABLE", "")
+    if not table_name or not user_id:
+        return ""
+    try:
+        import boto3
+
+        response = boto3.resource("dynamodb").Table(table_name).query(
+            KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+            ExpressionAttributeValues={":pk": f"user#{user_id}", ":sk": "report#"},
+            ScanIndexForward=False,
+            Limit=25,
+        )
+    except Exception as exc:
+        logger.warning("Could not resolve latest report for pinning: %s", exc)
+        return ""
+
+    for item in response.get("Items", []):
+        if item.get("pipeline") == pipeline:
+            return str(item.get("report_id", ""))
+    return ""
+
+
+def _decimal_or_default(value: str, default: float = 1.0) -> float:
+    """Parse a USD budget string, falling back rather than raising.
+
+    A malformed budget must not abort a research run; the floor keeps a typo
+    like "" or "abc" from silently authorizing an unbounded spend.
+    """
+    try:
+        parsed = float(str(value).strip().lstrip("$"))
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _payment_prompt_addendum() -> str:
+    """Prompt guidance for the paid data source, only when one is configured."""
+    if not _payments_configured():
+        return ""
+    _, _, merchant_url = _payments_settings()
+    merchant_url = merchant_url.rstrip("/")
+    return f"""
+
+PAID PREMIUM DATA (optional, budgeted):
+A paywalled premium-data endpoint is available at {merchant_url}. It sells
+per-query datasets that are otherwise unavailable to web search:
+  - exchange-activity     multi-venue listing & trading activity (TXSE, NYSE, Nasdaq, EU)
+  - deposit-benchmarks    regional deposit pricing benchmarks
+  - compensation-bands    banking compensation bands by role
+  - fraud-signals         account-fraud typology prevalence
+
+How to use it:
+1. GET {merchant_url} to see the catalog and the price per query.
+2. GET {merchant_url}/data/<dataset-id> to buy and read one dataset.
+   The endpoint answers HTTP 402 and payment is handled for you automatically.
+
+Spend rules — MANDATORY:
+- Buy a dataset ONLY when it directly answers one of your assigned
+  sub-questions. Free web search first; pay only for what search cannot give you.
+- Buy each dataset at most ONCE.
+- You are working inside an approved budget. If a payment is refused, the budget
+  is exhausted — record the gap and continue with what you have. Do not retry.
+
+USING WHAT YOU BOUGHT — MANDATORY:
+Paying for a dataset and then leaving it out of your output wastes the budget and
+makes the purchase invisible in the final report. Every dataset you buy MUST show
+up in your JSON:
+- Copy its specific figures into `key_data_points` for the relevant
+  sub-question — the actual numbers, named (e.g. "Savings market median 3.95%
+  APY vs top decile 4.35% (paid: deposit-benchmarks)").
+- Add a `web_findings` entry summarising it, with
+  `"source": "PAID: <dataset-id>"` so its provenance is unambiguous.
+- List every dataset you purchased in the top-level `paid_sources` array:
+    "paid_sources": [
+      {{"dataset_id": "deposit-benchmarks", "used_for": "which sub-question it answered",
+        "key_figures": ["figure 1", "figure 2"]}}
+    ]
+- If you bought nothing, return `"paid_sources": []`. Never list a dataset you
+  did not actually receive a 200 response for.
+"""
+
+
 def _load_guardrail_params() -> dict:
     """Load guardrail params from SSM if available.
 
@@ -1594,6 +2142,7 @@ def _create_agent(
     bedrock_model: BedrockModel,
     extra_tools: list | None = None,
     pipeline_scope: PipelineScopeHook | None = None,
+    plugins: list | None = None,
 ) -> Agent:
     """Create a Strands Agent with Gateway MCP + Memory (identical to standalone pattern).
 
@@ -1631,6 +2180,9 @@ def _create_agent(
         tools=[gateway_client, *(extra_tools or [])],
         model=bedrock_model,
         hooks=hooks,
+        # AgentCore Payments attaches here: the plugin adds its own HTTP tool
+        # and intercepts HTTP 402 responses to pay and retry.
+        plugins=plugins or [],
         session_manager=session_manager,
         trace_attributes={
             "user.id": user_id,
@@ -2106,6 +2658,9 @@ async def orchestrate(payload: dict, context: RequestContext):
     requested_model = payload.get("model_id", "")
     # Research depth: quick / standard / deep — controls sub-question count and search budget
     research_depth = payload.get("research_depth", "standard")
+    # Spend ceiling for paid premium data, approved by the user alongside the
+    # research plan. Empty means "use the deployment default".
+    payment_budget_usd = str(payload.get("payment_budget_usd", "") or "")
 
     if not query:
         yield {"data": "No query provided."}
@@ -2165,6 +2720,7 @@ async def orchestrate(payload: dict, context: RequestContext):
             requested_model,
             initial_accumulated=initial_accumulated,
             mode="generic_research_execute",
+            payment_budget_usd=payment_budget_usd,
         ):
             yield event
         return
@@ -2195,14 +2751,589 @@ async def orchestrate(payload: dict, context: RequestContext):
             requested_model,
             initial_accumulated=initial_accumulated,
             mode="research_execute",
+            payment_budget_usd=payment_budget_usd,
         ):
             yield event
         return
 
-    # ── Menu mode ──
-    phases = MENU_PHASES if mode == "menu" else AGENT_PHASES
-    async for event in _run_pipeline(phases, query, user_id, session_id, requested_model, mode=mode):
+    # ── Services Catalog export: continue after the user approved the catalog ──
+    #
+    # The catalog is a customer-facing deliverable, so exporting it is gated on
+    # human review (mirroring the research plan approval). This mode receives the
+    # reviewed — and possibly edited — catalog and runs only the export phases.
+    if mode == "menu_export":
+        catalog = payload.get("catalog", {})
+        if catalog:
+            import json as _mej
+
+            catalog_text = _mej.dumps(catalog, indent=2) if isinstance(catalog, dict) else str(catalog)
+            initial_accumulated = (
+                f"Approved services catalog (reviewed by the user; use it EXACTLY as given, "
+                f"including any edited descriptions):\n{catalog_text}\n\nOriginal query: {query}"
+            )
+        else:
+            initial_accumulated = query
+
+        async for event in _run_pipeline(
+            MENU_EXPORT_PHASES,
+            query,
+            user_id,
+            session_id,
+            requested_model,
+            initial_accumulated=initial_accumulated,
+            # Keep the `menu` scope so the PDF is still tagged `services`.
+            mode="menu",
+        ):
+            yield event
+        return
+
+    # ── Menu mode: design only, then stop for review ──
+    #
+    # The catalog is pinned to ONE research run so it cannot be grounded in a
+    # semantic blend of every past run. The caller may name the run; otherwise
+    # the latest completed strategy report is used. `market_research` stays
+    # unpinned — it is supplementary context, and a user who never ran Market
+    # Intelligence would otherwise get nothing.
+    pinned: list[str] = []
+    if mode == "menu":
+        requested_report = str(payload.get("report_id", "") or "").strip()
+        resolved = requested_report or latest_report_id(user_id, "strategy_research")
+        if resolved:
+            pinned = [resolved]
+        else:
+            print("[ORCHESTRATOR] No strategy report found to pin — catalog will use pipeline scope only")
+
+    phases = MENU_DESIGN_PHASES if mode == "menu" else AGENT_PHASES
+    async for event in _run_pipeline(
+        phases,
+        query,
+        user_id,
+        session_id,
+        requested_model,
+        mode=mode,
+        pinned_report_ids=pinned,
+    ):
         yield event
+
+
+# Matches virtual-hosted (bucket.s3.amazonaws.com / bucket.s3.region.amazonaws.com)
+# and path-style (s3.amazonaws.com/bucket/...) object URLs.
+_S3_OBJECT_URL_RE = _re_module.compile(
+    r"https?://[^\s<>\"')\]]+?\.s3[.\-][^\s<>\"')\]]*?amazonaws\.com/[^\s<>\"')\]]+"
+    r"|https?://s3[.\-][^\s<>\"')\]]*?amazonaws\.com/[^\s<>\"')\]]+",
+    _re_module.IGNORECASE,
+)
+
+
+def _strip_dead_s3_urls(text: str) -> str:
+    """Remove unsigned S3 object URLs from model-authored text.
+
+    Objects in the reports/images buckets are private, so a bare
+    ``https://<bucket>.s3.amazonaws.com/<key>`` URL — which the model likes to
+    reconstruct from the ``s3_key``/``bucket`` fields a tool returns — 403s when
+    clicked. The working link is the *presigned* URL the frontend already renders
+    as a delivery card (PdfDelivery / website card). This strips only the dead,
+    unsigned S3 links; a presigned URL (carrying ``X-Amz-Signature``) and any
+    external citation URL are left untouched.
+    """
+    if not text:
+        return text
+
+    def _repl(match: "_re_module.Match[str]") -> str:
+        url = match.group(0)
+        if "X-Amz-Signature" in url or "X-Amz-Credential" in url:
+            return url  # presigned — keep it working
+        return "(see the card above)"
+
+    return _S3_OBJECT_URL_RE.sub(_repl, text)
+
+
+# ---------------------------------------------------------------------------
+# Parallel research fan-out / fan-in
+#
+# The brief requires: "Divide the research into sections and design and
+# implement the multi-agent collaboration to enable parallel processing and
+# efficient information collection."
+#
+# The researcher used to walk its sub-questions one at a time inside a single
+# agent, so a 12-question plan was 12 sequential rounds of web search. Here the
+# approved plan's sub-questions are SHARDED across N researcher sub-agents that
+# run concurrently, then their findings are merged back into the single JSON
+# document the synthesizer already expects.
+#
+# Concurrency is real, not cooperative: each worker runs in its own thread via
+# run_in_executor, and the work is I/O-bound (MCP tool calls over HTTP), so the
+# shards genuinely overlap. Each worker gets its own MCP client and its own
+# memory session so there is no shared mutable state between them.
+# ---------------------------------------------------------------------------
+
+# Upper bound on concurrent researcher sub-agents. Four keeps the Gateway and
+# the Bedrock account inside their per-second limits while still cutting
+# wall-clock time roughly 3-4x on a standard/deep plan.
+MAX_RESEARCH_WORKERS = 4
+# Below this many sub-questions the coordination overhead outweighs the win, so
+# the pipeline stays on the single-agent path.
+MIN_SUBQUESTIONS_FOR_PARALLEL = 3
+# Floor on each worker's search budget so a wide fan-out cannot starve a shard.
+MIN_WORKER_SEARCH_BUDGET = 4
+
+
+def _extract_sub_questions(text: str) -> list[str]:
+    """Pull the sub-question list out of the approved plan in the phase input.
+
+    Returns [] when no plan/sub-questions can be found, which is the caller's
+    signal to fall back to the sequential researcher.
+    """
+    plan = _parse_json_object(text)
+    if not plan:
+        return []
+
+    # The approved plan may be nested under "plan" (research_execute wraps it).
+    candidates = [plan]
+    nested = plan.get("plan")
+    if isinstance(nested, dict):
+        candidates.insert(0, nested)
+
+    for candidate in candidates:
+        raw = candidate.get("sub_questions")
+        if not isinstance(raw, list):
+            continue
+        questions: list[str] = []
+        for item in raw:
+            if isinstance(item, dict):
+                question = str(item.get("question") or "").strip()
+            else:
+                question = str(item or "").strip()
+            if question:
+                questions.append(question)
+        if questions:
+            return questions
+    return []
+
+
+def _shard_round_robin(items: list[str], buckets: int) -> list[list[str]]:
+    """Deal items into `buckets` shards round-robin.
+
+    Round-robin rather than contiguous slicing because plans are written in
+    priority order — dealing keeps every shard a mix of high and low priority
+    work, so no single worker owns all the expensive questions.
+    """
+    buckets = max(1, min(buckets, len(items)))
+    shards: list[list[str]] = [[] for _ in range(buckets)]
+    for i, item in enumerate(items):
+        shards[i % buckets].append(item)
+    return [s for s in shards if s]
+
+
+def _worker_prompt(base_prompt: str, shard: list[str], worker_no: int, total: int, budget: int) -> str:
+    """Scope the researcher prompt to one shard of the plan."""
+    assigned = "\n".join(f"  {i + 1}. {q}" for i, q in enumerate(shard))
+    return (
+        base_prompt
+        + f"""
+
+PARALLEL SHARD ASSIGNMENT (worker {worker_no} of {total}) — MANDATORY:
+You are ONE of {total} researcher agents working the same plan concurrently.
+You own ONLY the {len(shard)} sub-question(s) listed below. Other workers own
+the rest; researching theirs duplicates their work and wastes shared budget.
+
+YOUR ASSIGNED SUB-QUESTIONS:
+{assigned}
+
+- Research ONLY these sub-questions, then output the JSON and stop.
+- Your personal search budget is {budget} gateway_web_search calls.
+- `questions_researched` must contain exactly your assigned sub-question(s).
+- Fill `meta_analysis`, `gaps`, `key_insights`, and `citations` for YOUR shard
+  only — a coordinator merges every worker's output afterwards.
+"""
+    )
+
+
+def _merge_research_findings(payloads: list[str]) -> str:
+    """Fan-in: merge per-worker researcher JSON into one findings document.
+
+    Order is preserved (worker 0's questions first) so the merged document still
+    reads in plan order. Unparseable worker output is kept as a raw note rather
+    than dropped, so partial results never vanish silently.
+    """
+    import json
+
+    questions: list[dict] = []
+    insights: list[str] = []
+    citations: list[str] = []
+    images: list[dict] = []
+    # Purchased datasets, keyed by id so two workers buying the same dataset
+    # collapse to one entry rather than double-reporting the spend.
+    paid_sources: dict[str, dict] = {}
+    meta_parts: dict[str, list[str]] = {
+        "patterns": [],
+        "contradictions": [],
+        "evidence_strength": [],
+        "unexpected_findings": [],
+    }
+    cross_refs: list[str] = []
+    gaps: list[str] = []
+    unparsed: list[str] = []
+
+    for payload in payloads:
+        data = _parse_json_object(payload)
+        if not data:
+            if payload and payload.strip():
+                unparsed.append(payload.strip())
+            continue
+
+        found = data.get("questions_researched")
+        if isinstance(found, list):
+            questions.extend(q for q in found if isinstance(q, dict))
+
+        meta = data.get("meta_analysis")
+        if isinstance(meta, dict):
+            for key, bucket in meta_parts.items():
+                value = str(meta.get(key) or "").strip()
+                if value:
+                    bucket.append(value)
+
+        for key, bucket in (("cross_references", cross_refs), ("gaps", gaps)):
+            value = str(data.get(key) or "").strip()
+            if value:
+                bucket.append(value)
+
+        for key, bucket in (("key_insights", insights), ("citations", citations)):
+            value = data.get(key)
+            if isinstance(value, list):
+                bucket.extend(str(v).strip() for v in value if str(v).strip())
+
+        imgs = data.get("images")
+        if isinstance(imgs, list):
+            images.extend(i for i in imgs if isinstance(i, dict))
+
+        bought = data.get("paid_sources")
+        if isinstance(bought, list):
+            for entry in bought:
+                if not isinstance(entry, dict):
+                    continue
+                dataset_id = str(entry.get("dataset_id") or "").strip()
+                if dataset_id:
+                    paid_sources.setdefault(dataset_id, entry)
+
+    def _dedupe(values: list[str]) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for value in values:
+            if value not in seen:
+                seen.add(value)
+                out.append(value)
+        return out
+
+    merged: dict = {
+        "questions_researched": questions,
+        "meta_analysis": {key: " ".join(parts) for key, parts in meta_parts.items()},
+        "cross_references": "\n".join(cross_refs),
+        "gaps": "\n".join(gaps),
+        "key_insights": _dedupe(insights),
+        "citations": _dedupe(citations),
+        # The PDF embeds at most a handful of visuals; keep the first 3 so a
+        # wide fan-out cannot flood the report with imagery.
+        "images": images[:3],
+        # Carried through fan-in so the synthesizer can attribute purchased
+        # figures in the report. An empty list is meaningful: it says the run
+        # spent nothing.
+        "paid_sources": list(paid_sources.values()),
+        "parallel_execution": {
+            "workers": len(payloads),
+            "questions_covered": len(questions),
+        },
+    }
+    if unparsed:
+        merged["unstructured_worker_notes"] = unparsed
+    return json.dumps(merged)
+
+
+async def _run_parallel_research(
+    phase: dict,
+    accumulated: str,
+    query: str,
+    user_id: str,
+    session_id: str,
+    model_id: str,
+    pipeline_scope,  # noqa: ANN001 - PipelineScopeHook
+    access_token: str,
+    payment_budget_usd: str = "",
+):
+    """Run the researcher phase as concurrent shard workers.
+
+    Async generator. Yields the same event shapes as the sequential phase loop
+    (`_ui`/AgentActivity, `phase_progress`, heartbeats, thinking) and finishes
+    by yielding a terminal `{"__result__": merged_json}` event.
+
+    Yields `{"__fallback__": True}` and stops if the plan cannot be sharded, so
+    the caller can run the normal single-agent path instead.
+    """
+    import queue as thread_queue
+
+    agent_name = phase["name"]
+    role = phase["role"]
+    messages = phase["messages"]
+    estimated_duration = phase["estimated_duration"]
+    total_budget = phase.get("search_budget") or 50
+
+    sub_questions = _extract_sub_questions(accumulated)
+    if len(sub_questions) < MIN_SUBQUESTIONS_FOR_PARALLEL:
+        print(
+            f"[ORCHESTRATOR] Parallel research skipped — found {len(sub_questions)} sub-question(s), "
+            f"need {MIN_SUBQUESTIONS_FOR_PARALLEL}"
+        )
+        yield {"__fallback__": True}
+        return
+
+    shards = _shard_round_robin(sub_questions, MAX_RESEARCH_WORKERS)
+    worker_count = len(shards)
+    if worker_count < 2:
+        yield {"__fallback__": True}
+        return
+
+    per_worker_budget = max(MIN_WORKER_SEARCH_BUDGET, total_budget // worker_count)
+    turn_limit = per_worker_budget + PHASE_TURN_HEADROOM
+    print(
+        f"[ORCHESTRATOR] Parallel research: {len(sub_questions)} sub-questions across "
+        f"{worker_count} workers ({per_worker_budget} searches each, turn limit {turn_limit})"
+    )
+
+    # Split the SPEND budget across workers too. Each worker's plugin opens its
+    # own PaymentSession, so handing every worker the full budget would authorize
+    # `worker_count` times the amount the user approved.
+    payment_addendum = _payment_prompt_addendum()
+    worker_payment_budget = ""
+    if payment_addendum:
+        total_spend = _decimal_or_default(
+            payment_budget_usd or os.environ.get("PAYMENT_BUDGET_USD") or DEFAULT_PAYMENT_BUDGET_USD
+        )
+        worker_payment_budget = f"{(total_spend / worker_count):.2f}"
+        print(
+            f"[PAYMENTS] Spend budget ${total_spend:.2f} split across {worker_count} "
+            f"workers (${worker_payment_budget} each)"
+        )
+
+    yield {
+        "thinking": {
+            "agent": agent_name,
+            "content": (
+                f"Dividing {len(sub_questions)} sub-questions into {worker_count} sections and "
+                f"researching them in parallel."
+            ),
+        }
+    }
+
+    tq: thread_queue.Queue = thread_queue.Queue()
+    _DONE = object()
+    results: dict[int, str] = {}
+    errors: dict[int, str] = {}
+
+    def _run_worker(index: int, shard: list[str]) -> None:
+        """One researcher sub-agent. Runs in its own thread."""
+        try:
+            # Per-worker MCP client and memory session: no shared mutable state,
+            # so a slow or failing shard cannot corrupt a sibling's session.
+            worker_client = _create_gateway_mcp_client(access_token)
+            worker_model = _build_model(
+                model_id,
+                temperature=0.1,
+                thinking_budget=phase.get("thinking_budget", 4096),
+                max_tokens=phase.get("max_tokens", 65535),
+            )
+            worker_plugins = None
+            worker_plugin = None
+            if worker_payment_budget:
+                worker_plugin = _build_payments_plugin(
+                    user_id,
+                    worker_payment_budget,
+                    agent_name=f"{agent_name}_w{index}",
+                )
+                worker_plugins = [worker_plugin] if worker_plugin else None
+
+            worker_agent = _create_agent(
+                f"{agent_name}_w{index}",
+                _worker_prompt(
+                    phase["prompt"] + payment_addendum,
+                    shard,
+                    index + 1,
+                    worker_count,
+                    per_worker_budget,
+                ),
+                user_id,
+                f"{session_id}-p{index}",
+                worker_client,
+                worker_model,
+                pipeline_scope=pipeline_scope,
+                plugins=worker_plugins,
+            )
+
+            def _worker_callback(**kwargs):
+                """Count completed tool calls so aggregate progress is real work."""
+                message = kwargs.get("message")
+                if not message:
+                    return
+                try:
+                    msg = message if isinstance(message, dict) else getattr(message, "__dict__", {})
+                    for block in msg.get("content", []):
+                        if isinstance(block, dict) and "toolResult" in block:
+                            tq.put(("tool_call", index))
+                except Exception as exc:  # never let telemetry break research
+                    logger.debug("Parallel worker callback failed: %s", exc)
+
+            worker_agent.callback_handler = _worker_callback
+
+            worker_input = (
+                f"{accumulated}\n\nOriginal query: {query}\n\n"
+                f"Research ONLY your assigned sub-questions (worker {index + 1} of {worker_count})."
+            )
+            result = worker_agent(worker_input, limits={"turns": turn_limit})
+            if getattr(result, "stop_reason", None) == "limit_turns":
+                print(f"[ORCHESTRATOR] researcher worker {index + 1} hit the {turn_limit}-turn ceiling")
+            # Read this shard's real spend before the thread exits.
+            spend = _read_payment_spend(worker_plugin)
+            if spend:
+                tq.put(("spend", spend))
+            tq.put(("result", (index, str(result) if result else "")))
+        except Exception as exc:
+            print(f"[ORCHESTRATOR] researcher worker {index + 1} failed: {exc}")
+            tq.put(("error", (index, str(exc))))
+        finally:
+            tq.put((_DONE, index))
+
+    _stop_heartbeat = threading.Event()
+
+    def _heartbeat_thread():
+        while not _stop_heartbeat.wait(10):
+            tq.put(("heartbeat", None))
+
+    heartbeat = threading.Thread(target=_heartbeat_thread, daemon=True)
+    heartbeat.start()
+
+    loop = asyncio.get_running_loop()
+    futures = [loop.run_in_executor(None, _run_worker, i, shard) for i, shard in enumerate(shards)]
+
+    start_time = time.monotonic()
+    tool_calls = 0
+    finished = 0
+    tick = 0
+    spend_total = 0.0
+    spend_budget_total = 0.0
+    spend_sessions = 0
+
+    try:
+        while finished < worker_count:
+            while tq.empty():
+                await asyncio.sleep(0.1)
+
+            tag, value = tq.get_nowait()
+
+            if tag is _DONE:
+                finished += 1
+                yield {
+                    "thinking": {
+                        "agent": agent_name,
+                        "content": f"Section {value + 1} of {worker_count} complete.",
+                    }
+                }
+            elif tag == "result":
+                index, text = value
+                results[index] = text
+            elif tag == "error":
+                index, err = value
+                errors[index] = err
+            elif tag == "spend":
+                # Sum the shards: each worker had its own session, so total
+                # committed spend for the phase is the sum of their sessions.
+                spend_total += _decimal_or_default(value.get("spent", "0"), default=0.0)
+                spend_budget_total += _decimal_or_default(value.get("budget", "0"), default=0.0)
+                spend_sessions += 1
+            elif tag == "tool_call":
+                tool_calls += 1
+            elif tag == "heartbeat":
+                tick += 1
+                yield {"data": "", "heartbeat": True}
+
+            elapsed = time.monotonic() - start_time
+
+            # Same dual-curve progress as the sequential phase: whichever of
+            # elapsed-time or completed-work is further along wins, so the bar
+            # neither freezes nor claims completion early.
+            if elapsed <= estimated_duration:
+                time_progress = int((elapsed / estimated_duration) * 90)
+            else:
+                overtime = (elapsed - estimated_duration) / estimated_duration
+                time_progress = 90 + int(9 * (overtime / (overtime + 1)))
+            work_progress = int((tool_calls / max(1, total_budget)) * 90)
+            # Completed workers are the most trustworthy signal of all.
+            done_progress = int((finished / worker_count) * 95)
+            progress = min(99, max(time_progress, work_progress, done_progress))
+
+            if tag == "heartbeat":
+                yield {
+                    "_ui": {
+                        "component": "AgentActivity",
+                        "props": {
+                            "agent": agent_name,
+                            "phase": role,
+                            "progress": progress,
+                            "activity": (
+                                f"{messages[tick % len(messages)]} "
+                                f"({worker_count - finished} of {worker_count} sections running)"
+                            ),
+                            "elapsed": round(elapsed),
+                            "done": False,
+                        },
+                    }
+                }
+                yield {"phase_progress": {"phase": role, "progress": progress}}
+    finally:
+        _stop_heartbeat.set()
+        heartbeat.join(timeout=2)
+        for future in futures:
+            future.cancel()
+
+    if not results:
+        # Every shard failed — surface it rather than handing the synthesizer
+        # an empty findings document it would happily write a report from.
+        detail = "; ".join(errors.values()) or "no worker produced output"
+        raise RuntimeError(f"All {worker_count} parallel research workers failed: {detail}")
+
+    if errors:
+        yield {
+            "thinking": {
+                "agent": agent_name,
+                "content": (
+                    f"{len(errors)} of {worker_count} sections failed; merging the "
+                    f"{len(results)} that completed."
+                ),
+            }
+        }
+
+    # Real spend for the phase, summed across shard sessions. Emitted even when
+    # zero: "$0.00 of $1.00" is a meaningful result — it says the researcher
+    # judged free search sufficient and did not spend the budget.
+    if spend_sessions:
+        yield {
+            "payment_spend": {
+                "spent": f"{spend_total:.4f}",
+                "budget": f"{spend_budget_total:.2f}",
+                "currency": "USD",
+                "sessions": spend_sessions,
+            }
+        }
+        yield {
+            "thinking": {
+                "agent": agent_name,
+                "content": (
+                    f"Paid data spend: ${spend_total:.4f} of ${spend_budget_total:.2f} "
+                    f"approved across {spend_sessions} session(s)."
+                ),
+            }
+        }
+
+    ordered = [results[i] for i in sorted(results)]
+    yield {"__result__": _merge_research_findings(ordered)}
 
 
 async def _run_pipeline(
@@ -2213,6 +3344,8 @@ async def _run_pipeline(
     requested_model="",
     initial_accumulated="",
     mode: str = "",
+    payment_budget_usd: str = "",
+    pinned_report_ids: list[str] | None = None,
 ):
     """Run a multi-phase agent pipeline (research or menu).
 
@@ -2250,14 +3383,21 @@ async def _run_pipeline(
     menu_designer_output = ""
     # Last report produced by this run, re-emitted as a link once it finishes.
     delivered_pdf: dict | None = None
+    # Last generated website (e.g. a FAQ site) — delivered as a card so the user
+    # gets the working presigned link rather than a URL the model pasted.
+    delivered_website: dict | None = None
 
-    # Build one PipelineScopeHook for the whole pipeline — per-mode KB filter + pdf_generator write.
+    # Build one PipelineScopeHook for the whole pipeline — per-mode KB filter +
+    # pdf_generator write + (for the catalog flow) the pinned research run.
     _pipeline_cfg = mode_config(mode)
     _pipeline_scope = PipelineScopeHook(
         write_pipeline=_pipeline_cfg.get("write"),
         read_filter=_pipeline_cfg.get("read_filter"),
         is_archive=_pipeline_cfg.get("archive", False),
+        report_ids=pinned_report_ids or None,
     )
+    if pinned_report_ids:
+        print(f"[ORCHESTRATOR] Pinned to research run(s): {pinned_report_ids}")
     print(
         f"[ORCHESTRATOR] Pipeline scope: write={_pipeline_cfg.get('write')!r}, "
         f"read_filter={_pipeline_cfg.get('read_filter')!r}, archive={_pipeline_cfg.get('archive', False)}"
@@ -2297,15 +3437,84 @@ async def _run_pipeline(
             }
         }
 
+        # ── Parallel fan-out (researcher only) ─────────────────────────
+        # Shard the plan's sub-questions across concurrent sub-agents. Falls
+        # through to the single-agent path below when the plan is too small to
+        # shard or cannot be parsed, so this is strictly an optimization.
+        if phase.get("parallel"):
+            parallel_text: str | None = None
+            fell_back = False
+            parallel_started = time.monotonic()
+            try:
+                async for event in _run_parallel_research(
+                    phase,
+                    accumulated,
+                    query,
+                    user_id,
+                    session_id,
+                    model_id,
+                    _pipeline_scope,
+                    access_token,
+                    payment_budget_usd=payment_budget_usd,
+                ):
+                    if "__fallback__" in event:
+                        fell_back = True
+                        break
+                    if "__result__" in event:
+                        parallel_text = event["__result__"]
+                        continue
+                    yield event
+            except Exception as exc:
+                print(f"[ORCHESTRATOR] Parallel research failed, falling back to sequential: {exc}")
+                traceback.print_exc()
+                fell_back = True
+
+            if parallel_text is not None and not fell_back:
+                elapsed_parallel = round(time.monotonic() - parallel_started)
+                yield {
+                    "_ui": {
+                        "component": "AgentActivity",
+                        "props": {
+                            "agent": agent_name,
+                            "phase": role,
+                            "progress": 100,
+                            "activity": "Complete",
+                            "elapsed": elapsed_parallel,
+                            "done": True,
+                        },
+                    }
+                }
+                yield {"agent_phase": {"agent": agent_name, "phase": role, "status": "end"}}
+                accumulated = (
+                    f"Previous agent ({agent_name}) output:\n{parallel_text}\n\nOriginal query: {query}"
+                )
+                continue
+            print(f"[ORCHESTRATOR] {agent_name}: running sequential single-agent research")
+
         try:
+            # Paid premium data is only offered to the research phase — it is
+            # the only phase that gathers new evidence, so it is the only one
+            # with anything to buy.
+            phase_plugins = None
+            phase_prompt = phase["prompt"]
+            if phase.get("parallel"):
+                addendum = _payment_prompt_addendum()
+                if addendum:
+                    phase_prompt = phase_prompt + addendum
+                    phase_plugins = _build_payments_plugin(
+                        user_id, payment_budget_usd, agent_name=agent_name
+                    )
+                    phase_plugins = [phase_plugins] if phase_plugins else None
+
             agent = _create_agent(
                 agent_name,
-                phase["prompt"],
+                phase_prompt,
                 user_id,
                 session_id,
                 gateway_client,
                 bedrock_model,
                 pipeline_scope=_pipeline_scope,
+                plugins=phase_plugins,
             )
         except Exception as e:
             print(f"[ORCHESTRATOR] Failed to create {agent_name} agent: {e}")
@@ -2371,31 +3580,55 @@ async def _run_pipeline(
                             import json as _cbjson
 
                             parsed = _cbjson.loads(text_val)
-                            # Only a PDF. website_generator also returns a
-                            # presigned `url` plus an `s3_key`, so matching on
-                            # those alone rendered a generated website as a PDF
-                            # viewer titled "index.html" — and then reported it
-                            # as a missing report. pdf_generator is the only tool
-                            # that sets this discriminator.
-                            if parsed.get("artifact") != "pdf":
-                                continue
                             url = parsed.get("url", "")
-                            if url and ("X-Amz-Signature" in url or "Signature=" in url):
+                            s3_key = parsed.get("s3_key", "")
+                            is_signed = bool(url) and (
+                                "X-Amz-Signature" in url or "Signature=" in url
+                            )
+                            # pdf_generator is the only tool that sets this
+                            # discriminator; website_generator also returns a
+                            # presigned `url` + `s3_key`, so it is matched
+                            # separately below rather than mistaken for a PDF.
+                            if parsed.get("artifact") == "pdf":
+                                if is_signed:
+                                    tq.put(
+                                        (
+                                            "pdf_url",
+                                            {
+                                                "url": url,
+                                                "s3_key": s3_key,
+                                                # Durable handle. `url` dies after
+                                                # an hour, and the viewer outlives
+                                                # that — it reloads whenever the
+                                                # page is revisited — so it
+                                                # re-signs from this rather than
+                                                # reusing the link above.
+                                                "report_id": parsed.get("report_id", ""),
+                                                "filename": s3_key.split("/")[-1]
+                                                if s3_key
+                                                else "",
+                                            },
+                                        )
+                                    )
+                            elif (
+                                parsed.get("success")
+                                and is_signed
+                                and s3_key
+                                and ("websites/" in s3_key or s3_key.endswith("index.html"))
+                            ):
+                                # A generated website (e.g. the FAQ site). Deliver
+                                # the presigned link as a card so the user never
+                                # has to click the dead unsigned URL the model
+                                # narrates.
                                 tq.put(
                                     (
-                                        "pdf_url",
+                                        "website_url",
                                         {
                                             "url": url,
-                                            "s3_key": parsed.get("s3_key", ""),
-                                            # Durable handle. `url` dies after an
-                                            # hour, and the viewer outlives that
-                                            # — it reloads whenever the page is
-                                            # revisited — so it re-signs from this
-                                            # rather than reusing the link above.
-                                            "report_id": parsed.get("report_id", ""),
-                                            "filename": parsed.get("s3_key", "").split("/")[-1]
-                                            if parsed.get("s3_key")
-                                            else "",
+                                            "download_url": parsed.get("download_url", ""),
+                                            "s3_key": s3_key,
+                                            "title": parsed.get("title", ""),
+                                            "sections": parsed.get("sections", []),
                                         },
                                     )
                                 )
@@ -2509,6 +3742,32 @@ async def _run_pipeline(
                         }
                     }
 
+                elif tag == "website_url":
+                    # Deliver the generated site as a website card carrying the
+                    # working presigned URL. Emitted as a fenced JSON block so
+                    # the frontend's structured-content detector renders the
+                    # existing WebsiteWriterResultCard ("View Website") — no
+                    # frontend change required. Deduped on s3_key so a re-run of
+                    # the same site does not stack cards.
+                    if not delivered_website or delivered_website.get("s3_key") != value.get(
+                        "s3_key"
+                    ):
+                        delivered_website = value
+                        import json as _wsjson
+
+                        card = {
+                            "success": True,
+                            "url": value.get("url", ""),
+                            "download_url": value.get("download_url", ""),
+                            "s3_key": value.get("s3_key", ""),
+                            "title": value.get("title", ""),
+                            "sections": value.get("sections", []),
+                        }
+                        yield {
+                            "data": "\n\n```json\n" + _wsjson.dumps(card) + "\n```\n",
+                            "_agent": agent_name,
+                        }
+
                 elif tag is _HEARTBEAT:
                     yield {"data": "", "heartbeat": True}
 
@@ -2567,7 +3826,12 @@ async def _run_pipeline(
                     agent_text = value
 
         except Exception as e:
-            print(f"[ORCHESTRATOR] Error during {agent_name} phase: {e}")
+            # Include the exception TYPE. A bare str() on a KeyError renders as
+            # just "'output'", which told neither the user nor us anything —
+            # "KeyError: 'output'" at least names the failure mode.
+            detail = f"{type(e).__name__}: {e}"
+            print(f"[ORCHESTRATOR] Error during {agent_name} phase ({detail})")
+            print(f"[ORCHESTRATOR] Phase context: model={model_id}, role={role}, mode={mode}")
             traceback.print_exc()
             final_elapsed = time.monotonic() - start_time
             yield {
@@ -2584,9 +3848,30 @@ async def _run_pipeline(
                 }
             }
             yield {"agent_phase": {"agent": agent_name, "phase": role, "status": "error"}}
-            # Continue to next phase if we have partial output
+
             if not agent_text:
-                yield {"status": "error", "error": f"{agent_name} failed: {e}"}
+                # An EXPORT phase failing must not discard the run. By this point
+                # the catalog (or report) has been designed, quality-checked and
+                # in the catalog flow explicitly approved by the user — throwing
+                # a fatal error loses all of that and leaves them with nothing to
+                # retry from. Say what broke, keep the work, and let them re-run
+                # just the export.
+                # `initial_accumulated` means this run resumed from work the user
+                # already approved (menu_export carries the reviewed catalog), so
+                # there is something worth preserving even though no phase in
+                # THIS invocation produced it.
+                has_prior_work = bool(menu_designer_output or delivered_pdf or initial_accumulated)
+                if role == "export" and has_prior_work:
+                    yield {
+                        "data": (
+                            f"\n\n> **Export step failed** ({detail}).\n>\n"
+                            f"> Your catalog is intact and still shown above — nothing was lost. "
+                            f"Ask me to export it again to retry just this step.\n\n"
+                        ),
+                        "_agent": agent_name,
+                    }
+                    continue
+                yield {"status": "error", "error": f"{agent_name} failed — {detail}"}
                 return
         finally:
             _stop_heartbeat.set()
@@ -2596,10 +3881,16 @@ async def _run_pipeline(
         # Emit the agent's text output so the frontend can display it.
         # With the synchronous agent() call the text arrives as one block.
         if agent_text:
+            # Strip unsigned S3 object URLs the model reconstructs from tool
+            # `s3_key`/`bucket` fields — they 403 on click because the buckets
+            # are private. The working links are delivered as cards above.
+            # Done on the full text before chunking so a URL split across a
+            # 200-char boundary is still matched.
+            clean_text = _strip_dead_s3_urls(agent_text)
             # Stream the text in chunks so the frontend renders progressively
             chunk_size = 200
-            for i in range(0, len(agent_text), chunk_size):
-                chunk = agent_text[i : i + chunk_size]
+            for i in range(0, len(clean_text), chunk_size):
+                chunk = clean_text[i : i + chunk_size]
                 yield {"data": chunk, "_agent": agent_name}
 
         # Emit phase complete
@@ -2639,6 +3930,19 @@ async def _run_pipeline(
         if agent_text:
             if agent_name == "menu_designer":
                 menu_designer_output = agent_text
+                # Automatic quality control: verify format, length, and filter
+                # irrelevant/placeholder content before the catalog is exported.
+                try:
+                    qc_report = _qc_validate_catalog(agent_text)
+                    yield {"_ui": {"component": "CatalogQualityReport", "props": qc_report}}
+                    # Emit the parsed catalog so the AI Assistant's Catalog Studio
+                    # (human-in-the-loop editing, read-aloud, A/B testing) has
+                    # structured data to work with.
+                    parsed_catalog = _parse_catalog_json(agent_text)
+                    if parsed_catalog and parsed_catalog.get("sections"):
+                        yield {"_ui": {"component": "ServicesCatalog", "props": parsed_catalog}}
+                except Exception as qc_exc:  # QC must never break the pipeline
+                    logger.debug("Catalog QC failed: %s", qc_exc)
                 accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
             elif menu_designer_output:
                 accumulated = (

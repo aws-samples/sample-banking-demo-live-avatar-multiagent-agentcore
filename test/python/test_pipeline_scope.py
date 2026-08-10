@@ -85,11 +85,14 @@ class TestPipelineScopeHookReadFilter:
         hook._inject_pipeline(event)
         assert event.tool_use["input"]["pipelines"] == ["strategy_research", "market_research"]
 
-    def test_chatbot_mode_scopes_to_services_only(self, make_event):
+    def test_chatbot_mode_scopes_to_services_and_strategy(self, make_event):
+        # The Client Advisor grounds in the services catalog AND the step-1
+        # strategy report (a demo goal: answers shown grounded in the Deep
+        # Research Agent's PDF). It still never writes to the KB.
         hook = _hook_for_mode("chatbot")
         event = make_event(KB_SEARCH_TOOL)
         hook._inject_pipeline(event)
-        assert event.tool_use["input"]["pipelines"] == ["services"]
+        assert event.tool_use["input"]["pipelines"] == ["services", "strategy_research"]
 
     def test_hook_overrides_llm_supplied_pipelines(self, make_event):
         hook = _hook_for_mode("research")

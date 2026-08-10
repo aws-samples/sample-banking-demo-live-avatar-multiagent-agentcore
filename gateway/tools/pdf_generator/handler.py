@@ -229,12 +229,18 @@ def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "
         toc_sections.append("Key Findings")
     if report.get("supporting_evidence"):
         toc_sections.append("Supporting Evidence")
+    if report.get("paid_sources"):
+        toc_sections.append("Paid Data Sources")
     if report.get("data_analysis"):
         toc_sections.append("Data Analysis")
     if report.get("conclusions"):
         toc_sections.append("Conclusions")
+    if report.get("recommended_option"):
+        toc_sections.append("Recommended Option")
     if report.get("recommendations"):
         toc_sections.append("Recommendations")
+    if report.get("suggested_services"):
+        toc_sections.append("Suggested Services")
     if report.get("limitations_and_future_research"):
         toc_sections.append("Limitations &amp; Future Research")
     if report.get("images"):
@@ -473,6 +479,32 @@ def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "
             _add_paragraphs(story, str(evidence), body_style)
 
     # ================================================================
+    # 6b. PAID DATA SOURCES
+    #
+    # Purchased premium datasets get their own section so a reader can tell
+    # paid evidence from free web research. If the run spent budget, the report
+    # has to show what that money bought.
+    # ================================================================
+    paid_sources = report.get("paid_sources", [])
+    if paid_sources and isinstance(paid_sources, list):
+        story.append(Paragraph("Paid Data Sources", subheading_style))
+        for source in paid_sources:
+            if not isinstance(source, dict):
+                story.append(Paragraph(f"\u2022 {_safe_text(source)}", evidence_style))
+                continue
+            dataset_id = source.get("dataset_id", "")
+            used_for = source.get("used_for", "")
+            label = f"<b>{_safe_text(dataset_id)}</b>"
+            if used_for:
+                label += f" — {_safe_text(used_for)}"
+            story.append(Paragraph(label, evidence_style))
+            figures = source.get("key_figures", [])
+            if isinstance(figures, list):
+                for figure in figures:
+                    story.append(Paragraph(f"    \u2022 {_safe_text(figure)}", evidence_style))
+        story.append(Spacer(1, 8))
+
+    # ================================================================
     # 7. DATA ANALYSIS
     # ================================================================
     data_analysis = report.get("data_analysis", {})
@@ -507,6 +539,34 @@ def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "
         story.append(PageBreak())
         story.append(Paragraph("Conclusions", heading_style))
         _add_paragraphs(story, conclusions, body_style)
+
+    # ================================================================
+    # 8b. RECOMMENDED OPTION (the single best option)
+    # ================================================================
+    recommended_option = report.get("recommended_option")
+    if recommended_option:
+        story.append(PageBreak())
+        story.append(Paragraph("Recommended Option", heading_style))
+        if isinstance(recommended_option, dict):
+            ro_title = recommended_option.get("title", "")
+            if ro_title:
+                story.append(Paragraph(_safe_text(ro_title), subheading_style))
+            if recommended_option.get("why_this_one"):
+                story.append(
+                    Paragraph(
+                        f"<b>Why this option:</b> {_safe_text(recommended_option['why_this_one'])}",
+                        body_style,
+                    )
+                )
+            if recommended_option.get("tradeoffs"):
+                story.append(
+                    Paragraph(
+                        f"<b>Tradeoffs:</b> {_safe_text(recommended_option['tradeoffs'])}",
+                        body_style,
+                    )
+                )
+        else:
+            _add_paragraphs(story, str(recommended_option), body_style)
 
     # ================================================================
     # 9. RECOMMENDATIONS
@@ -556,6 +616,25 @@ def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "
                     story.append(Paragraph(f"{i}. {_safe_text(rec)}", body_style))
         else:
             _add_paragraphs(story, str(recommendations), body_style)
+
+    # ================================================================
+    # 9b. SUGGESTED SERVICES (services chapter — text, illustrated by images)
+    # ================================================================
+    suggested_services = report.get("suggested_services", [])
+    if suggested_services and isinstance(suggested_services, list):
+        story.append(PageBreak())
+        story.append(Paragraph("Suggested Services", heading_style))
+        for svc in suggested_services:
+            if isinstance(svc, dict):
+                svc_name = svc.get("name", "")
+                svc_desc = svc.get("description", "")
+                if svc_name:
+                    story.append(Paragraph(_safe_text(svc_name), subheading_style))
+                if svc_desc:
+                    story.append(Paragraph(_safe_text(svc_desc), body_style))
+                story.append(Spacer(1, 6))
+            else:
+                story.append(Paragraph(f"\u2022 {_safe_text(svc)}", body_style))
 
     # ================================================================
     # 10. LIMITATIONS & FUTURE RESEARCH
@@ -650,6 +729,11 @@ def _generate_pdf(topic: str, report: dict, user_id: str = "", pipeline: str = "
             "generated_date": datetime.utcnow().strftime("%Y-%m-%d"),
             "pipeline": pipeline,
             "page_count": str(total_pages),
+            # Per-run identifier, propagated by kb_ingest into the KB metadata
+            # sidecar so retrieval can be pinned to ONE research run. Without it
+            # the only run discriminator was `generated_date`, which is date-only
+            # and cannot separate two runs on the same day.
+            "report_id": report_id,
             **({"user_id": user_id} if user_id else {}),
         },
     )
@@ -1030,6 +1114,8 @@ def _generate_services_pdf(title: str, services_data: dict, user_id: str = "", p
         Metadata={
             "generated_date": datetime.utcnow().strftime("%Y-%m-%d"),
             "pipeline": pipeline,
+            # Same per-run identifier as the research report path.
+            "report_id": report_id,
             **({"user_id": user_id} if user_id else {}),
         },
     )

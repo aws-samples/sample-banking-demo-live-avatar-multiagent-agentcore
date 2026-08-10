@@ -33,6 +33,21 @@ export interface FeatureFlags {
     guardrails: boolean;
     browser: boolean;
     sample_tool: boolean;
+    /**
+     * AgentCore Payments (preview) for the Deep Research Agent.
+     *
+     * When true, deploys a PaymentManager plus a SELF-HOSTED x402 merchant
+     * (API Gateway + Lambda serving synthetic premium market data) so the
+     * researcher can discover a paywalled data source, pay per query, and stay
+     * inside a budget the user approved alongside the research plan. Keeping
+     * the merchant in-stack is what lets the demo stay self-contained: no
+     * external API, no real funds, deploy and destroy with plain CDK.
+     *
+     * Defaults to FALSE because AgentCore Payments is a preview service whose
+     * APIs may change before GA, and because a live payment path needs a
+     * funded (testnet) wallet the operator has to supply.
+     */
+    payments: boolean;
 }
 
 export interface ModelConfig {
@@ -56,6 +71,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
     guardrails: true,
     browser: true,
     sample_tool: false,
+    payments: false,
 };
 
 const DEFAULT_MODELS: ModelConfig = {

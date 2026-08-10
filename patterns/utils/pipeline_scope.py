@@ -74,7 +74,12 @@ MODE_PIPELINE_CONFIG: dict[str, dict[str, Any]] = {
         "read_filter": ["strategy_research", "market_research"],
         "archive": False,
     },
-    "chatbot": {"write": None, "read_filter": ["services"], "archive": False},
+    # Client Advisor grounds in the services catalog AND the step-1 strategy
+    # report, so its answers can be shown to be grounded in the Deep Research
+    # Agent's PDF (a stated demo goal). It never writes to the KB. The strategy
+    # report also carries staff/salary detail, which is exactly what the
+    # guardrails / DLP demo is meant to block — reading it makes that demo real.
+    "chatbot": {"write": None, "read_filter": ["services", "strategy_research"], "archive": False},
     "archive_chat": {"write": None, "read_filter": None, "archive": True},
 }
 
@@ -109,10 +114,15 @@ class PipelineScopeHook(HookProvider):
         write_pipeline=None,
         read_filter=None,
         is_archive: bool = False,
+        report_ids=None,
     ) -> None:
         self._write_provider = self._as_provider(write_pipeline)
         self._read_provider = self._as_provider(read_filter)
         self._is_archive = bool(is_archive)
+        # Static list or zero-arg callable, same contract as read_filter — the
+        # callable form lets the pinned run change between turns without
+        # rebuilding the agent.
+        self._report_provider = self._as_provider(report_ids)
 
     @staticmethod
     def _as_provider(value):
@@ -128,6 +138,23 @@ class PipelineScopeHook(HookProvider):
         if raw:
             logger.warning("pipeline_scope: dropping unknown write_pipeline %r", raw)
         return None
+
+    @staticmethod
+    def _coerce_report_ids(raw):
+        """Normalize a report-id pin to a clean list of non-empty strings.
+
+        Returns [] for anything unusable. An empty list means "do not pin" — it
+        must NOT fail closed, because most modes never pin and would otherwise
+        lose all retrieval.
+        """
+        if raw is None:
+            return []
+        if isinstance(raw, str):
+            raw = [raw]
+        if not isinstance(raw, list):
+            logger.warning("pipeline_scope: report_ids must be list/str/None, got %r", type(raw).__name__)
+            return []
+        return [r.strip() for r in raw if isinstance(r, str) and r.strip()]
 
     @staticmethod
     def _coerce_read(raw):
@@ -182,6 +209,21 @@ class PipelineScopeHook(HookProvider):
                 )
             else:
                 logger.info("pipeline_scope: injected kb_search pipelines=%r", read_filter)
+
+            # Pin retrieval to specific research run(s) when the caller supplied
+            # them. This is what stops the AI Assistant grounding itself in a
+            # semantic blend of every past run — two runs can recommend
+            # contradictory rates, and mixing them produced a catalog that read
+            # as one coherent report but was not.
+            #
+            # Always overwrite (never merge with an LLM-supplied value): the pin
+            # is a runtime authorization decision, not a model choice.
+            report_ids = self._coerce_report_ids(self._report_provider())
+            if report_ids:
+                tool_input["report_ids"] = report_ids
+                logger.info("pipeline_scope: pinned kb_search report_ids=%r", report_ids)
+            else:
+                tool_input.pop("report_ids", None)
             return
 
         if tool_name == "pdf_generator":

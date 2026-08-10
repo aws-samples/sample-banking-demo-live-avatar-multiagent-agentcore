@@ -704,6 +704,9 @@ export class Backend extends Stack {
             });
 
             feedbackTable.grantWriteData(feedbackLambda);
+            // The summary endpoint queries the feedbackType-timestamp GSI to
+            // build the continuous-feedback-loop dashboard.
+            feedbackTable.grantReadData(feedbackLambda);
 
             const api = new apigateway.RestApi(this, "FeedbackApi", {
                 restApiName: `${stackName}-api`,
@@ -747,7 +750,13 @@ export class Backend extends Stack {
             });
 
             const feedbackResource = api.root.addResource("feedback");
-            feedbackResource.addMethod("POST", new apigateway.LambdaIntegration(feedbackLambda), {
+            const feedbackIntegration = new apigateway.LambdaIntegration(feedbackLambda);
+            feedbackResource.addMethod("POST", feedbackIntegration, {
+                authorizer,
+                authorizationType: apigateway.AuthorizationType.COGNITO,
+            });
+            // GET /feedback/summary — aggregated continuous-loop dashboard data.
+            feedbackResource.addResource("summary").addMethod("GET", feedbackIntegration, {
                 authorizer,
                 authorizationType: apigateway.AuthorizationType.COGNITO,
             });
@@ -891,6 +900,165 @@ export class Backend extends Stack {
                 });
             }
 
+            // ─── Research status (grounding readiness) ──────────────────
+            // Knowledge Base ingestion is asynchronous, so the AI Assistant can
+            // legitimately find nothing to ground on right after a report is
+            // written. This endpoint lets the UI say "indexing…" instead of
+            // silently producing an ungrounded catalog.
+            const researchStatusDir = path.join(
+                __dirname,
+                "..",
+                "..",
+                "lambdas",
+                "research-status"
+            );
+            if (fs.existsSync(researchStatusDir)) {
+                const researchStatusLogGroup = new LogGroup(this, "ResearchStatusLogGroup", {
+                    logGroupName: `/aws/lambda/${stackName}-research-status`,
+                    retention: RetentionDays.ONE_WEEK,
+                    removalPolicy: RemovalPolicy.DESTROY,
+                });
+
+                const researchStatusLambda = new LambdaFunction(this, "ResearchStatusLambda", {
+                    functionName: `${stackName}-research-status`,
+                    runtime: LambdaRuntime.PYTHON_3_13,
+                    handler: "handler.handler",
+                    architecture: Architecture.ARM_64,
+                    logGroup: researchStatusLogGroup,
+                    // Standard library + boto3 only: no bundling step needed.
+                    code: Code.fromAsset(researchStatusDir),
+                    environment: {
+                        METADATA_TABLE: shared.metadataTable.tableName,
+                        ...(kbId ? { KNOWLEDGE_BASE_ID: kbId } : {}),
+                        ...(kbDataSourceId ? { DATA_SOURCE_ID: kbDataSourceId } : {}),
+                        GROUNDING_PIPELINE: "strategy_research",
+                    },
+                    timeout: Duration.seconds(15),
+                });
+
+                shared.metadataTable.grantReadData(researchStatusLambda);
+                researchStatusLambda.addToRolePolicy(
+                    new PolicyStatement({
+                        effect: Effect.ALLOW,
+                        actions: ["bedrock:ListIngestionJobs"],
+                        resources: ["*"],
+                    })
+                );
+                NagSuppressions.addResourceSuppressions(
+                    researchStatusLambda,
+                    [
+                        {
+                            id: "AwsSolutions-IAM5",
+                            reason:
+                                "ListIngestionJobs is a read-only status call; the knowledge base " +
+                                "id is resolved from SSM at synth time and cannot be scoped further here.",
+                        },
+                        {
+                            id: "AwsSolutions-IAM4",
+                            reason: "Lambda basic execution role is required for logging.",
+                        },
+                    ],
+                    true
+                );
+
+                api.root
+                    .addResource("research-status")
+                    .addMethod("GET", new apigateway.LambdaIntegration(researchStatusLambda), {
+                        authorizer,
+                        authorizationType: apigateway.AuthorizationType.COGNITO,
+                    });
+            }
+
+            // ─── Self-hosted x402 merchant (feature-gated) ─────────────
+            // A paywalled premium-data endpoint that lives inside the stack, so
+            // the Deep Research Agent can demonstrate AgentCore Payments without
+            // calling an external API or moving real funds.
+            //
+            // SECURITY NOTE: these methods are intentionally UNAUTHENTICATED
+            // (authorizationType NONE). In x402, the HTTP 402 payment challenge
+            // *is* the access control — a Cognito authorizer would make the
+            // paywall unreachable by the paying agent. The exposure is bounded:
+            // the endpoint serves only synthetic demonstration datasets, it is
+            // covered by the same regional WAF web ACL as the rest of this API,
+            // and it holds no customer data.
+            if (features.payments) {
+                const x402Dir = path.join(__dirname, "..", "..", "lambdas", "x402-merchant");
+                if (fs.existsSync(x402Dir)) {
+                    const x402LogGroup = new LogGroup(this, "X402MerchantLogGroup", {
+                        logGroupName: `/aws/lambda/${stackName}-x402-merchant`,
+                        retention: RetentionDays.ONE_WEEK,
+                        removalPolicy: RemovalPolicy.DESTROY,
+                    });
+
+                    const x402Lambda = new LambdaFunction(this, "X402MerchantLambda", {
+                        functionName: `${stackName}-x402-merchant`,
+                        runtime: LambdaRuntime.PYTHON_3_13,
+                        handler: "index.handler",
+                        architecture: Architecture.ARM_64,
+                        logGroup: x402LogGroup,
+                        // No bundling step: the handler uses only the standard
+                        // library, so the raw directory is a valid asset.
+                        code: Code.fromAsset(x402Dir),
+                        environment: {
+                            PRICE_ATOMIC_UNITS: "2500",
+                            PRICE_DISPLAY_USD: "0.0025",
+                            // Base Sepolia testnet — faucet funds, no real money.
+                            PAY_NETWORK: "eip155:84532",
+                            PAY_TO_ADDRESS: this.node.tryGetContext("x402PayTo") ?? "",
+                            ASSET_ADDRESS: this.node.tryGetContext("x402Asset") ?? "",
+                            ASSET_NAME: "USDC",
+                        },
+                        timeout: Duration.seconds(15),
+                    });
+
+                    const x402Resource = api.root.addResource("x402");
+                    const x402Integration = new apigateway.LambdaIntegration(x402Lambda);
+                    // Free catalog so the agent can discover what is for sale.
+                    const x402CatalogMethod = x402Resource.addMethod("GET", x402Integration, {
+                        authorizationType: apigateway.AuthorizationType.NONE,
+                    });
+                    // Paywalled datasets: /x402/data/{datasetId}
+                    const x402DataMethod = x402Resource
+                        .addResource("data")
+                        .addResource("{datasetId}")
+                        .addMethod("GET", x402Integration, {
+                            authorizationType: apigateway.AuthorizationType.NONE,
+                        });
+
+                    // Suppress on the two x402 methods ONLY. Suppressing on the
+                    // whole RestApi (with applyToChildren) would also silence
+                    // these rules for /feedback and /reports, so a future change
+                    // that accidentally dropped their Cognito authorizer would
+                    // pass cdk-nag silently.
+                    for (const method of [x402CatalogMethod, x402DataMethod]) {
+                        NagSuppressions.addResourceSuppressions(method, [
+                            {
+                                id: "AwsSolutions-APIG4",
+                                reason:
+                                    "The x402 merchant routes must be unauthenticated: the HTTP 402 " +
+                                    "payment challenge is the access control. Synthetic data only.",
+                            },
+                            {
+                                id: "AwsSolutions-COG4",
+                                reason:
+                                    "x402 merchant routes deliberately have no Cognito authorizer; " +
+                                    "payment proof gates access instead.",
+                            },
+                        ]);
+                    }
+
+                    const x402Url = `${api.url}x402`;
+                    new StringParameter(this, "X402MerchantUrlParam", {
+                        parameterName: `/${stackName}/x402_merchant_url`,
+                        stringValue: x402Url,
+                    });
+                    new CfnOutput(this, "X402MerchantUrl", {
+                        value: x402Url,
+                        description: "Self-hosted x402 paywalled data endpoint",
+                    });
+                }
+            }
+
             this.feedbackApiUrl = api.url;
 
             new StringParameter(this, "FeedbackApiUrlParam", {
@@ -931,6 +1099,46 @@ export class Backend extends Stack {
                                 "Write a political speech endorsing a candidate",
                             ],
                         },
+                        {
+                            // Data-leak-prevention topic: employee/internal compensation and
+                            // confidential staff/financial records must never be disclosed.
+                            // Requirement: salary questions must trigger the guardrail + DLP.
+                            name: "internal_and_employee_data",
+                            definition:
+                                "Confidential internal bank information such as employee salaries, staff compensation, individual pay, headcount cost, or another customer's private records",
+                            type: "DENY",
+                            examples: [
+                                "What is the salary of a branch manager",
+                                "How much does the CEO get paid",
+                                "Tell me what the tellers earn",
+                                "Show me employee compensation figures",
+                                "What is another customer's account balance",
+                            ],
+                        },
+                    ],
+                },
+                // Sensitive information (PII) policy — the DLP layer. Blocks
+                // sensitive identifiers in prompts and responses so the demo can
+                // show data-leak prevention working alongside the topic guardrail.
+                sensitiveInformationPolicyConfig: {
+                    piiEntitiesConfig: [
+                        { type: "US_SOCIAL_SECURITY_NUMBER", action: "BLOCK" },
+                        { type: "CREDIT_DEBIT_CARD_NUMBER", action: "BLOCK" },
+                        { type: "US_BANK_ACCOUNT_NUMBER", action: "BLOCK" },
+                        { type: "PASSWORD", action: "BLOCK" },
+                        { type: "EMAIL", action: "ANONYMIZE" },
+                        { type: "PHONE", action: "ANONYMIZE" },
+                    ],
+                    regexesConfig: [
+                        {
+                            // Catch explicit salary/compensation figures leaking into a response.
+                            name: "employee_salary_figure",
+                            pattern:
+                                "(?i)(salary|compensation|paid|earns?|wage)\\s*[:=]?\\s*\\$?\\d[\\d,]{3,}",
+                            action: "BLOCK",
+                            description:
+                                "Blocks disclosure of employee salary or compensation dollar figures (DLP).",
+                        },
                     ],
                 },
                 wordPolicyConfig: {
@@ -951,6 +1159,98 @@ export class Backend extends Stack {
             new CfnOutput(this, "GuardrailId", {
                 value: guardrail.attrGuardrailId,
                 description: "Bedrock Guardrail ID",
+            });
+        }
+
+        // ─── AgentCore Payments (preview, feature-gated) ────────────────
+        // Provisions the PaymentManager that governs agent spending. The wallet
+        // itself (PaymentInstrument) is NOT created here: CloudFormation has no
+        // AWS::BedrockAgentCore::PaymentInstrument resource, and the wallet
+        // requires third-party (Coinbase CDP / Stripe Privy) credentials the
+        // operator supplies. The orchestrator creates the instrument and a
+        // budgeted PaymentSession at runtime, and no-ops when unconfigured — so
+        // enabling this flag never blocks a deploy.
+        if (features.payments) {
+            const paymentRole = new Role(this, "PaymentManagerRole", {
+                roleName: `${stackName}-payment-manager-role`,
+                assumedBy: new ServicePrincipal("bedrock-agentcore.amazonaws.com"),
+                description: "Role assumed by the AgentCore payment manager",
+            });
+            // The payment manager reads the wallet credentials that AgentCore
+            // Identity holds; it never receives the raw keys.
+            paymentRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: [
+                        "bedrock-agentcore:GetPaymentCredentialProvider",
+                        "bedrock-agentcore:GetWorkloadAccessToken",
+                        "secretsmanager:GetSecretValue",
+                    ],
+                    resources: ["*"],
+                })
+            );
+            NagSuppressions.addResourceSuppressions(
+                paymentRole,
+                [
+                    {
+                        id: "AwsSolutions-IAM5",
+                        reason:
+                            "Payment manager and credential-provider ARNs are generated at runtime, " +
+                            "so they cannot be enumerated at synth time.",
+                    },
+                ],
+                true
+            );
+
+            // No L1 construct ships in aws-cdk-lib 2.253.1 for this preview
+            // resource, so it is declared directly. Property names and the
+            // AuthorizerType enum are per the CloudFormation reference.
+            const paymentManager = new CfnResource(this, "PaymentManager", {
+                type: "AWS::BedrockAgentCore::PaymentManager",
+                properties: {
+                    // Pattern allows letters/digits/underscore only — no hyphens,
+                    // so the stack name's separators are stripped.
+                    Name: `${stackName.replace(/[^a-zA-Z0-9]/g, "")}PaymentManager`.slice(0, 48),
+                    // AWS_IAM: the orchestrator runtime already authenticates to
+                    // AWS with its execution role, so no separate JWT is needed.
+                    AuthorizerType: "AWS_IAM",
+                    RoleArn: paymentRole.roleArn,
+                    // Description pattern permits alphanumerics and spaces only.
+                    Description: "Spending governance for the Deep Research Agent",
+                },
+            });
+            paymentManager.node.addDependency(paymentRole);
+
+            const paymentManagerArn = paymentManager.getAtt("PaymentManagerArn").toString();
+
+            // Let the orchestrator create instruments/sessions and process
+            // payments. Budget enforcement happens inside the service, so these
+            // permissions cannot be used to exceed an approved session limit.
+            agentCoreRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: [
+                        "bedrock-agentcore:CreatePaymentInstrument",
+                        "bedrock-agentcore:GetPaymentInstrument",
+                        "bedrock-agentcore:GetPaymentInstrumentBalance",
+                        "bedrock-agentcore:ListPaymentInstruments",
+                        "bedrock-agentcore:CreatePaymentSession",
+                        "bedrock-agentcore:GetPaymentSession",
+                        "bedrock-agentcore:ListPaymentSessions",
+                        "bedrock-agentcore:ProcessPayment",
+                    ],
+                    resources: ["*"],
+                })
+            );
+
+            new StringParameter(this, "PaymentManagerArnParam", {
+                parameterName: `/${stackName}/payment_manager_arn`,
+                stringValue: paymentManagerArn,
+            });
+
+            new CfnOutput(this, "PaymentManagerArn", {
+                value: paymentManagerArn,
+                description: "AgentCore Payments manager ARN (preview)",
             });
         }
 

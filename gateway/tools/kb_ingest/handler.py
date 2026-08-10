@@ -171,13 +171,31 @@ def handler(event, context):
             TaggingDirective="REPLACE",
         )
 
-        # Write .metadata.json sidecar so Bedrock KB indexes both `user_id`
-        # and `pipeline` as filterable attributes.
+        # Write .metadata.json sidecar so Bedrock KB indexes `user_id`,
+        # `pipeline` and `report_id` as filterable attributes.
+        #
+        # `report_id` is what lets the AI Assistant ground itself in ONE research
+        # run rather than a semantic blend of every run the user has ever done —
+        # two runs can recommend contradictory rates, and mixing them produced a
+        # catalog that read as if both came from one coherent report.
         metadata_attrs = {
             "source": "generated",
             "pipeline": pipeline,
             "user_id": user_id,
         }
+        report_id = source_metadata.get("report_id", "")
+        if report_id:
+            metadata_attrs["report_id"] = report_id
+        else:
+            # Pre-existing objects predate the stamp. Logged loudly because such
+            # a document has no `report_id` key, and S3 Vectors only evaluates a
+            # filter against documents that HAVE the key — so it will pass a
+            # report_id filter instead of being excluded by it.
+            logger.warning(
+                "Ingesting %s with no report_id — it will not be excluded by a "
+                "report_id filter. Re-ingest after a KB reset to pin it.",
+                src_key,
+            )
         sidecar_key = dest_key + ".metadata.json"
         s3.put_object(
             Bucket=KB_DOCS_BUCKET,

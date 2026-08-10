@@ -93,6 +93,10 @@ export class ApplicationStage extends Stage {
             ...(features.tavus_avatar && tavusAvatar
                 ? { VITE_TAVUS_OFFER_URL: tavusAvatar.offerApiUrl }
                 : {}),
+            // Gates the paid-data budget control on the research plan card. Only
+            // "true" enables it, so a stack without payments never offers the
+            // user a spend authorization it cannot honour.
+            VITE_PAYMENTS_ENABLED: features.payments ? "true" : "false",
         };
 
         // this stack must be named FrontendDeployment
