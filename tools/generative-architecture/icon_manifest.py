@@ -117,15 +117,17 @@ _MANIFEST: dict[str, IconEntry] = {
         stock_class="SimpleStorageServiceS3",
         stock_module="diagrams.aws.storage",
     ),
+    # The installed `diagrams` release ships a first-party Bedrock icon, so the
+    # old Sagemaker stand-in is no longer needed (and was misleading — it drew
+    # a SageMaker glyph for Bedrock foundation models).
     "bedrock": IconEntry(
         "bedrock",
-        stock_class="Sagemaker",  # diagrams lib has no Bedrock; Sagemaker is used
-        # as the convention in the reference agentcore_2026 spec.
+        stock_class="Bedrock",
         stock_module="diagrams.aws.ml",
     ),
     "knowledge_base": IconEntry(
         "knowledge_base",
-        stock_class="Sagemaker",
+        stock_class="Bedrock",
         stock_module="diagrams.aws.ml",
     ),
     "cloudfront": IconEntry(

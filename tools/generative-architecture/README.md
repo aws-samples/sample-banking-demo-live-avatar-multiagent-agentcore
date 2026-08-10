@@ -1,5 +1,54 @@
 # Generative Architecture Toolkit
 
+## 0. CANONICAL PATH: `arch_diagram.py` (deterministic, offline)
+
+**The current architecture diagram is produced by `arch_diagram.py`, not by
+the Claude pipeline described below.** It renders the same architecture
+deterministically with zero Bedrock calls:
+
+```bash
+cd tools/generative-architecture
+../../.venv/bin/python arch_diagram.py      # PNG + SVG + DOT
+../../.venv/bin/python dot_to_drawio.py     # editable draw.io XML
+```
+
+Outputs:
+
+| File                                       | What it is                                  |
+| ------------------------------------------ | ------------------------------------------- |
+| `architecture.drawio.png` (repo root)      | The diagram (landscape, ~2.1:1)             |
+| `architecture.drawio` (repo root)          | Editable draw.io XML, icons base64-embedded |
+| `architecture.drawio.svg` / `.dot`         | Vector + Graphviz source                    |
+| `docs/architecture.png`                    | Copy for documentation                      |
+| `docs/architecture.drawio.xml`             | Copy of the editable XML                    |
+
+Why it replaced the LLM path:
+
+- **Readability.** The generated spec had 58 nodes / 67 edges — an
+  unreadable edge mesh. `arch_diagram.py` consolidates sibling resources
+  into 26 nodes / 28 edges without losing meaning (collapsed detail is
+  named in each node's sub-label).
+- **Hub-and-spoke, not mesh.** The MCP Gateway is the single hub for tool
+  traffic and the Runtime the single hub for model traffic, so there are
+  no N×M crossing lines.
+- **Cost + reproducibility.** No Bedrock call, so layout iteration is
+  free and byte-identical between runs.
+- **Latest icons.** AgentCore primitives use the Jan 2026 AWS icon pack
+  in `icons/`; AWS services use first-party `diagrams.aws` classes,
+  including the native `Bedrock` icon (previously a SageMaker stand-in).
+
+Layout note: `arch_diagram.py` uses `style="invis"` edges purely to pin
+Graphviz ranks (they draw nothing). Without them the canvas comes out
+portrait. `dot_to_drawio.py` filters them so they never become phantom
+connectors in the XML.
+
+The Claude-in-the-loop pipeline below is retained for reference and for
+the legacy `--target agentcore-2026` spec.
+
+---
+
+## 1. Legacy: Claude-in-the-loop generator
+
 A Claude-in-the-loop architecture-diagram generator for the research-agent
 repo. Reads `cdk.json` + `lib/common/feature-flags.ts` to build a layout
 spec (clusters / nodes / edges), asks Claude to emit `diagrams` Python

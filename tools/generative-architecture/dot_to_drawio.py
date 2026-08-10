@@ -47,6 +47,12 @@ if not DOT_FILE.exists():
 
 dot = DOT_FILE.read_text(encoding="utf-8")
 
+# Graphviz soft-wraps long attribute values with a trailing backslash followed
+# by a newline and indentation. Left folded, a wrapped `image="..."` path parses
+# as a filename containing a newline, the icon silently fails to resolve, and
+# every node in the draw.io export degrades to a plain grey box. Unfold first.
+dot = re.sub(r"\\\s*\n\s*", "", dot)
+
 
 # ---------------------------------------------------------------------------
 # Parsing — DOT is structured enough that regex handles it reliably
@@ -438,6 +444,12 @@ for n in nodes.values():
 # Emit edges. draw.io edges live at the top-level parent ("1") regardless
 # of where their endpoints are.
 for i, e in enumerate(edges):
+    # Skip layout-only edges. `style=invis` edges exist purely to pin
+    # Graphviz ranks (they draw nothing in the PNG/SVG); emitting them here
+    # would add phantom connectors that imply relationships the
+    # architecture does not have.
+    if e.style and "invis" in e.style:
+        continue
     src = _sanitize_id(e.source)
     tgt = _sanitize_id(e.target)
     if src not in {_sanitize_id(n.id) for n in nodes.values()}:

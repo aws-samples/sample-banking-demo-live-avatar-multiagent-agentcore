@@ -38,6 +38,10 @@ from pathlib import Path
 
 DEFAULT_FEATURES: dict[str, object] = {
     "avatar": True,
+    # LiveKit WebRTC transport for the avatar voice loop.
+    "livekit": False,
+    # Tavus photoreal avatar video track (parallel transport to livekit).
+    "tavus_avatar": False,
     "knowledge_base": True,
     "kb_backend": "s3-vectors",
     "neptune": False,
@@ -48,6 +52,8 @@ DEFAULT_FEATURES: dict[str, object] = {
     "guardrails": True,
     "browser": True,
     "sample_tool": False,
+    # AgentCore Payments (preview) + the self-hosted x402 merchant.
+    "payments": False,
 }
 
 
@@ -72,6 +78,8 @@ _DEFAULT_CDK_JSON = Path(__file__).resolve().parent.parent.parent / "cdk.json"
 @dataclass(frozen=True)
 class FeatureFlags:
     avatar: bool
+    livekit: bool
+    tavus_avatar: bool
     knowledge_base: bool
     kb_backend: str
     neptune: bool
@@ -82,6 +90,7 @@ class FeatureFlags:
     guardrails: bool
     browser: bool
     sample_tool: bool
+    payments: bool
 
 
 @dataclass(frozen=True)
