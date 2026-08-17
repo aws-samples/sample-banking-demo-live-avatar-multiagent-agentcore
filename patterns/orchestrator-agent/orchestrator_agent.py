@@ -114,6 +114,10 @@ Your responsibilities:
 
 Guidelines:
 - Break complex topics into specific, researchable sub-questions
+- Across the sub-questions you MUST use every research type at least once: at
+  least one "kb" (grounded in prior/internal material or baseline reports), at
+  least one "web" (live external data), and at least one "analysis" (synthesis
+  or recommendation the agent reasons out). A plan that omits a type is invalid.
 - Check the knowledge base for similar past research before planning
 - Consider multiple perspectives: technical, business, regulatory, market
 - Prioritize questions by importance and dependency ordering
@@ -1665,6 +1669,80 @@ def _is_usable_plan(parsed: object) -> bool:
     return isinstance(questions, list) and len(questions) > 0
 
 
+# The three source lanes the plan card renders under each question. Every plan
+# should visibly draw on all three so the demo shows the agent combining the
+# knowledge base, live web, and its own analysis — the researcher queries all
+# sources at execution time regardless, so this only aligns the plan labels.
+_PLAN_SOURCE_TYPES = ("web", "kb", "analysis")
+
+# Words that hint a question is naturally a knowledge-base lookup (prior/internal
+# material) rather than live web research. Used only to pick a sensible donor
+# when the planner forgot to tag any question `kb`.
+_KB_AFFINITY_WORDS = (
+    "prior",
+    "previous",
+    "existing",
+    "past",
+    "baseline",
+    "internal",
+    "history",
+    "historical",
+    "already",
+    "our ",
+    "trinity",
+)
+
+
+def _ensure_source_coverage(plan: dict) -> dict:
+    """Guarantee the plan tags at least one question per source lane.
+
+    The planner intermittently omits a lane (most often `kb`), which makes the
+    approval card look like the agent skipped a whole source. Reassigning a
+    label is safe: `type` is an advisory lane shown on the card, and the
+    researcher hits the KB, the web, and its own analysis for every shard no
+    matter how questions are tagged. We only relabel when a lane is missing,
+    and we take the donor from an over-represented lane so no other required
+    lane drops to zero.
+    """
+    if not isinstance(plan, dict):
+        return plan
+    questions = plan.get("sub_questions")
+    if not isinstance(questions, list):
+        return plan
+
+    editable = [q for q in questions if isinstance(q, dict)]
+    # With fewer questions than lanes we cannot cover all three without leaving
+    # a lane empty elsewhere, so leave the planner's assignment untouched.
+    if len(editable) < len(_PLAN_SOURCE_TYPES):
+        return plan
+
+    for q in editable:
+        if q.get("type") not in _PLAN_SOURCE_TYPES:
+            q["type"] = "web"
+
+    for missing in [t for t in _PLAN_SOURCE_TYPES if all(q["type"] != t for q in editable)]:
+        counts: dict[str, int] = {}
+        for q in editable:
+            counts[q["type"]] = counts.get(q["type"], 0) + 1
+        # Donors must come from a lane with a spare (count >= 2) so we never
+        # empty a lane we already satisfied.
+        donors = [q for q in editable if counts.get(q["type"], 0) >= 2]
+        if not donors:
+            break
+        if missing == "kb":
+            preferred = [
+                q
+                for q in donors
+                if any(word in str(q.get("question", "")).lower() for word in _KB_AFFINITY_WORDS)
+            ]
+            donors = preferred or donors
+        # Pull from the most over-represented lane for a stable, sensible choice.
+        donor = max(donors, key=lambda q: counts.get(q["type"], 0))
+        donor["type"] = missing
+
+    return plan
+
+
 # ---------------------------------------------------------------------------
 # Research depth configuration
 # ---------------------------------------------------------------------------
@@ -2649,6 +2727,7 @@ async def _run_plan_only(query, user_id, session_id, requested_model="", researc
             print(f"[ORCHESTRATOR] Planner retry failed: {exc}")
 
     if plan:
+        _ensure_source_coverage(plan)
         print(f"[ORCHESTRATOR] Plan extracted: {plan.get('research_topic', 'unknown')}")
         yield {
             "_ui": {
