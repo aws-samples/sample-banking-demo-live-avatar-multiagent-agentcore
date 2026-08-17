@@ -295,10 +295,15 @@ function ConciergeFlowInner() {
         } else if (runtimeActive) {
             // Runtime just started — focus on the orchestration core before tools fire.
             focusOnGroup(["user", "runtime", "guardrails", "memory"]);
-        } else {
+        } else if (!anyActivity) {
+            // Only fit-to-view on the initial idle state, before anything has
+            // run. Once a run has happened we deliberately hold the last zoom
+            // (wherever the final tool left the camera) rather than snapping
+            // back out — the finished flow stays framed until the next run
+            // starts or the page reloads.
             reactFlow.fitView({ padding: 0.15, duration: 500 });
         }
-    }, [activeTool, runtimeActive, nodes, reactFlow]);
+    }, [activeTool, runtimeActive, anyActivity, nodes, reactFlow]);
 
     const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
