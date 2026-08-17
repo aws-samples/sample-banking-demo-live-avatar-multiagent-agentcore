@@ -6,6 +6,7 @@ import { PdfDeliveryCard } from "./PdfDeliveryCard";
 import { PdfDownloadLinkCard } from "./PdfDownloadLinkCard";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 import { ServicesCatalogCard } from "./ServicesCatalogCard";
+import { EvaluationScorecardCard } from "@/components/common/evaluation/EvaluationScorecard";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyComponent = ComponentType<any>;
@@ -24,6 +25,7 @@ const UI_COMPONENTS: Record<string, AnyComponent> = {
     PdfDownloadLink: PdfDownloadLinkCard,
     ResearchPlan: ResearchPlanCard,
     ServicesCatalog: ServicesCatalogCard,
+    EvaluationScorecard: EvaluationScorecardCard,
 };
 
 /** Look up a generative UI component by name. */

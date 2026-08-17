@@ -1,7 +1,22 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-import { Aws, CfnOutput, CfnResource, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
+import {
+    Aws,
+    CfnOutput,
+    CfnResource,
+    CustomResource,
+    Duration,
+    RemovalPolicy,
+    StackProps,
+} from "aws-cdk-lib";
+import { Provider } from "aws-cdk-lib/custom-resources";
 import { CfnGuardrail } from "aws-cdk-lib/aws-bedrock";
-import { CfnGateway, CfnGatewayTarget, CfnRuntime } from "aws-cdk-lib/aws-bedrockagentcore";
+import {
+    CfnGateway,
+    CfnGatewayTarget,
+    CfnPolicy,
+    CfnPolicyEngine,
+    CfnRuntime,
+} from "aws-cdk-lib/aws-bedrockagentcore";
 import {
     AttributeType,
     BillingMode,
@@ -38,6 +53,14 @@ export interface BackendProps extends StackProps {
 }
 
 export class Backend extends Stack {
+    // One dedicated orchestrator runtime per agent experience. They share a
+    // single container image (the mode-routing orchestrator) but are separate
+    // AgentCore Runtimes so each agent is independently listed, scaled, and
+    // observable in the console.
+    public readonly researchRuntimeArn: string = "";
+    public readonly assistantRuntimeArn: string = "";
+    public readonly agentRuntimeArn: string = "";
+    /** Back-compat alias — points at the Deep Research runtime. */
     public readonly orchestratorRuntimeArn: string = "";
     public readonly avatarRuntimeArn: string = "";
     public readonly feedbackApiUrl: string = "";
@@ -485,10 +508,320 @@ export class Backend extends Stack {
 
         this.gatewayUrl = gateway.attrGatewayUrl;
 
+        // ─── AgentCore Policy engine (Cedar, on the Gateway) ───────────
+        // A policy engine associated with the Gateway intercepts EVERY agent
+        // tool call and authorizes it against Cedar policies before the tool
+        // runs — deterministic control the agent cannot reason its way around.
+        //
+        // Ships in LOG_ONLY: it records allow/deny traces on real traffic
+        // without enforcing. That is the AWS-recommended path (validate on live
+        // traffic first) and it is also a safety requirement here — Cedar is
+        // default-deny, and because all three orchestrator runtimes currently
+        // call the Gateway as the same machine (OAuth) principal, an ENFORCE
+        // flip needs a complete permit set plus per-agent workload identities
+        // first. Do not set policyMode:"ENFORCE" until those exist.
+        if (features.policy) {
+            const gatewayArn = gateway.attrGatewayArn;
+
+            // The engine must NOT depend on the gateway: the gateway takes a
+            // dependency on the engine (via policyEngineConfiguration below), so
+            // an engine→gateway dependency here would form a cycle. The policies
+            // reference the gateway ARN as a plain string, which is enough.
+            const policyEngine = new CfnPolicyEngine(this, "PolicyEngine", {
+                name: `${stackName.replace(/-/g, "_")}_policy_engine`,
+                description: `Cedar authorization for the ${stackName} Gateway tool calls`,
+            });
+
+            // The Gateway's service role must be able to read the policy engine
+            // it is associated with — AgentCore checks this at association time
+            // (GetPolicyEngine) and uses it to evaluate tool calls. Without it
+            // the Gateway update fails with "Access denied while calling
+            // GetPolicyEngine ... Confirm this role has ... permissions".
+            // The Gateway's role must read AND evaluate the policy engine. The
+            // association's "GenesisPolicyEngineCheck" and runtime evaluation
+            // call a family of authorization actions (GetPolicyEngine,
+            // AuthorizeAction, PartiallyAuthorizeActions, …) whose resource
+            // varies — the engine ARN for reads, the GATEWAY ARN for the
+            // authorize calls. Rather than chase each action/resource pair
+            // through failed deploys, grant the bedrock-agentcore family for
+            // this service role. It is a Gateway-only service principal in a dev
+            // account (already broadly scoped for Bedrock), and the IAM5 nag is
+            // suppressed on this role. Tighten to the exact action set once the
+            // preview API's required permissions are documented.
+            gatewayRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["bedrock-agentcore:*"],
+                    resources: ["*"],
+                })
+            );
+
+            // Baseline allow: authenticated agents may call Gateway tools. This
+            // is the permit root an ENFORCE posture builds on (without it,
+            // default-deny would block everything the moment enforcement is on).
+            const permitBaseline = new CfnPolicy(this, "PolicyPermitGatewayTools", {
+                policyEngineId: policyEngine.attrPolicyEngineId,
+                name: "permit_gateway_tools",
+                description: "Baseline: authenticated agents may invoke Gateway tools.",
+                // Cedar analyzer findings are ignored so the policy deploys even
+                // before the tool schema is fully resolved; LOG_ONLY keeps it safe.
+                validationMode: "IGNORE_ALL_FINDINGS",
+                definition: {
+                    cedar: {
+                        statement: [
+                            "permit (",
+                            "  principal,",
+                            "  action,",
+                            `  resource == AgentCore::Gateway::"${gatewayArn}"`,
+                            ");",
+                        ].join("\n"),
+                    },
+                },
+            });
+            permitBaseline.node.addDependency(policyEngine);
+
+            // Deny the account-opening and customer-PII tools. In LOG_ONLY this
+            // surfaces "would-deny" traces demonstrating deterministic tool
+            // gating; on ENFORCE (once agents carry distinct identities) it
+            // keeps research agents away from write/PII actions that only the
+            // customer-facing AI Agent should reach.
+            const forbidSensitive = new CfnPolicy(this, "PolicyDenySensitiveTools", {
+                policyEngineId: policyEngine.attrPolicyEngineId,
+                name: "deny_account_and_pii_tools",
+                description:
+                    "Deny account-opening and customer-profile tools (deterministic tool gating).",
+                validationMode: "IGNORE_ALL_FINDINGS",
+                definition: {
+                    cedar: {
+                        statement: [
+                            "forbid (",
+                            "  principal,",
+                            "  action in [",
+                            '    AgentCore::Action::"place-order___place_order",',
+                            '    AgentCore::Action::"retrieve-user-profile___retrieve_user_profile"',
+                            "  ],",
+                            `  resource == AgentCore::Gateway::"${gatewayArn}"`,
+                            ");",
+                        ].join("\n"),
+                    },
+                },
+            });
+            forbidSensitive.node.addDependency(policyEngine);
+
+            // Associate the engine with the Gateway. LOG_ONLY by default.
+            gateway.policyEngineConfiguration = {
+                arn: policyEngine.attrPolicyEngineArn,
+                mode: features.policyMode,
+            };
+
+            // Ensure the Gateway role's GetPolicyEngine permission is attached
+            // BEFORE the Gateway association is updated, or the update races the
+            // policy grant and fails the access check.
+            const gwDefaultPolicy = gatewayRole.node.tryFindChild("DefaultPolicy")?.node
+                .defaultChild as CfnResource | undefined;
+            if (gwDefaultPolicy) {
+                gateway.addDependency(gwDefaultPolicy);
+            }
+
+            new StringParameter(this, "PolicyEngineArn", {
+                parameterName: `/${stackName}/policy_engine_arn`,
+                stringValue: policyEngine.attrPolicyEngineArn,
+            });
+
+            new CfnOutput(this, "PolicyEngineArn_Output", {
+                value: policyEngine.attrPolicyEngineArn,
+                description: `AgentCore Policy engine (${features.policyMode}) for the Gateway`,
+            });
+        }
+
         new StringParameter(this, "GatewayUrlParam", {
             parameterName: `/${stackName}/gateway_url`,
             stringValue: gateway.attrGatewayUrl,
         });
+
+        // ─── AgentCore Harness (managed agent, via custom resource) ────
+        // An additive, customer-facing "Quick Assistant" built on the config-only
+        // Harness path (model + system prompt, managed loop) so the Harness
+        // console page shows a real managed agent alongside the Runtime agents.
+        // There is no CloudFormation resource for Harness, so a small custom
+        // resource calls the preview `bedrock-agentcore-control` API. It is
+        // BEST-EFFORT: if the preview API is unavailable/denied in the account,
+        // the deploy still succeeds and the entry simply does not appear.
+        if (features.harness) {
+            const harnessName = `${stackName.replace(/-/g, "_")}_quick_assistant`.slice(0, 40);
+            const harnessSystemPrompt =
+                "You are the Trinity Reserve Bank Quick Assistant, a friendly customer-facing " +
+                "helper. Answer questions about the bank's accounts, cards, investing and " +
+                "retirement services clearly and concisely. If you are unsure, say so and " +
+                "suggest contacting the bank. Never invent account details, rates, or figures.";
+
+            // The harness needs its OWN execution role. It validates that the
+            // role's trust policy allows assumption by bedrock-agentcore ONLY —
+            // reusing the shared agentCoreRole (which also trusts
+            // bedrock.amazonaws.com) fails role validation. Permissions follow
+            // the AgentCore harness sample execution-role policy.
+            const harnessRole = new Role(this, "HarnessExecutionRole", {
+                roleName: `${stackName}-harness-role`,
+                assumedBy: new ServicePrincipal("bedrock-agentcore.amazonaws.com"),
+                description: "Execution role for the AgentCore Harness Quick Assistant",
+            });
+            harnessRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: [
+                        "bedrock:InvokeModel",
+                        "bedrock:InvokeModelWithResponseStream",
+                        "logs:CreateLogGroup",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents",
+                        "logs:DescribeLogStreams",
+                        "logs:DescribeLogGroups",
+                        "logs:PutResourcePolicy",
+                        "xray:PutTraceSegments",
+                        "xray:PutTelemetryRecords",
+                        "xray:GetSamplingRules",
+                        "xray:GetSamplingTargets",
+                        "ecr-public:GetAuthorizationToken",
+                        "sts:GetServiceBearerToken",
+                        "bedrock-agentcore:GetWorkloadAccessToken",
+                        "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
+                    ],
+                    resources: ["*"],
+                })
+            );
+            harnessRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["cloudwatch:PutMetricData"],
+                    resources: ["*"],
+                    conditions: {
+                        StringEquals: { "cloudwatch:namespace": "bedrock-agentcore" },
+                    },
+                })
+            );
+            NagSuppressions.addResourceSuppressions(
+                harnessRole,
+                [
+                    {
+                        id: "AwsSolutions-IAM5",
+                        reason: "Harness execution role uses wildcard resources per the AgentCore harness sample policy (Bedrock model invocation, logs, X-Ray, managed image pull).",
+                    },
+                ],
+                true
+            );
+
+            const harnessFn = new LambdaFunction(this, "HarnessProvisioner", {
+                functionName: `${stackName}-harness-provisioner`,
+                runtime: LambdaRuntime.PYTHON_3_13,
+                architecture: Architecture.ARM_64,
+                handler: "index.on_event",
+                timeout: Duration.minutes(5),
+                memorySize: 256,
+                // Vendors a recent boto3 — the Harness control-plane API is newer
+                // than the runtime-bundled SDK. boto3/botocore are pure-Python so
+                // the bundle is architecture-independent.
+                code: Code.fromAsset(path.join(repoRoot, "lib", "lambdas", "harness-provisioner"), {
+                    bundling: {
+                        image: LambdaRuntime.PYTHON_3_13.bundlingImage,
+                        command: [
+                            "bash",
+                            "-c",
+                            "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output",
+                        ],
+                    },
+                }),
+                environment: {
+                    HARNESS_NAME: harnessName,
+                    EXECUTION_ROLE_ARN: harnessRole.roleArn,
+                    SYSTEM_PROMPT: harnessSystemPrompt,
+                },
+            });
+
+            // CreateHarness/UpdateHarness/DeleteHarness each also require the
+            // underlying AgentRuntime (and Memory) action — see the AgentCore
+            // harness "required IAM actions" table — so the provisioner needs
+            // both the harness actions and their runtime/memory counterparts.
+            // CreateHarness fans out to the underlying AgentRuntime, its DEFAULT
+            // AgentRuntimeEndpoint, and Memory. Rather than enumerate each
+            // fan-out action (CreateAgentRuntime, CreateAgentRuntimeEndpoint,
+            // CreateMemory, and their update/delete counterparts) and rediscover
+            // them through failed provisioning, grant the bedrock-agentcore
+            // family to this deploy-time custom-resource role.
+            harnessFn.addToRolePolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["bedrock-agentcore:*"],
+                    resources: ["*"],
+                })
+            );
+            // Passing the dedicated execution role to the harness requires PassRole.
+            harnessFn.addToRolePolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["iam:PassRole"],
+                    resources: [harnessRole.roleArn],
+                    conditions: {
+                        StringEquals: {
+                            "iam:PassedToService": "bedrock-agentcore.amazonaws.com",
+                        },
+                    },
+                })
+            );
+
+            const harnessProvider = new Provider(this, "HarnessProvider", {
+                onEventHandler: harnessFn,
+            });
+
+            const harnessResource = new CustomResource(this, "HarnessResource", {
+                serviceToken: harnessProvider.serviceToken,
+                properties: {
+                    // Re-provision when the identity, prompt, or this rev changes.
+                    HarnessName: harnessName,
+                    PromptHash: harnessSystemPrompt.length.toString(),
+                    // Bump to force the custom resource to re-run (e.g. after
+                    // switching to the dedicated execution role / fixing perms).
+                    Rev: "3",
+                },
+            });
+            harnessResource.node.addDependency(harnessRole);
+
+            new CfnOutput(this, "HarnessArn_Output", {
+                value: harnessResource.getAttString("HarnessArn"),
+                description:
+                    "AgentCore Harness ARN (Quick Assistant); empty if the preview API was unavailable",
+            });
+
+            // The provisioner needs wildcard bedrock-agentcore + PassRole; the
+            // Provider framework brings its own managed-runtime Lambda + role.
+            NagSuppressions.addResourceSuppressions(
+                harnessFn,
+                [
+                    {
+                        id: "AwsSolutions-IAM5",
+                        reason: "Harness provisioner needs bedrock-agentcore:* on * (harness ARNs are created at runtime) and PassRole on the AgentCore role.",
+                    },
+                ],
+                true
+            );
+            NagSuppressions.addResourceSuppressions(
+                harnessProvider,
+                [
+                    {
+                        id: "AwsSolutions-IAM4",
+                        reason: "CDK Provider framework Lambda uses the managed basic-execution role.",
+                    },
+                    {
+                        id: "AwsSolutions-IAM5",
+                        reason: "CDK Provider framework grants wildcard invoke on its own onEvent handler.",
+                    },
+                    {
+                        id: "AwsSolutions-L1",
+                        reason: "CDK Provider framework manages its own Lambda runtime version.",
+                    },
+                ],
+                true
+            );
+        }
 
         // ─── AgentCore Runtimes ────────────────────────────────────────
         const jwtDiscoveryUrl = `${cognitoIssuer}/.well-known/openid-configuration`;
@@ -513,29 +846,35 @@ export class Backend extends Stack {
 
         const runtimeArns: Record<string, string> = {};
 
-        // ─── Orchestrator Runtime ──────────────────────────────────────
-        {
-            // NOTE: the `_v2` suffix is a one-time rename. The original
-            // orchestrator runtime was created via the alpha L2 construct;
-            // after migrating to this L1 CfnRuntime, CloudFormation forces a
-            // replacement on any change, and because AgentRuntimeName is a
-            // create-only identifier the create-before-delete collided
-            // ("already exists") with the still-live L2 runtime. Renaming once
-            // lets CFN create the fresh L1-native runtime under a new name and
-            // delete the old one. Subsequent image updates then apply in place
-            // (as the avatar runtime already does). The name is internal
-            // (ARN/logs only) — nothing references the literal string.
-            const orchestratorRuntimeName = `${stackName.replace(/-/g, "_")}_orchestrator_v2`;
-            const orchestratorPatternDir = "patterns/orchestrator-agent";
+        // ─── Orchestrator Runtimes (one per agent experience) ──────────
+        // The orchestrator is a single codebase whose entrypoint routes by a
+        // `mode` field. We deploy it as three dedicated AgentCore Runtimes so
+        // each agent experience is a first-class, independently listed, scaled,
+        // and observable runtime — matching the requirement that Deep Research,
+        // the AI Assistant, and the AI Agent are separate agents that each call
+        // the shared Gateway. They reuse ONE container image (CDK dedupes the
+        // asset by content hash, so it is built and pushed once), differing only
+        // by name and an AGENT_PROFILE tag that identifies the experience in
+        // logs/observability and scopes the Policy engine's per-agent rules.
+        const orchestratorImage = new DockerImageAsset(this, "OrchestratorImage", {
+            directory: repoRoot,
+            file: "patterns/orchestrator-agent/Dockerfile",
+            platform: Platform.LINUX_ARM64,
+        });
 
-            const orchestratorImage = new DockerImageAsset(this, "OrchestratorImage", {
-                directory: repoRoot,
-                file: `${orchestratorPatternDir}/Dockerfile`,
-                platform: Platform.LINUX_ARM64,
-            });
+        const orchestratorProfiles = [
+            {
+                key: "research",
+                profile: "deep_research",
+                label: "Deep Research + Research Studio",
+            },
+            { key: "assistant", profile: "ai_assistant", label: "AI Assistant" },
+            { key: "agent", profile: "ai_agent", label: "AI Agent + archive chat" },
+        ] as const;
 
-            const orchestratorRuntime = new CfnRuntime(this, "Runtime_orchestrator", {
-                agentRuntimeName: orchestratorRuntimeName,
+        for (const { key, profile, label } of orchestratorProfiles) {
+            const runtime = new CfnRuntime(this, `Runtime_${key}`, {
+                agentRuntimeName: `${stackName.replace(/-/g, "_")}_${profile}`,
                 agentRuntimeArtifact: {
                     containerConfiguration: {
                         containerUri: orchestratorImage.imageUri,
@@ -553,6 +892,9 @@ export class Backend extends Stack {
                     // can disable the microVM spend without rebuilding the
                     // image. See patterns/orchestrator-agent/browser_tools.py.
                     ENABLE_BROWSER_TOOLS: features.browser ? "true" : "false",
+                    // Identifies which agent experience this runtime serves.
+                    // Surfaced in logs and used to scope the Policy engine.
+                    AGENT_PROFILE: profile,
                 },
                 authorizerConfiguration: runtimeAuthorizerConfiguration,
                 // L1 spells this `requestHeaderAllowlist`; the alpha L2 called
@@ -562,24 +904,36 @@ export class Backend extends Stack {
                 requestHeaderConfiguration: {
                     requestHeaderAllowlist: ["Authorization"],
                 },
-                description: `In-process orchestrator for ${stackName}`,
+                description: `${label} agent for ${stackName}`,
             });
 
-            orchestratorRuntime.node.addDependency(agentCoreRole);
+            runtime.node.addDependency(agentCoreRole);
 
-            this.orchestratorRuntimeArn = orchestratorRuntime.attrAgentRuntimeArn;
-            runtimeArns["orchestrator"] = orchestratorRuntime.attrAgentRuntimeArn;
+            runtimeArns[key] = runtime.attrAgentRuntimeArn;
 
-            new StringParameter(this, "RuntimeArn_orchestrator", {
-                parameterName: `/${stackName}/runtime_arn_orchestrator`,
-                stringValue: orchestratorRuntime.attrAgentRuntimeArn,
+            new StringParameter(this, `RuntimeArn_${key}`, {
+                parameterName: `/${stackName}/runtime_arn_${key}`,
+                stringValue: runtime.attrAgentRuntimeArn,
             });
 
-            new CfnOutput(this, "RuntimeArn_orchestrator_Output", {
-                value: orchestratorRuntime.attrAgentRuntimeArn,
-                description: "Runtime ARN for orchestrator agent",
+            new CfnOutput(this, `RuntimeArn_${key}_Output`, {
+                value: runtime.attrAgentRuntimeArn,
+                description: `Runtime ARN for the ${label} agent`,
             });
         }
+
+        this.researchRuntimeArn = runtimeArns["research"];
+        this.assistantRuntimeArn = runtimeArns["assistant"];
+        this.agentRuntimeArn = runtimeArns["agent"];
+        // Back-compat alias — anything still reading the single orchestrator ARN
+        // resolves to the Deep Research runtime.
+        this.orchestratorRuntimeArn = runtimeArns["research"];
+
+        // NOTE: the previous single-orchestrator runtime (`_orchestrator_v2`)
+        // and its transitional cross-stack export were removed here once the
+        // frontend migrated to the three per-agent exports above. The old
+        // export is no longer imported by any stack, so CloudFormation can drop
+        // it cleanly on this deploy.
 
         // ─── Avatar Runtime (feature-gated) ────────────────────────────
         if (features.avatar) {

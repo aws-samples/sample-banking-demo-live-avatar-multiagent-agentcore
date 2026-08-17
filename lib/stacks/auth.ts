@@ -200,6 +200,17 @@ export class Auth extends Stack {
                 resources: ["*"],
             })
         );
+        // Read-aloud in the AI Assistant synthesizes speech with Polly's
+        // generative voice directly from the browser, using the temporary
+        // Identity Pool credentials. SynthesizeSpeech has no resource ARN, so
+        // the resource must be "*".
+        authenticatedRole.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ["polly:SynthesizeSpeech"],
+                resources: ["*"],
+            })
+        );
         NagSuppressions.addResourceSuppressions(
             authenticatedRole,
             [

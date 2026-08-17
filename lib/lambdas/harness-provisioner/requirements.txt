@@ -1,0 +1,5 @@
+# Recent boto3/botocore are required: the AgentCore Harness control-plane API
+# (bedrock-agentcore-control create/get/update/delete-harness) is newer than the
+# boto3 bundled in the Lambda runtime, so it is vendored into the asset.
+boto3>=1.40.0
+botocore>=1.40.0

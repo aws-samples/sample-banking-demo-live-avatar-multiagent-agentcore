@@ -32,7 +32,13 @@ export type ResearchPhase = PipelinePhase;
 /** Stream event types emitted by parsers */
 export type StreamEvent =
     | { type: "text"; content: string; _agent?: AgentId }
-    | { type: "tool_use_start"; toolUseId: string; name: string }
+    /**
+     * `telemetryOnly` marks a tool call reported for metrics only — the
+     * parallel researcher's worker sub-agents, whose arguments and results are
+     * never streamed. Counted in the flow diagram and run report, but kept out
+     * of the chat transcript where it would render as an empty dropdown.
+     */
+    | { type: "tool_use_start"; toolUseId: string; name: string; telemetryOnly?: boolean }
     | { type: "tool_use_delta"; toolUseId: string; input: string }
     | { type: "tool_result"; toolUseId: string; result: string }
     | { type: "message"; role: string; content: unknown[] }

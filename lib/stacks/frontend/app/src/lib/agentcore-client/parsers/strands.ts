@@ -115,7 +115,15 @@ export const parseStrandsChunk: ChunkParser = (line, callback) => {
         if (json.current_tool_use) {
             const tool = json.current_tool_use;
             if (json.delta?.toolUse?.input === "") {
-                callback({ type: "tool_use_start", toolUseId: tool.toolUseId, name: tool.name });
+                callback({
+                    type: "tool_use_start",
+                    toolUseId: tool.toolUseId,
+                    name: tool.name,
+                    // Metrics-only calls (parallel research workers) are counted
+                    // but never rendered as chat cards — they have no streamed
+                    // arguments or result to show.
+                    telemetryOnly: json.telemetry_only === true,
+                });
             } else if (json.delta?.toolUse?.input) {
                 callback({
                     type: "tool_use_delta",

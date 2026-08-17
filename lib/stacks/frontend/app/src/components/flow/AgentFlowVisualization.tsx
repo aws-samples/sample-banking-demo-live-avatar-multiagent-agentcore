@@ -47,7 +47,15 @@ export interface FlowConfig {
     userLabel?: string;
 }
 
-function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig }) {
+function AgentFlowInner({
+    mode,
+    config,
+    fill = false,
+}: {
+    mode: string;
+    config?: FlowConfig;
+    fill?: boolean;
+}) {
     const pipeline = config?.pipeline ?? AGENT_PIPELINE;
     const agentToPhase = config?.agentToPhase ?? DEFAULT_AGENT_TO_PHASE;
     const descriptions = config?.descriptions ?? DEFAULT_DESCRIPTIONS;
@@ -196,29 +204,41 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
 
     return (
         <div
-            className="relative w-full overflow-hidden rounded-xl border"
+            className={
+                fill
+                    ? "relative flex h-full w-full flex-col overflow-hidden"
+                    : "relative w-full overflow-hidden rounded-xl border"
+            }
             style={{
-                borderColor: "rgba(71,85,105,0.4)",
+                borderColor: fill ? undefined : "rgba(71,85,105,0.4)",
                 background:
                     "linear-gradient(160deg, rgb(15,23,42) 0%, rgb(11,17,32) 55%, rgb(15,23,42) 100%)",
             }}
         >
             {/* Header: run state, status key, and the affordance that makes the
                 step inspector discoverable — without it the enlarged popout is
-                hidden behind an undiscoverable click. */}
-            <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-3 py-2">
-                <div className="flex items-center gap-2">
-                    <span
-                        className={`inline-block h-2 w-2 rounded-full ${
-                            state.isActive ? "animate-pulse bg-emerald-400" : "bg-slate-600"
-                        }`}
-                        aria-hidden
-                    />
-                    <span className="text-xs font-semibold text-slate-100">Agent Workflow</span>
+                hidden behind an undiscoverable click. In fill mode the parent
+                shell already carries the run-state header, so we drop the left
+                cluster and keep just the status key. */}
+            <div className="flex flex-none items-center justify-between gap-3 border-b border-slate-800 px-3 py-2">
+                {fill ? (
                     <span className="text-[10px] uppercase tracking-wider text-slate-500">
-                        {state.isActive ? "Live" : "Idle"}
+                        Agent Workflow
                     </span>
-                </div>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <span
+                            className={`inline-block h-2 w-2 rounded-full ${
+                                state.isActive ? "animate-pulse bg-emerald-400" : "bg-slate-600"
+                            }`}
+                            aria-hidden
+                        />
+                        <span className="text-xs font-semibold text-slate-100">Agent Workflow</span>
+                        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                            {state.isActive ? "Live" : "Idle"}
+                        </span>
+                    </div>
+                )}
                 <div className="flex items-center gap-2.5">
                     {(
                         [
@@ -242,7 +262,10 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
                 </div>
             </div>
 
-            <div className="relative w-full" style={{ height: flowHeight }}>
+            <div
+                className={fill ? "relative w-full flex-1" : "relative w-full"}
+                style={fill ? undefined : { height: flowHeight }}
+            >
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -427,10 +450,18 @@ function AgentFlowInner({ mode, config }: { mode: string; config?: FlowConfig })
     );
 }
 
-export function AgentFlowVisualization({ mode, config }: { mode: string; config?: FlowConfig }) {
+export function AgentFlowVisualization({
+    mode,
+    config,
+    fill,
+}: {
+    mode: string;
+    config?: FlowConfig;
+    fill?: boolean;
+}) {
     return (
         <ReactFlowProvider>
-            <AgentFlowInner mode={mode} config={config} />
+            <AgentFlowInner mode={mode} config={config} fill={fill} />
         </ReactFlowProvider>
     );
 }

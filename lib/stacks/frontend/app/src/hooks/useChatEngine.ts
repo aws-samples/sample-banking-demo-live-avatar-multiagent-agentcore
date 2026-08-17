@@ -8,6 +8,7 @@ import { useModelSelector } from "@/hooks/useModelSelector";
 import { useChatStore } from "@/stores/chatStore";
 import type { ResearchAction } from "@/stores/chatStore";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
+import type { EvaluationData } from "@/components/common/evaluation/types";
 import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
 import { normalizeToolName } from "@/components/concierge-flow/flow-types";
 
@@ -37,6 +38,24 @@ export interface UseChatEngineReturn {
     sessionId: string;
     startNewChat: () => void;
     isReady: boolean;
+}
+
+/**
+ * Each agent experience is its own AgentCore Runtime, so pick the runtime ARN
+ * by mode. The AI Assistant (menu) and AI Agent (chatbot/archive) have their
+ * own runtimes; everything else is a research experience. Falls back to the
+ * back-compat orchestrator ARN if a specific one isn't injected.
+ */
+function runtimeArnForMode(mode: string): string | undefined {
+    const env = import.meta.env;
+    if (mode === "menu" || mode === "menu_export") {
+        return env.VITE_RUNTIME_ARN_ASSISTANT || env.VITE_RUNTIME_ARN_ORCHESTRATOR;
+    }
+    if (mode === "chatbot" || mode === "archive_chat") {
+        return env.VITE_RUNTIME_ARN_AGENT || env.VITE_RUNTIME_ARN_ORCHESTRATOR;
+    }
+    // research, generic_research (+ their *_execute variants) and any default.
+    return env.VITE_RUNTIME_ARN_RESEARCH || env.VITE_RUNTIME_ARN_ORCHESTRATOR;
 }
 
 export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineReturn {
@@ -73,7 +92,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
     );
 
     useEffect(() => {
-        const runtimeArn = import.meta.env.VITE_RUNTIME_ARN_ORCHESTRATOR;
+        const runtimeArn = runtimeArnForMode(mode);
         if (!runtimeArn) {
             useChatStore
                 .getState()
@@ -87,7 +106,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                 pattern: "strands-single-agent" as AgentPattern,
             })
         );
-    }, [storeKey]);
+    }, [storeKey, mode]);
 
     /** Shared streaming logic — sends a request and processes SSE events into message segments. */
     const _streamResponse = useCallback(
@@ -194,14 +213,6 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                 break;
                             }
                             case "tool_use_start": {
-                                const tc: ToolCall = {
-                                    toolUseId: event.toolUseId,
-                                    name: event.name,
-                                    input: "",
-                                    status: "streaming",
-                                };
-                                toolCallMap.set(event.toolUseId, tc);
-                                segments.push({ type: "tool", toolCall: tc });
                                 useConciergeFlowStore
                                     .getState()
                                     .toolStart(event.toolUseId, event.name);
@@ -215,6 +226,22 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                         tool: normalizeToolName(event.name),
                                     });
                                 }
+                                // Metrics-only calls stop here. The parallel
+                                // researcher's workers report their tool use for
+                                // the diagram and run report, but their
+                                // arguments and results never stream, so a chat
+                                // card would stay empty — dozens of blank
+                                // dropdowns burying the conversation.
+                                if (event.telemetryOnly) break;
+
+                                const tc: ToolCall = {
+                                    toolUseId: event.toolUseId,
+                                    name: event.name,
+                                    input: "",
+                                    status: "streaming",
+                                };
+                                toolCallMap.set(event.toolUseId, tc);
+                                segments.push({ type: "tool", toolCall: tc });
                                 updateMessage();
                                 break;
                             }
@@ -299,6 +326,16 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                         .dispatchMenu({ type: "SET_SECTIONS", sections: mapped });
                                     // No `break` — the generic handler below
                                     // pushes it as an inline chat segment.
+                                }
+                                // Evaluation scorecard: populate the flow store
+                                // so the Run Report's evaluation tile lights up
+                                // live, then FALL THROUGH so the full card also
+                                // renders inline in the chat.
+                                if (event.component === "EvaluationScorecard") {
+                                    useConciergeFlowStore
+                                        .getState()
+                                        .setEvaluation(event.props as unknown as EvaluationData);
+                                    // No `break` — render the inline card too.
                                 }
                                 const uiKey = `ui-${(event.props.agent as string) || event.component}`;
                                 const existingIdx = segments.findIndex(

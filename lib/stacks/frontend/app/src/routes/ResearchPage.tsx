@@ -1,69 +1,13 @@
 import { useMemo, useState } from "react";
 import ChatInterface from "@/components/chat/ChatInterface";
-import { AgentFlowVisualization } from "@/components/flow/AgentFlowVisualization";
-import { ResearchProgressBar } from "@/components/research/ResearchProgressBar";
-import PipelineRunReport from "@/components/research/PipelineRunReport";
+import { PipelineFlowSidebar } from "@/components/common/flow/PipelineFlowSidebar";
 import { useResearchState } from "@/hooks/useResearchState";
 import { SAMPLE_PROMPTS } from "@/config/samplePrompts";
-import Button from "@cloudscape-design/components/button";
-import { PanelRight, PanelRightClose } from "lucide-react";
 import ResizablePanelLayout, {
     type ResizablePanelConfig,
 } from "@/components/common/resizable/ResizablePanelLayout";
 
 const MODE = "research";
-
-function ResearchSidebar({
-    collapsed,
-    onToggle,
-}: {
-    collapsed: boolean;
-    onToggle: () => void;
-}): JSX.Element {
-    if (collapsed) {
-        return (
-            <div
-                className="h-full w-full min-w-0 flex flex-col items-center py-3 glass-panel-strong"
-                style={{ borderLeft: "1px solid var(--glass-border)" }}
-            >
-                <Button
-                    variant="icon"
-                    iconSvg={<PanelRight size={16} />}
-                    onClick={onToggle}
-                    ariaLabel="Expand sidebar"
-                />
-            </div>
-        );
-    }
-
-    return (
-        <div
-            className="h-full w-full min-w-0 overflow-y-auto flex flex-col glass-panel-strong"
-            style={{ borderLeft: "1px solid var(--glass-border)" }}
-        >
-            <div
-                className="flex items-center justify-between px-4 py-3"
-                style={{ borderBottom: "1px solid var(--glass-border)" }}
-            >
-                <span className="text-sm font-medium" style={{ color: "var(--app-text)" }}>
-                    Research Pipeline
-                </span>
-                <Button
-                    variant="icon"
-                    iconSvg={<PanelRightClose size={16} />}
-                    onClick={onToggle}
-                    ariaLabel="Collapse sidebar"
-                />
-            </div>
-
-            <div className="flex flex-col gap-4 p-4">
-                <ResearchProgressBar mode={MODE} />
-                <AgentFlowVisualization mode={MODE} />
-                <PipelineRunReport mode={MODE} />
-            </div>
-        </div>
-    );
-}
 
 export default function ResearchPage(): JSX.Element {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -103,7 +47,10 @@ export default function ResearchPage(): JSX.Element {
                 />
             </div>
             {showSidebar ? (
-                <ResearchSidebar
+                <PipelineFlowSidebar
+                    mode={MODE}
+                    title="AgentCore Flow"
+                    subtitle="Real-time view of the research pipeline & tool invocations"
                     collapsed={sidebarCollapsed}
                     onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                 />

@@ -12,8 +12,10 @@ import {
     AlertTriangle,
     Info,
     CheckCircle2,
+    ChevronRight,
 } from "lucide-react";
 import { useFeedbackSummary } from "@/hooks/useFeedbackSummary";
+import { useChatStore } from "@/stores/chatStore";
 import type {
     FeedbackSummary,
     FeedbackEvent,
@@ -23,20 +25,19 @@ import type {
 /**
  * Continuous Feedback Loop — the AI Assistant's live quality readout.
  *
- * Every thumbs rating, human edit and applied A/B winner captured during
- * catalog review is aggregated here and shown as a turning loop:
- *   Generate → Collect → Evaluate → Improve
- * mirroring the AgentCore Evaluations lifecycle (experimentation → online
- * sampling → post-production insights). The thumbs the operator already uses
- * are the loop's input, not a separate mechanism.
+ * Laid out as a left-to-right flywheel with a return arrow, matching the agent
+ * workflow diagrams elsewhere in the app. An earlier version drew this as a
+ * circle with the four stages pinned N/E/S/W; in a panel this shape it cost a
+ * lot of vertical space and the badge labels collided with the metrics beneath
+ * it, so the picture actively got in the way of the numbers.
+ *
+ * Every figure is real: ratings, human edits and applied A/B winners captured
+ * during catalog review, aggregated by GET /feedback/summary. Rates are
+ * qualified while the sample is small rather than presented as if settled.
  */
 
-const STAGES = [
-    { key: "generate", label: "Generate", icon: Sparkles, color: "#ff9900" },
-    { key: "collect", label: "Collect", icon: Inbox, color: "#4fd1a5" },
-    { key: "evaluate", label: "Evaluate", icon: Gauge, color: "#8b8ef7" },
-    { key: "improve", label: "Improve", icon: RefreshCw, color: "#e0b850" },
-] as const;
+/** Below this many signals a percentage is noise, and is labelled as such. */
+const SMALL_SAMPLE = 5;
 
 function bandColor(rate: number): string {
     if (rate >= 0.85) return "#37b24d";
@@ -46,25 +47,69 @@ function bandColor(rate: number): string {
 
 export default function ContinuousFeedbackLoop(): JSX.Element | null {
     const { summary, loading } = useFeedbackSummary();
+    // Items currently in the catalog — the "Generate" stage's real output.
+    const generatedCount = useChatStore((s) =>
+        s.menuState.sections.reduce((n, section) => n + section.items.length, 0)
+    );
 
     // Render nothing until the first read resolves — the rail already carries
     // the pipeline view, and a flash of empty scaffolding on load is noise.
     if (!summary && loading) return null;
     if (!summary) return null;
 
-    const active = summary.totals.total > 0;
+    const { totals, bySource } = summary;
+    const active = totals.total > 0;
+    const improvements =
+        (bySource.find((s) => s.source === "edit")?.count ?? 0) +
+        (bySource.find((s) => s.source === "ab_test")?.count ?? 0);
+    const smallSample = totals.total > 0 && totals.total < SMALL_SAMPLE;
+
+    const stages = [
+        {
+            key: "generate",
+            label: "Generate",
+            icon: Sparkles,
+            color: "#ff9900",
+            value: generatedCount > 0 ? String(generatedCount) : "—",
+            unit: generatedCount === 1 ? "item" : "items",
+        },
+        {
+            key: "collect",
+            label: "Collect",
+            icon: Inbox,
+            color: "#4fd1a5",
+            value: String(totals.total),
+            unit: totals.total === 1 ? "signal" : "signals",
+        },
+        {
+            key: "evaluate",
+            label: "Evaluate",
+            icon: Gauge,
+            color: "#8b8ef7",
+            value: active ? `${Math.round(totals.approvalRate * 100)}%` : "—",
+            unit: "approved",
+        },
+        {
+            key: "improve",
+            label: "Improve",
+            icon: RefreshCw,
+            color: "#e0b850",
+            value: String(improvements),
+            unit: improvements === 1 ? "applied" : "applied",
+        },
+    ] as const;
 
     return (
         <div
             className="rounded-lg p-3"
             style={{ border: "1px solid var(--glass-border)", background: "var(--glass-bg)" }}
         >
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-3 flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm font-semibold">
                     <TrendingUp size={14} /> Continuous Feedback Loop
                 </span>
                 <span
-                    className="flex items-center gap-1 text-[10px]"
+                    className="flex items-center gap-1 text-[10px] uppercase tracking-wider"
                     style={{ color: "var(--app-text-secondary)" }}
                 >
                     <span
@@ -75,168 +120,184 @@ export default function ContinuousFeedbackLoop(): JSX.Element | null {
                 </span>
             </div>
 
-            <LoopRing summary={summary} active={active} />
+            {/* Flywheel: four stages left to right, then a return arrow showing
+                the loop closing back on the next catalog. */}
+            <div className="flex items-stretch gap-1">
+                {stages.map((stage, i) => (
+                    <div key={stage.key} className="flex min-w-0 flex-1 items-center gap-1">
+                        <div
+                            className="min-w-0 flex-1 rounded-md px-1.5 py-2 text-center"
+                            style={{
+                                border: `1px solid ${active ? `${stage.color}55` : "var(--glass-border)"}`,
+                                background: active ? `${stage.color}0f` : "transparent",
+                            }}
+                        >
+                            <motion.div
+                                className="mx-auto mb-1 flex h-6 w-6 items-center justify-center rounded-full"
+                                style={{
+                                    color: active ? stage.color : "var(--app-text-secondary)",
+                                    background: active ? `${stage.color}1f` : "transparent",
+                                }}
+                                animate={active ? { opacity: [1, 0.45, 1] } : undefined}
+                                transition={
+                                    active
+                                        ? {
+                                              duration: 2.4,
+                                              repeat: Infinity,
+                                              ease: "easeInOut",
+                                              delay: i * 0.6,
+                                          }
+                                        : undefined
+                                }
+                            >
+                                <stage.icon size={13} />
+                            </motion.div>
+                            <div className="truncate text-[13px] font-semibold leading-none">
+                                {stage.value}
+                            </div>
+                            <div
+                                className="mt-0.5 truncate text-[9px]"
+                                style={{ color: "var(--app-text-secondary)" }}
+                            >
+                                {stage.unit}
+                            </div>
+                            <div
+                                className="mt-1 truncate text-[9.5px] font-medium"
+                                style={{
+                                    color: active ? stage.color : "var(--app-text-secondary)",
+                                }}
+                            >
+                                {stage.label}
+                            </div>
+                        </div>
+                        {i < stages.length - 1 && (
+                            <ChevronRight
+                                size={12}
+                                className="shrink-0"
+                                style={{ color: "var(--app-text-secondary)" }}
+                                aria-hidden
+                            />
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            {/* Return path — what makes it a loop rather than a funnel. */}
+            <div className="mt-1 flex items-center gap-1.5">
+                <svg
+                    viewBox="0 0 100 10"
+                    preserveAspectRatio="none"
+                    className="h-2.5 flex-1"
+                    aria-hidden
+                >
+                    <path
+                        d="M98 1 L98 6 Q98 9 95 9 L5 9 Q2 9 2 6 L2 1"
+                        fill="none"
+                        stroke={active ? "#e0b850" : "var(--glass-border)"}
+                        strokeWidth="1"
+                        strokeDasharray={active ? "3 3" : undefined}
+                        opacity={active ? 0.9 : 0.5}
+                    />
+                </svg>
+            </div>
+            <div
+                className="mb-3 text-center text-[9.5px]"
+                style={{ color: "var(--app-text-secondary)" }}
+            >
+                Findings inform the next catalog
+            </div>
 
             {active ? (
                 <>
-                    <StatRow summary={summary} />
-                    {summary.trend.length > 1 && <TrendSparkline summary={summary} />}
+                    {smallSample && (
+                        <div
+                            className="mb-2 rounded-md px-2 py-1.5 text-[10px] leading-snug"
+                            style={{
+                                border: "1px solid #e0b85044",
+                                background: "#e0b85011",
+                            }}
+                        >
+                            Early sample — {totals.total} signal
+                            {totals.total === 1 ? "" : "s"} so far. Rates will settle as more
+                            reviews come in.
+                        </div>
+                    )}
+                    <ApprovalBar summary={summary} smallSample={smallSample} />
+                    <TrendStrip summary={summary} />
                     <SourceBars summary={summary} />
                     <InsightList insights={summary.insights} />
                     <RecentList recent={summary.recent} />
                 </>
             ) : (
                 <p
-                    className="mt-2 text-center text-xs leading-relaxed"
+                    className="text-center text-xs leading-relaxed"
                     style={{ color: "var(--app-text-secondary)" }}
                 >
-                    The loop is idle. Rate, edit or A/B a service in the catalog review to see it
-                    turn.
+                    The loop is idle. Rate, edit or review a service in the catalog to see it turn.
                 </p>
             )}
         </div>
     );
 }
 
-function LoopRing({ summary, active }: { summary: FeedbackSummary; active: boolean }): JSX.Element {
-    const rate = summary.totals.approvalRate;
-    const ring = active ? bandColor(rate) : "var(--app-text-secondary)";
-
+/**
+ * Approval as a split bar. Reads faster than a lone percentage because the
+ * negative share is visible rather than inferred.
+ */
+function ApprovalBar({
+    summary,
+    smallSample,
+}: {
+    summary: FeedbackSummary;
+    smallSample: boolean;
+}): JSX.Element {
+    const { positive, negative, total, approvalRate } = summary.totals;
+    const pct = Math.round(approvalRate * 100);
     return (
-        <div className="relative mx-auto my-1 h-[188px] w-[188px]">
-            {/* Flowing ring + traveling pulse behind the stage badges */}
-            <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full">
-                <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    fill="none"
-                    stroke="var(--glass-border)"
-                    strokeWidth="1.5"
-                />
-                {active && (
-                    <motion.circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        fill="none"
-                        stroke={ring}
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeDasharray="3 5"
-                        animate={{ strokeDashoffset: [0, -16] }}
-                        transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
-                        opacity={0.7}
-                    />
-                )}
-                {active && (
-                    <motion.g
-                        style={{ originX: "50px", originY: "50px" }}
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
-                    >
-                        <circle cx="50" cy="10" r="2.6" fill={ring} />
-                    </motion.g>
-                )}
-            </svg>
-
-            {/* Center: overall approval */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-semibold" style={{ color: ring }}>
-                    {active ? `${Math.round(rate * 100)}%` : "—"}
-                </span>
+        <div className="mb-3">
+            <div className="mb-1 flex items-baseline justify-between">
                 <span className="text-[10px]" style={{ color: "var(--app-text-secondary)" }}>
-                    approval
+                    Approval
+                </span>
+                <span
+                    className="text-sm font-semibold"
+                    style={{ color: smallSample ? "var(--app-text)" : bandColor(approvalRate) }}
+                >
+                    {pct}%
                 </span>
             </div>
-
-            {/* Stage badges pinned N/E/S/W */}
-            {STAGES.map((stage, i) => {
-                const Icon = stage.icon;
-                const pos = [
-                    "left-1/2 top-0 -translate-x-1/2 -translate-y-1/2",
-                    "right-0 top-1/2 translate-x-1/2 -translate-y-1/2",
-                    "left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2",
-                    "left-0 top-1/2 -translate-x-1/2 -translate-y-1/2",
-                ][i];
-                const isCollect = stage.key === "collect";
-                return (
-                    <div key={stage.key} className={`absolute ${pos} flex flex-col items-center`}>
-                        <motion.div
-                            className="flex h-8 w-8 items-center justify-center rounded-full"
-                            style={{
-                                background: "var(--app-bg, #0b0f1a)",
-                                border: `1.5px solid ${active ? stage.color : "var(--glass-border)"}`,
-                                color: active ? stage.color : "var(--app-text-secondary)",
-                            }}
-                            animate={
-                                active && isCollect
-                                    ? {
-                                          boxShadow: [
-                                              `0 0 0 0 ${stage.color}55`,
-                                              `0 0 0 6px transparent`,
-                                          ],
-                                      }
-                                    : undefined
-                            }
-                            transition={
-                                active && isCollect
-                                    ? { duration: 1.6, repeat: Infinity, ease: "easeOut" }
-                                    : undefined
-                            }
-                        >
-                            <Icon size={15} />
-                        </motion.div>
-                        <span
-                            className="mt-0.5 text-[9px] font-medium"
-                            style={{ color: "var(--app-text-secondary)" }}
-                        >
-                            {stage.label}
-                        </span>
-                    </div>
-                );
-            })}
+            <div className="flex h-2 overflow-hidden rounded-full bg-black/10">
+                <div style={{ width: `${pct}%`, background: "#37b24d" }} />
+                <div style={{ width: `${100 - pct}%`, background: "#f03e3e" }} />
+            </div>
+            <div
+                className="mt-1 flex justify-between text-[9.5px]"
+                style={{ color: "var(--app-text-secondary)" }}
+            >
+                <span>{positive} helpful</span>
+                <span>
+                    {negative} not helpful · {total} total
+                </span>
+            </div>
         </div>
     );
 }
 
-function StatRow({ summary }: { summary: FeedbackSummary }): JSX.Element {
-    const { totals, topModel } = summary;
-    const stats = [
-        { label: "Signals", value: String(totals.total) },
-        { label: "Edit rate", value: `${Math.round(totals.editRate * 100)}%` },
-        {
-            label: "Top A/B model",
-            value: topModel ? shortModel(topModel.model) : "—",
-        },
-    ];
-    return (
-        <div className="mt-2 grid grid-cols-3 gap-1.5">
-            {stats.map((s) => (
-                <div
-                    key={s.label}
-                    className="rounded-md px-1.5 py-1 text-center"
-                    style={{ border: "1px solid var(--glass-border)" }}
-                >
-                    <div className="truncate text-xs font-semibold" title={s.value}>
-                        {s.value}
-                    </div>
-                    <div className="text-[9px]" style={{ color: "var(--app-text-secondary)" }}>
-                        {s.label}
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-
-function TrendSparkline({ summary }: { summary: FeedbackSummary }): JSX.Element {
+/**
+ * Sentiment over time.
+ *
+ * Sparse data is drawn as discrete pills rather than stretched bars — one day of
+ * activity previously filled the whole width with a single green slab that
+ * looked like a rendering fault.
+ */
+function TrendStrip({ summary }: { summary: FeedbackSummary }): JSX.Element | null {
     const points = summary.trend;
+    if (points.length === 0) return null;
+
     const max = Math.max(1, ...points.map((p) => p.positive + p.negative));
-    const barW = 100 / points.length;
 
     return (
-        <div className="mt-3">
+        <div className="mb-3">
             <div
                 className="mb-1 flex items-center justify-between text-[10px]"
                 style={{ color: "var(--app-text-secondary)" }}
@@ -251,36 +312,39 @@ function TrendSparkline({ summary }: { summary: FeedbackSummary }): JSX.Element 
                     </span>
                 </span>
             </div>
-            <svg viewBox="0 0 100 28" className="h-8 w-full" preserveAspectRatio="none">
-                {points.map((p, i) => {
-                    const posH = (p.positive / max) * 26;
-                    const negH = (p.negative / max) * 26;
-                    const x = i * barW + barW * 0.15;
-                    const w = barW * 0.7;
+            <div className="flex h-12 items-end gap-1">
+                {points.map((p) => {
+                    const totalDay = p.positive + p.negative;
+                    const h = totalDay === 0 ? 2 : Math.max(6, (totalDay / max) * 44);
+                    const posShare = totalDay === 0 ? 0 : p.positive / totalDay;
                     return (
-                        <g key={p.date}>
-                            <rect
-                                x={x}
-                                y={28 - negH}
-                                width={w}
-                                height={negH}
-                                fill="#f03e3e"
-                                opacity={0.8}
-                                rx={0.6}
-                            />
-                            <rect
-                                x={x}
-                                y={28 - negH - posH}
-                                width={w}
-                                height={posH}
-                                fill="#37b24d"
-                                opacity={0.9}
-                                rx={0.6}
-                            />
-                        </g>
+                        <div
+                            key={p.date}
+                            className="flex max-w-[26px] flex-1 flex-col justify-end"
+                            title={`${p.date}: ${p.positive} up, ${p.negative} down`}
+                        >
+                            <div
+                                className="flex w-full flex-col overflow-hidden rounded-sm"
+                                style={{ height: h }}
+                            >
+                                <div
+                                    style={{
+                                        height: `${posShare * 100}%`,
+                                        background: "#37b24d",
+                                    }}
+                                />
+                                <div
+                                    style={{
+                                        height: `${(1 - posShare) * 100}%`,
+                                        background:
+                                            totalDay === 0 ? "var(--glass-border)" : "#f03e3e",
+                                    }}
+                                />
+                            </div>
+                        </div>
                     );
                 })}
-            </svg>
+            </div>
         </div>
     );
 }
@@ -296,7 +360,7 @@ function SourceBars({ summary }: { summary: FeedbackSummary }): JSX.Element | nu
         ab_test: <FlaskConical size={11} />,
     };
     return (
-        <div className="mt-3">
+        <div className="mb-3">
             <div className="mb-1 text-[10px]" style={{ color: "var(--app-text-secondary)" }}>
                 Signal mix
             </div>
@@ -307,10 +371,14 @@ function SourceBars({ summary }: { summary: FeedbackSummary }): JSX.Element | nu
                             className="flex w-24 shrink-0 items-center gap-1 text-[10px]"
                             style={{ color: "var(--app-text-secondary)" }}
                         >
-                            {iconFor[s.source] ?? <ThumbsDown size={11} />}
-                            <span className="truncate">{s.label}</span>
+                            {iconFor[s.source] ?? <Info size={11} />}
+                            {/* Signals recorded before sources were tagged arrive
+                                as "other"; name that honestly. */}
+                            <span className="truncate">
+                                {s.source === "other" ? "Untagged" : s.label}
+                            </span>
                         </span>
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/10">
                             <div
                                 className="h-full rounded-full"
                                 style={{
@@ -335,7 +403,7 @@ function InsightList({ insights }: { insights: FeedbackInsight[] }): JSX.Element
         neutral: { icon: Info, color: "#8b8ef7" },
     };
     return (
-        <div className="mt-3 flex flex-col gap-1.5">
+        <div className="mb-3 flex flex-col gap-1.5">
             <div className="text-[10px]" style={{ color: "var(--app-text-secondary)" }}>
                 Recommendations
             </div>
@@ -360,7 +428,7 @@ function InsightList({ insights }: { insights: FeedbackInsight[] }): JSX.Element
 function RecentList({ recent }: { recent: FeedbackEvent[] }): JSX.Element | null {
     if (recent.length === 0) return null;
     return (
-        <div className="mt-3">
+        <div>
             <div className="mb-1 text-[10px]" style={{ color: "var(--app-text-secondary)" }}>
                 Recent signals
             </div>
@@ -401,6 +469,7 @@ function sourceLabel(source: string): string {
             chat_rating: "Chat rating",
             edit: "Human edit",
             ab_test: "A/B winner",
+            other: "Untagged signal",
         }[source] ?? source
     );
 }

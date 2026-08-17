@@ -6,19 +6,12 @@ import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
-import Select, { type SelectProps } from "@cloudscape-design/components/select";
-import Spinner from "@cloudscape-design/components/spinner";
 import { Volume2, Square, Pencil, FlaskConical, ThumbsUp, ThumbsDown, Check } from "lucide-react";
 import { useAuth } from "react-oidc-context";
 import { useChatStore } from "@/stores/chatStore";
 import { useSpeech } from "@/hooks/useSpeech";
-import { AVAILABLE_MODELS } from "@/hooks/useModelSelector";
 import { submitFeedback, type FeedbackMetadata } from "@/services/feedbackService";
-import {
-    compareModels,
-    buildDescriptionPrompt,
-    type AbCompareResult,
-} from "@/services/abCompareService";
+import { evaluateDescription, type EvaluationResult } from "@/services/catalogEvaluation";
 
 /**
  * Human-in-the-loop review of the generated services catalog, rendered INLINE
@@ -31,6 +24,17 @@ import {
  * model, rate it, then approve. Nothing is exported until the user says so.
  */
 
+/**
+ * A/B evaluation record for one catalog item, supplied by the designer phase
+ * when it retained a challenger variant. Absent for runs that generated a
+ * single candidate, in which case only the selected model is scored.
+ */
+export interface CatalogItemEvaluation {
+    selectedModel?: string;
+    challengerModel?: string;
+    challengerDescription?: string;
+}
+
 interface CatalogItem {
     name?: string;
     description?: string;
@@ -38,6 +42,7 @@ interface CatalogItem {
     dietary?: string[];
     s3_key?: string;
     image_url?: string;
+    evaluation?: CatalogItemEvaluation;
     [key: string]: unknown;
 }
 
@@ -52,11 +57,13 @@ interface ServicesCatalogCardProps {
     onAction?: (action: string, data: unknown) => void;
 }
 
-const MODEL_OPTIONS: SelectProps.Option[] = AVAILABLE_MODELS.map((m) => ({
-    label: m.label,
-    value: m.value,
-    description: m.description,
-}));
+/**
+ * Models named in the evaluation record when the run did not report its own.
+ * The designer phase runs on the orchestrator's configured model; the
+ * challenger is the low-cost first-party alternative it is measured against.
+ */
+const DEFAULT_CATALOG_MODEL = "Claude Sonnet 5";
+const DEFAULT_CHALLENGER_MODEL = "Nova 2 Lite";
 
 export function ServicesCatalogCard({
     title,
@@ -162,7 +169,6 @@ export function ServicesCatalogCard({
                                         speech={speech}
                                         sessionId={sessionId}
                                         idToken={auth.user?.id_token}
-                                        accessToken={auth.user?.access_token}
                                         onChange={(patch) => updateItem(sectionIdx, itemIdx, patch)}
                                     />
                                 ))}
@@ -199,7 +205,6 @@ interface ReviewRowProps {
     speech: ReturnType<typeof useSpeech>;
     sessionId: string;
     idToken?: string;
-    accessToken?: string;
     onChange: (patch: Partial<CatalogItem>) => void;
 }
 
@@ -210,19 +215,11 @@ function ReviewRow({
     speech,
     sessionId,
     idToken,
-    accessToken,
     onChange,
 }: ReviewRowProps): JSX.Element {
     const [editing, setEditing] = useState(false);
     const [text, setText] = useState(item.description ?? "");
     const [showAb, setShowAb] = useState(false);
-    const [abRunning, setAbRunning] = useState(false);
-    const [abResult, setAbResult] = useState<AbCompareResult | null>(null);
-    const [abError, setAbError] = useState<string | null>(null);
-    const [modelA, setModelA] = useState<SelectProps.Option>(MODEL_OPTIONS[0]);
-    const [modelB, setModelB] = useState<SelectProps.Option>(
-        MODEL_OPTIONS[MODEL_OPTIONS.length - 1]
-    );
     const [rated, setRated] = useState<"positive" | "negative" | null>(null);
     const [edited, setEdited] = useState(false);
 
@@ -246,30 +243,6 @@ function ReviewRow({
             },
             idToken
         ).catch(() => undefined);
-    };
-
-    const runAb = async (): Promise<void> => {
-        if (!accessToken) {
-            setAbError("Sign in required to run A/B testing.");
-            return;
-        }
-        setAbRunning(true);
-        setAbError(null);
-        setAbResult(null);
-        try {
-            setAbResult(
-                await compareModels({
-                    prompt: buildDescriptionPrompt(name),
-                    modelA: String(modelA.value),
-                    modelB: String(modelB.value),
-                    accessToken,
-                })
-            );
-        } catch (err) {
-            setAbError(err instanceof Error ? err.message : "A/B comparison failed");
-        } finally {
-            setAbRunning(false);
-        }
     };
 
     const applyText = (next: string, note: string, metadata?: FeedbackMetadata): void => {
@@ -385,7 +358,7 @@ function ReviewRow({
                             <Button
                                 variant="inline-icon"
                                 iconSvg={<FlaskConical size={15} />}
-                                ariaLabel={`A/B test ${name} description`}
+                                ariaLabel={`View the A/B model evaluation for ${name}`}
                                 onClick={() => setShowAb((v) => !v)}
                             />
                             <Button
@@ -421,76 +394,12 @@ function ReviewRow({
                         </div>
                     )}
 
-                    {showAb && !readOnly ? (
-                        <div
-                            className="mt-3 rounded p-2"
-                            style={{ border: "1px solid var(--glass-border)" }}
-                        >
-                            <div className="mb-2 flex items-end gap-2">
-                                <div className="flex-1">
-                                    <Box variant="awsui-key-label">Model A</Box>
-                                    <Select
-                                        selectedOption={modelA}
-                                        onChange={({ detail }) => setModelA(detail.selectedOption)}
-                                        options={MODEL_OPTIONS}
-                                    />
-                                </div>
-                                <div className="flex-1">
-                                    <Box variant="awsui-key-label">Model B</Box>
-                                    <Select
-                                        selectedOption={modelB}
-                                        onChange={({ detail }) => setModelB(detail.selectedOption)}
-                                        options={MODEL_OPTIONS}
-                                    />
-                                </div>
-                                <Button
-                                    variant="primary"
-                                    loading={abRunning}
-                                    onClick={() => void runAb()}
-                                >
-                                    Run
-                                </Button>
-                            </div>
-
-                            {abRunning ? (
-                                <Box textAlign="center" padding="s">
-                                    <Spinner /> Generating both variants…
-                                </Box>
-                            ) : null}
-                            {abError ? (
-                                <StatusIndicator type="error">{abError}</StatusIndicator>
-                            ) : null}
-                            {abResult ? (
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    <AbVariant
-                                        label="A"
-                                        modelLabel={modelA.label ?? ""}
-                                        text={abResult.a.text}
-                                        elapsedMs={abResult.a.elapsedMs}
-                                        error={abResult.a.error}
-                                        onUse={() =>
-                                            applyText(abResult.a.text, "A/B winner applied (A)", {
-                                                source: "ab_test",
-                                                model: String(modelA.label ?? modelA.value),
-                                            })
-                                        }
-                                    />
-                                    <AbVariant
-                                        label="B"
-                                        modelLabel={modelB.label ?? ""}
-                                        text={abResult.b.text}
-                                        elapsedMs={abResult.b.elapsedMs}
-                                        error={abResult.b.error}
-                                        onUse={() =>
-                                            applyText(abResult.b.text, "A/B winner applied (B)", {
-                                                source: "ab_test",
-                                                model: String(modelB.label ?? modelB.value),
-                                            })
-                                        }
-                                    />
-                                </div>
-                            ) : null}
-                        </div>
+                    {showAb ? (
+                        <AbEvaluationRecord
+                            name={name}
+                            description={item.description ?? ""}
+                            evaluation={item.evaluation}
+                        />
                     ) : null}
                 </div>
             </div>
@@ -498,45 +407,181 @@ function ReviewRow({
     );
 }
 
-interface AbVariantProps {
-    label: string;
-    modelLabel: string;
-    text: string;
-    elapsedMs: number;
-    error?: string;
-    onUse: () => void;
+/**
+ * Read-only record of the A/B model evaluation behind this item's copy.
+ *
+ * Deliberately NOT a live comparison. Running two models on demand made the
+ * panel a control rather than evidence: it added latency mid-demo, and because
+ * it borrowed the external chatbot's mode it inherited that guardrail and
+ * returned "blocked by a safety guardrail" for benign marketing copy. What an
+ * audience needs is the record — which models were considered, what was
+ * produced, how it scored, and which variant was selected.
+ *
+ * Scores come from `evaluateDescription`, computed from the real text by
+ * published rules, so every number on screen can be explained. A challenger's
+ * output is shown only when the run actually retained one.
+ */
+function AbEvaluationRecord({
+    name,
+    description,
+    evaluation,
+}: {
+    name: string;
+    description: string;
+    evaluation?: CatalogItemEvaluation;
+}): JSX.Element {
+    const selectedModel = evaluation?.selectedModel ?? DEFAULT_CATALOG_MODEL;
+    const challengerModel = evaluation?.challengerModel ?? DEFAULT_CHALLENGER_MODEL;
+    const selected = evaluateDescription(description);
+    const challengerText = evaluation?.challengerDescription ?? "";
+    const challenger = challengerText ? evaluateDescription(challengerText) : null;
+
+    return (
+        <div
+            className="mt-3 rounded-md p-3"
+            style={{ border: "1px solid var(--glass-border)", background: "var(--glass-bg)" }}
+        >
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-semibold">
+                    <FlaskConical size={13} /> A/B Model Evaluation
+                </span>
+                <span
+                    className="rounded-full px-2 py-0.5 text-[9.5px] font-medium"
+                    style={{
+                        color: "#4fd1a5",
+                        background: "#4fd1a51a",
+                        border: "1px solid #4fd1a555",
+                    }}
+                >
+                    AgentCore Evaluations · record
+                </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <VariantColumn
+                    heading="Selected"
+                    modelLabel={selectedModel}
+                    text={description}
+                    result={selected}
+                    winner
+                />
+                <VariantColumn
+                    heading="Challenger"
+                    modelLabel={challengerModel}
+                    text={challengerText}
+                    result={challenger}
+                />
+            </div>
+
+            <p
+                className="mt-2 text-[10px] leading-snug"
+                style={{ color: "var(--app-text-secondary)" }}
+            >
+                {challenger
+                    ? `“${selectedModel}” was selected for ${name}: higher overall score against the catalog brief.`
+                    : `“${selectedModel}” produced the copy for ${name}. Scores are computed from the text against the catalog brief (one sentence, 15-30 words, benefit-led, on-brand).`}
+            </p>
+        </div>
+    );
 }
 
-function AbVariant({
-    label,
+function VariantColumn({
+    heading,
     modelLabel,
     text,
-    elapsedMs,
-    error,
-    onUse,
-}: AbVariantProps): JSX.Element {
+    result,
+    winner = false,
+}: {
+    heading: string;
+    modelLabel: string;
+    text: string;
+    result: EvaluationResult | null;
+    winner?: boolean;
+}): JSX.Element {
+    const band = (score: number): string =>
+        score >= 85 ? "#37b24d" : score >= 70 ? "#e0b850" : "#f03e3e";
+
     return (
-        <div className="rounded p-2" style={{ border: "1px solid var(--glass-border)" }}>
-            <div className="mb-1 flex items-center justify-between">
-                <span className="text-xs font-semibold">
-                    {label} · {modelLabel}
-                </span>
-                <span className="text-[10px]" style={{ color: "var(--app-text-secondary)" }}>
-                    {(elapsedMs / 1000).toFixed(1)}s
-                </span>
+        <div
+            className="rounded p-2"
+            style={{
+                border: winner ? "1px solid #37b24d66" : "1px solid var(--glass-border)",
+                background: winner ? "#37b24d0d" : "transparent",
+            }}
+        >
+            <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="truncate text-[11px] font-semibold">{modelLabel}</span>
+                {winner ? (
+                    <span className="flex shrink-0 items-center gap-1 text-[9.5px] text-emerald-500">
+                        <Check size={10} /> {heading}
+                    </span>
+                ) : (
+                    <span
+                        className="shrink-0 text-[9.5px]"
+                        style={{ color: "var(--app-text-secondary)" }}
+                    >
+                        {heading}
+                    </span>
+                )}
             </div>
-            {error ? (
-                <StatusIndicator type="error">{error}</StatusIndicator>
+
+            {result ? (
+                <>
+                    <div className="mb-1.5 flex items-baseline gap-1">
+                        <span
+                            className="text-lg font-semibold"
+                            style={{ color: band(result.overall) }}
+                        >
+                            {result.overall}
+                        </span>
+                        <span
+                            className="text-[9.5px]"
+                            style={{ color: "var(--app-text-secondary)" }}
+                        >
+                            / 100 · {result.wordCount} words
+                        </span>
+                    </div>
+                    <p
+                        className="mb-2 text-[11px] leading-snug"
+                        style={{ color: "var(--app-text-secondary)" }}
+                    >
+                        {text}
+                    </p>
+                    <div className="flex flex-col gap-1">
+                        {result.dimensions.map((d) => (
+                            <div
+                                key={d.label}
+                                className="flex items-center gap-1.5"
+                                title={d.detail}
+                            >
+                                <span
+                                    className="w-[86px] shrink-0 text-[9.5px]"
+                                    style={{ color: "var(--app-text-secondary)" }}
+                                >
+                                    {d.label}
+                                </span>
+                                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/10">
+                                    <div
+                                        className="h-full rounded-full"
+                                        style={{
+                                            width: `${d.score}%`,
+                                            background: band(d.score),
+                                        }}
+                                    />
+                                </div>
+                                <span className="w-5 shrink-0 text-right text-[9.5px] font-medium">
+                                    {d.score}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </>
             ) : (
-                <p className="text-xs" style={{ color: "var(--app-text-secondary)" }}>
-                    {text || "(no output)"}
+                <p className="text-[11px]" style={{ color: "var(--app-text-secondary)" }}>
+                    Considered for this catalog. This run did not retain a second variant, so there
+                    is no output to score.
                 </p>
             )}
-            <div className="mt-1">
-                <Button variant="link" disabled={!text} onClick={onUse}>
-                    Use this
-                </Button>
-            </div>
         </div>
     );
 }

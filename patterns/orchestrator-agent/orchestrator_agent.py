@@ -208,13 +208,20 @@ Research Guidelines:
 - Aim for depth over breadth — quality findings from fewer searches beat exhaustive querying
 
 VISUAL RESEARCH (REQUIRED — multimodal output):
-After completing ALL text research, identify 2-3 key concepts that would benefit from a
-visual (e.g., a market-positioning graphic, an operating-model diagram concept, or a brand
-storefront/logo motif). For each, call gateway_nova_canvas_generate with a professional prompt
-like: "Professional infographic illustration of [concept], clean modern institutional banking
-aesthetic, deep navy and brass palette, data-visualization style, 4k". Collect the s3_key and
+After completing ALL text research, identify 2-3 concepts that a photographic image would
+illustrate (e.g., a trading floor, a bank branch interior, a city financial district). For
+each, call gateway_nova_canvas_generate with a prompt describing the SUBJECT and MOOD only:
+"Professional photographic image of [concrete subject], clean modern institutional banking
+aesthetic, deep navy and brass palette, soft lighting, no text, 4k". Collect the s3_key and
 image_url from each Canvas result into the "images" array. Budget: max 3 images. If image
 generation fails, omit that image and continue — never fabricate an image reference.
+
+IMAGE PROMPT RULES — FOLLOW EXACTLY:
+- NEVER request an infographic, chart, diagram, logo, sign, poster or labelled graphic. Those
+  force the model to render lettering and it comes back as garbled nonsense.
+- NEVER put words, names, rates or numbers in the image prompt.
+- The caption you write in the "images" array is what labels the figure in the report; the
+  image itself must carry no text.
 
 Output your findings as structured JSON:
 {
@@ -527,10 +534,22 @@ Your responsibilities:
 4. Collect the s3_key and image_url from each Canvas generation result
 5. Compile the complete catalog with all details
 
-For each product image, use a prompt like:
-"Professional financial services imagery representing [product name], modern institutional
-banking aesthetic, clean composition, deep navy and brass palette, soft studio lighting,
-premium and trustworthy, 4k"
+For each product image, describe the SUBJECT and MOOD only — never the product name, and
+never any words to render. Diffusion models try to draw whatever text they are given and
+produce garbled lettering, which ruins the image. Describe what is in the frame instead:
+
+"Abstract professional financial services photography, [concrete subject: e.g. modern bank
+interior, city skyline at dusk, glass office tower, stacked coins, subtle geometric pattern],
+modern institutional banking aesthetic, clean composition, deep navy and brass palette, soft
+studio lighting, premium and trustworthy, no text, 4k"
+
+IMAGE PROMPT RULES — FOLLOW EXACTLY:
+- NEVER put the product name, bank name, rate, or any words inside the image prompt.
+- NEVER ask for a logo, sign, label, banner, poster, book cover, brochure or screen with
+  writing on it. These all cause the model to render broken text.
+- Choose a concrete visual subject appropriate to the product (a vault door for savings, a
+  skyline for wealth, a family home for mortgages) and describe that.
+- Titles and rates are drawn by the PDF and website templates, not by the image.
 
 Output your catalog as structured JSON:
 {
@@ -785,9 +804,7 @@ def _qc_validate_catalog(designer_output: str) -> dict:
 
             # FORMAT — required fields present.
             if not item.get("name"):
-                checks.append(
-                    {"item": name, "rule": "format", "status": "fail", "detail": "Missing product name."}
-                )
+                checks.append({"item": name, "rule": "format", "status": "fail", "detail": "Missing product name."})
             if not str(item.get("price") or "").strip():
                 checks.append(
                     {"item": name, "rule": "format", "status": "warn", "detail": "Missing headline rate / price line."}
@@ -797,9 +814,7 @@ def _qc_validate_catalog(designer_output: str) -> dict:
             desc = str(item.get("description") or "").strip()
             words = len(desc.split())
             if words == 0:
-                checks.append(
-                    {"item": name, "rule": "length", "status": "fail", "detail": "Empty description."}
-                )
+                checks.append({"item": name, "rule": "length", "status": "fail", "detail": "Empty description."})
             elif words < _QC_DESC_MIN_WORDS:
                 checks.append(
                     {
@@ -855,6 +870,7 @@ def _qc_validate_catalog(designer_output: str) -> dict:
         },
         "checks": checks,
     }
+
 
 # ---------------------------------------------------------------------------
 # Trinity Reserve Bank — baked-in facts for the AI Client Advisor
@@ -1379,14 +1395,22 @@ GENERIC_RESEARCH_PHASES = [
     },
 ]
 
+# The Bedrock model that acts as the LLM-as-a-judge. Deliberately DISTINCT from
+# the orchestrator/generator model so the evaluation is not self-grading. Nova
+# Pro is a lower-cost first-party model already enabled in this account, and
+# `_build_model` treats it as temperature-only (no thinking config to reject).
+# Overridable via env for a future swap.
+EVALUATION_JUDGE_MODEL = os.environ.get("EVALUATION_JUDGE_MODEL", "us.amazon.nova-pro-v1:0")
+
 # Evaluation phase — runs last, after the PDF exists, to score the report
 # against the brief and the gathered evidence. It streams a markdown scorecard;
 # it does not produce a PDF. Shared by both the Market Strategy and Market
-# Intelligence execution pipelines.
+# Intelligence execution pipelines. Runs on a distinct Bedrock judge model.
 EVALUATION_PHASE = {
     "name": "evaluator",
     "role": "evaluation",
     "prompt": EVALUATION_PROMPT,
+    "model_id": EVALUATION_JUDGE_MODEL,
     "estimated_duration": 60,
     "thinking_budget": 4096,
     "messages": [
@@ -1522,6 +1546,14 @@ STATIC_PHASE_MAX_TURNS: dict[str, int] = {
     # The evaluator spot-checks a few claims via kb_search then writes a compact
     # scorecard — a small ceiling keeps its cost bounded.
     "evaluator": 8,
+    # The catalog designer generates ONE IMAGE PER PRODUCT: up to 4 sections of 3
+    # products, plus the opening kb_search and the final JSON write. On the
+    # 20-turn default it ran out after the first few images and the rest of the
+    # catalog shipped with no imagery at all, which is what made PDFs and web
+    # pages look half-finished. Sized for 12 image calls with headroom.
+    "menu_designer": 42,
+    "menu_pdf_writer": 12,
+    "menu_website_writer": 12,
 }
 DEFAULT_PHASE_MAX_TURNS = 20
 
@@ -2036,11 +2068,15 @@ def latest_report_id(user_id: str, pipeline: str = "strategy_research") -> str:
     try:
         import boto3
 
-        response = boto3.resource("dynamodb").Table(table_name).query(
-            KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
-            ExpressionAttributeValues={":pk": f"user#{user_id}", ":sk": "report#"},
-            ScanIndexForward=False,
-            Limit=25,
+        response = (
+            boto3.resource("dynamodb")
+            .Table(table_name)
+            .query(
+                KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+                ExpressionAttributeValues={":pk": f"user#{user_id}", ":sk": "report#"},
+                ScanIndexForward=False,
+                Limit=25,
+            )
         )
     except Exception as exc:
         logger.warning("Could not resolve latest report for pinning: %s", exc)
@@ -2877,6 +2913,22 @@ MIN_SUBQUESTIONS_FOR_PARALLEL = 3
 # Floor on each worker's search budget so a wide fan-out cannot starve a shard.
 MIN_WORKER_SEARCH_BUDGET = 4
 
+# Deadlines that stop the phase waiting on a wedged worker.
+#
+# A worker runs the model and MCP tools synchronously in a thread. The turn
+# limit bounds the number of turns, but NOT a single call that never returns —
+# a hung Gateway tool (browser, image gen, a stalled search) blocks that thread
+# forever, and the consumer loop would wait on it indefinitely while heartbeats
+# kept the UI looking "live". Observed in production: a run sat 22 minutes with
+# zero progress. These two guards convert "hang forever" into "drop the wedged
+# section and synthesize from the rest".
+#
+# IDLE is the primary signal: a healthy-but-slow worker still emits tool events,
+# so silence (no result/tool activity, heartbeats excluded) for this long means
+# a worker is stuck. WALL_CLOCK is a hard backstop for the whole fan-out.
+WORKER_IDLE_TIMEOUT_SEC = 180
+PARALLEL_PHASE_WALL_CLOCK_SEC = 900
+
 
 def _extract_sub_questions(text: str) -> list[str]:
     """Pull the sub-question list out of the approved plan in the phase input.
@@ -2947,6 +2999,98 @@ YOUR ASSIGNED SUB-QUESTIONS:
   only — a coordinator merges every worker's output afterwards.
 """
     )
+
+
+def _tool_action_label(tool_name: str) -> str:
+    """Plain-language verb for a tool, for activity traces.
+
+    Raw gateway names ("gateway_kb_search") read as plumbing; the reader wants
+    the action being taken.
+    """
+    name = (tool_name or "").lower()
+    for fragment, label in (
+        ("kb_search", "Searching the knowledge base"),
+        ("web_search", "Searching the web"),
+        ("data_sources", "Querying market data"),
+        ("analyze_patterns", "Analyzing patterns"),
+        ("nova_canvas", "Generating an image"),
+        ("nova_reel", "Generating video"),
+        ("pdf_generator", "Writing the PDF"),
+        ("website_generator", "Building the site"),
+        ("extract_pdf_images", "Extracting PDF images"),
+        ("recall_memories", "Recalling prior context"),
+        ("save_memory", "Saving context"),
+        ("retrieve_user_profile", "Loading the client profile"),
+    ):
+        if fragment in name:
+            return label
+    return f"Calling {tool_name}"
+
+
+def _readable_tool_query(raw) -> str:  # noqa: ANN001 - accepts str or dict
+    """The human-meaningful argument of a tool call, for activity traces.
+
+    Tool arguments are a JSON blob of which only one field is interesting to a
+    reader — the query, question or topic. Returns "" when nothing readable can
+    be found, so callers can skip the trace rather than print machine noise.
+    """
+    data = raw
+    if isinstance(raw, str):
+        if not raw.strip():
+            return ""
+        data = _parse_json_object(raw)
+        if data is None:
+            # Not JSON — a bare string argument is already readable.
+            return raw.strip()[:160]
+    if not isinstance(data, dict):
+        return ""
+
+    for key in ("query", "question", "search_query", "topic", "prompt", "text", "url"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:160]
+    return ""
+
+
+def _summarize_worker_findings(payload: str, index: int, total: int, shard: list[str]) -> str:
+    """A substantive completion trace for one research section.
+
+    "Section 3 of 4 complete" told the reader nothing. This reports what the
+    section actually produced — how many insights and sources it gathered, and
+    its leading insight — so the activity log explains the reasoning behind the
+    final report instead of just its bookkeeping.
+    """
+    header = f"Section {index + 1} of {total} complete"
+    data = _parse_json_object(payload) if payload else None
+    if not isinstance(data, dict):
+        # Worker returned prose (or nothing parseable) — still say something
+        # truthful rather than inventing counts.
+        covered = f" · covered {len(shard)} sub-question(s)" if shard else ""
+        return f"{header}{covered}."
+
+    insights = [str(v).strip() for v in (data.get("key_insights") or []) if str(v).strip()]
+    citations = [c for c in (data.get("citations") or []) if str(c).strip()]
+    questions = data.get("questions_researched")
+    question_count = len(questions) if isinstance(questions, list) else len(shard)
+
+    parts = [f"{question_count} sub-question(s)"]
+    if insights:
+        parts.append(f"{len(insights)} insight(s)")
+    if citations:
+        parts.append(f"{len(citations)} source(s)")
+
+    lines = [f"{header} — {', '.join(parts)}."]
+    if insights:
+        lead = insights[0]
+        lines.append(f"Leading finding: {lead[:280]}{'…' if len(lead) > 280 else ''}")
+
+    meta = data.get("meta_analysis")
+    if isinstance(meta, dict):
+        contradictions = str(meta.get("contradictions") or "").strip()
+        if contradictions:
+            lines.append(f"Conflicts noted: {contradictions[:200]}{'…' if len(contradictions) > 200 else ''}")
+
+    return "\n".join(lines)
 
 
 def _merge_research_findings(payloads: list[str]) -> str:
@@ -3119,10 +3263,25 @@ async def _run_parallel_research(
             "agent": agent_name,
             "content": (
                 f"Dividing {len(sub_questions)} sub-questions into {worker_count} sections and "
-                f"researching them in parallel."
+                f"researching them in parallel, {per_worker_budget} searches each."
             ),
         }
     }
+
+    # Show WHAT each section will investigate. The division of labour is a real
+    # decision the reader cares about; announcing only the count told them
+    # nothing about how the brief was interpreted.
+    for i, shard in enumerate(shards):
+        yield {
+            "thinking": {
+                "agent": agent_name,
+                "content": "Section {} of {} will investigate:\n{}".format(
+                    i + 1,
+                    worker_count,
+                    "\n".join(f"- {q}" for q in shard),
+                ),
+            }
+        }
 
     tq: thread_queue.Queue = thread_queue.Queue()
     _DONE = object()
@@ -3168,15 +3327,59 @@ async def _run_parallel_research(
                 plugins=worker_plugins,
             )
 
+            # Last tool-use id seen by THIS worker. Strands re-emits
+            # `current_tool_use` for every input delta, so without this the
+            # same call would be reported dozens of times.
+            seen_tool_use_id = [None]
+            # Accumulated argument JSON per tool call, so the trace can name the
+            # actual query rather than just the tool.
+            tool_inputs: dict[str, str] = {}
+
             def _worker_callback(**kwargs):
-                """Count completed tool calls so aggregate progress is real work."""
-                message = kwargs.get("message")
-                if not message:
-                    return
+                """Report tool activity so progress and the UI reflect real work.
+
+                Three signals are emitted:
+
+                * `tool_use` on first sight of a new tool call, carrying the
+                  tool NAME. The sequential path streams this so each flow node
+                  can show the AWS services that step exercised and the run
+                  report can count invocations; without it the parallel path
+                  left both empty.
+                * `tool_query` once the arguments have streamed in, so the
+                  reader sees WHAT was searched, not merely that something was.
+                * `tool_call` when a result comes back, which drives the
+                  work-based half of the progress curve.
+                """
                 try:
+                    current_tool_use = kwargs.get("current_tool_use")
+                    if current_tool_use and current_tool_use.get("name"):
+                        tool_use_id = current_tool_use.get("toolUseId", "")
+                        tool_name = current_tool_use.get("name", "")
+                        if tool_use_id != seen_tool_use_id[0]:
+                            seen_tool_use_id[0] = tool_use_id
+                            tq.put(("tool_use", (index, tool_use_id, tool_name)))
+                        # Strands reports the accumulated arguments as they
+                        # stream; keep the longest sighting, which is complete.
+                        streamed = current_tool_use.get("input")
+                        if isinstance(streamed, str) and len(streamed) > len(tool_inputs.get(tool_use_id, "")):
+                            tool_inputs[tool_use_id] = streamed
+
+                    message = kwargs.get("message")
+                    if not message:
+                        return
                     msg = message if isinstance(message, dict) else getattr(message, "__dict__", {})
                     for block in msg.get("content", []):
-                        if isinstance(block, dict) and "toolResult" in block:
+                        if not isinstance(block, dict):
+                            continue
+                        # A tool_use block in a completed message carries the
+                        # final, fully-formed arguments — the most reliable
+                        # place to read what was actually asked.
+                        use = block.get("toolUse")
+                        if isinstance(use, dict) and use.get("name"):
+                            query = _readable_tool_query(use.get("input"))
+                            if query:
+                                tq.put(("tool_query", (index, use["name"], query)))
+                        if "toolResult" in block:
                             tq.put(("tool_call", index))
                 except Exception as exc:  # never let telemetry break research
                     logger.debug("Parallel worker callback failed: %s", exc)
@@ -3220,20 +3423,57 @@ async def _run_parallel_research(
     spend_total = 0.0
     spend_budget_total = 0.0
     spend_sessions = 0
+    # Reset by any real progress event (tool activity, a completed shard). NOT
+    # by heartbeats — those fire every 10s regardless of whether work is
+    # happening, so counting them would mask a wedged worker.
+    last_progress = time.monotonic()
+    timed_out = False
 
     try:
         while finished < worker_count:
             while tq.empty():
+                now = time.monotonic()
+                if now - last_progress > WORKER_IDLE_TIMEOUT_SEC:
+                    print(
+                        f"[ORCHESTRATOR] Parallel research idle for "
+                        f"{WORKER_IDLE_TIMEOUT_SEC}s with {finished}/{worker_count} sections done "
+                        f"— abandoning wedged worker(s)"
+                    )
+                    timed_out = True
+                    break
+                if now - start_time > PARALLEL_PHASE_WALL_CLOCK_SEC:
+                    print(
+                        f"[ORCHESTRATOR] Parallel research hit the "
+                        f"{PARALLEL_PHASE_WALL_CLOCK_SEC}s wall-clock cap with "
+                        f"{finished}/{worker_count} sections done — proceeding with partial results"
+                    )
+                    timed_out = True
+                    break
                 await asyncio.sleep(0.1)
+            if timed_out:
+                break
 
             tag, value = tq.get_nowait()
+            # Any event other than a heartbeat is real progress.
+            if tag != "heartbeat":
+                last_progress = time.monotonic()
 
             if tag is _DONE:
                 finished += 1
+                # The worker's "result" is queued before its _DONE, so the
+                # findings are available here and the trace can report what the
+                # section produced rather than merely that it ended.
                 yield {
                     "thinking": {
                         "agent": agent_name,
-                        "content": f"Section {value + 1} of {worker_count} complete.",
+                        "content": _summarize_worker_findings(
+                            results.get(value, ""),
+                            value,
+                            worker_count,
+                            shards[value] if value < len(shards) else [],
+                        )
+                        if value not in errors
+                        else (f"Section {value + 1} of {worker_count} failed: {str(errors[value])[:200]}"),
                     }
                 }
             elif tag == "result":
@@ -3250,6 +3490,38 @@ async def _run_parallel_research(
                 spend_sessions += 1
             elif tag == "tool_call":
                 tool_calls += 1
+            elif tag == "tool_use":
+                worker_index, tool_use_id, tool_name = value
+                # Same shape the sequential phase streams, so the existing
+                # parser attributes the call to this phase's node and the run
+                # report counts it. Worker ids are namespaced because the
+                # shards run concurrently and Strands only guarantees the id is
+                # unique within one agent.
+                # `telemetry_only` keeps this out of the chat transcript. These
+                # calls happen inside worker sub-agents whose arguments and
+                # results are never streamed, so a chat tool card would sit
+                # empty forever — dozens of blank dropdowns burying the
+                # conversation. The workflow panel is where they belong, so the
+                # event still drives the node chips and the run report count.
+                yield {
+                    "current_tool_use": {
+                        "toolUseId": f"w{worker_index}-{tool_use_id}",
+                        "name": tool_name,
+                    },
+                    "delta": {"toolUse": {"input": ""}},
+                    "telemetry_only": True,
+                }
+            elif tag == "tool_query":
+                # What the section actually asked. This is the reasoning the
+                # reader wants: which questions the agent chose to put to the
+                # knowledge base and the web, in its own words.
+                worker_index, tool_name, query = value
+                yield {
+                    "thinking": {
+                        "agent": agent_name,
+                        "content": (f"Section {worker_index + 1} · {_tool_action_label(tool_name)}: “{query}”"),
+                    }
+                }
             elif tag == "heartbeat":
                 tick += 1
                 yield {"data": "", "heartbeat": True}
@@ -3290,12 +3562,23 @@ async def _run_parallel_research(
     finally:
         _stop_heartbeat.set()
         heartbeat.join(timeout=2)
+        # Cancelling the executor future stops us awaiting the worker; it cannot
+        # kill a thread already blocked in a synchronous tool call. That thread
+        # is abandoned and dies with the session's microVM. The point is that
+        # the phase stops waiting and the pipeline moves on.
         for future in futures:
             future.cancel()
 
+    # Record any shard that never reported back as a timeout, so the notice and
+    # the merge treat it the same as an explicit failure.
+    if timed_out:
+        for i in range(worker_count):
+            if i not in results and i not in errors:
+                errors[i] = f"timed out (no result after {WORKER_IDLE_TIMEOUT_SEC}s idle)"
+
     if not results:
-        # Every shard failed — surface it rather than handing the synthesizer
-        # an empty findings document it would happily write a report from.
+        # Every shard failed or hung — surface it rather than handing the
+        # synthesizer an empty findings document it would happily write from.
         detail = "; ".join(errors.values()) or "no worker produced output"
         raise RuntimeError(f"All {worker_count} parallel research workers failed: {detail}")
 
@@ -3304,8 +3587,9 @@ async def _run_parallel_research(
             "thinking": {
                 "agent": agent_name,
                 "content": (
-                    f"{len(errors)} of {worker_count} sections failed; merging the "
-                    f"{len(results)} that completed."
+                    f"{len(errors)} of {worker_count} sections did not finish "
+                    f"({'timed out' if timed_out else 'failed'}); merging the "
+                    f"{len(results)} that completed so the report still ships."
                 ),
             }
         }
@@ -3334,6 +3618,113 @@ async def _run_parallel_research(
 
     ordered = [results[i] for i in sorted(results)]
     yield {"__result__": _merge_research_findings(ordered)}
+
+
+# ---------------------------------------------------------------------------
+# Evaluation scorecard parsing (LLM-as-a-judge → structured card)
+# ---------------------------------------------------------------------------
+
+# Maps our human scorecard dimensions onto Bedrock Evaluations' metric names, so
+# the UI can label each dimension with the managed metric it corresponds to.
+_EVAL_METRIC_MAP = [
+    ("align", ("alignment", "Correctness")),
+    ("comprehen", ("comprehensiveness", "Completeness")),
+    ("ground", ("groundedness", "Faithfulness")),
+    ("citation", ("citations", "Citation precision")),
+    ("coher", ("coherence", "Coherence")),
+]
+
+
+def _eval_metric_for(label: str) -> tuple[str, str]:
+    """Return (stable_key, Bedrock metric name) for a scorecard dimension label."""
+    low = label.lower()
+    for needle, (key, metric) in _EVAL_METRIC_MAP:
+        if needle in low:
+            return key, metric
+    key = _re_module.sub(r"[^a-z0-9]+", "_", low).strip("_") or "dimension"
+    return key, "Relevance"
+
+
+def _extract_plan_criteria(text: str) -> list[str]:
+    """Best-effort pull of `evaluation_criteria` from an approved plan blob.
+
+    The execute pipeline receives the approved plan as its initial input; when it
+    carries the plan JSON we surface the same criteria the report is judged
+    against. Returns an empty list when nothing parseable is present.
+    """
+    if not text:
+        return []
+    m = _re_module.search(r'"evaluation_criteria"\s*:\s*\[(.*?)\]', text, _re_module.S)
+    if not m:
+        return []
+    try:
+        arr = _json_module.loads("[" + m.group(1) + "]")
+        return [str(c).strip() for c in arr if str(c).strip()][:6]
+    except Exception:
+        return [s.strip() for s in _re_module.findall(r'"([^"]+)"', m.group(1))][:6]
+
+
+def _extract_bullets_after(text: str, heading: str, limit: int = 4) -> list[str]:
+    """Pull bullet lines following a heading like 'Top gaps' in the scorecard."""
+    if not text:
+        return []
+    idx = text.lower().find(heading.lower())
+    if idx < 0:
+        return []
+    bullets = _re_module.findall(r"^\s*[-*]\s+(.*\S)\s*$", text[idx:], _re_module.M)
+    return [b.strip().lstrip("*").strip() for b in bullets if b.strip()][:limit]
+
+
+def _parse_evaluation_scorecard(text: str, judge_model: str, criteria: list[str]) -> dict | None:
+    """Parse the evaluator's markdown scorecard into EvaluationScorecard props.
+
+    The evaluator streams a fixed-format table (see EVALUATION_PROMPT). This turns
+    that table into structured props the frontend renders — dimensions with
+    0-100 scores and their Bedrock metric names, an overall, a pass/revise gate,
+    and the top gaps. Returns None when no table is found (the markdown still
+    streamed into the trace, so nothing is lost).
+    """
+    if not text:
+        return None
+    row_re = _re_module.compile(
+        r"^\|\s*\*{0,2}([^|]+?)\*{0,2}\s*\|\s*\*{0,2}\s*(\d{1,3})\s*/\s*100\s*\*{0,2}\s*\|\s*([^|]*?)\s*\|",
+        _re_module.M,
+    )
+    rows = row_re.findall(text)
+    if not rows:
+        return None
+
+    dimensions: list[dict] = []
+    overall: int | None = None
+    summary = ""
+    for raw_label, score_s, notes in rows:
+        label = raw_label.strip()
+        try:
+            score = max(0, min(100, int(score_s)))
+        except ValueError:
+            continue
+        if "overall" in label.lower():
+            overall = score
+            summary = notes.strip()
+            continue
+        key, metric = _eval_metric_for(label)
+        dimensions.append({"key": key, "label": label, "score": score, "rationale": notes.strip(), "metricRef": metric})
+
+    if not dimensions:
+        return None
+    if overall is None:
+        overall = round(sum(d["score"] for d in dimensions) / len(dimensions))
+
+    return {
+        "target": "report",
+        "judgeModel": judge_model,
+        "overall": overall,
+        "verdict": "pass" if overall >= 80 else "revise",
+        "summary": summary,
+        "criteria": criteria,
+        "dimensions": dimensions,
+        "gaps": _extract_bullets_after(text, "Top gaps"),
+    }
 
 
 async def _run_pipeline(
@@ -3416,9 +3807,14 @@ async def _run_pipeline(
         )
 
         # Build model per-phase — phases like synthesizer need a larger thinking
-        # budget to reason over the full researcher output.
+        # budget to reason over the full researcher output. A phase may also pin
+        # its own model (e.g. the evaluator uses a distinct Bedrock judge model
+        # so the evaluation is not self-grading).
+        phase_model_id = phase.get("model_id") or model_id
+        if phase_model_id != model_id:
+            print(f"[ORCHESTRATOR] Phase '{agent_name}' uses model: {phase_model_id}")
         bedrock_model = _build_model(
-            model_id, temperature=0.1, thinking_budget=thinking_budget, max_tokens=phase_max_tokens
+            phase_model_id, temperature=0.1, thinking_budget=thinking_budget, max_tokens=phase_max_tokens
         )
 
         # Emit phase start
@@ -3485,9 +3881,7 @@ async def _run_pipeline(
                     }
                 }
                 yield {"agent_phase": {"agent": agent_name, "phase": role, "status": "end"}}
-                accumulated = (
-                    f"Previous agent ({agent_name}) output:\n{parallel_text}\n\nOriginal query: {query}"
-                )
+                accumulated = f"Previous agent ({agent_name}) output:\n{parallel_text}\n\nOriginal query: {query}"
                 continue
             print(f"[ORCHESTRATOR] {agent_name}: running sequential single-agent research")
 
@@ -3501,9 +3895,7 @@ async def _run_pipeline(
                 addendum = _payment_prompt_addendum()
                 if addendum:
                     phase_prompt = phase_prompt + addendum
-                    phase_plugins = _build_payments_plugin(
-                        user_id, payment_budget_usd, agent_name=agent_name
-                    )
+                    phase_plugins = _build_payments_plugin(user_id, payment_budget_usd, agent_name=agent_name)
                     phase_plugins = [phase_plugins] if phase_plugins else None
 
             agent = _create_agent(
@@ -3533,6 +3925,19 @@ async def _run_pipeline(
                 }
             }
             yield {"agent_phase": {"agent": agent_name, "phase": role, "status": "error"}}
+            if role == "evaluation":
+                # The judge model is optional and runs last, after the report and
+                # PDF are already delivered. If it can't even be created (e.g. the
+                # judge model isn't enabled), skip scoring rather than failing the
+                # whole run.
+                yield {
+                    "data": (
+                        "\n\n> **Evaluation unavailable** — the automated quality score "
+                        "could not run this time. Your report above is complete.\n\n"
+                    ),
+                    "_agent": agent_name,
+                }
+                continue
             yield {"status": "error", "error": f"Failed to create {agent_name}: {e}"}
             return
 
@@ -3582,9 +3987,7 @@ async def _run_pipeline(
                             parsed = _cbjson.loads(text_val)
                             url = parsed.get("url", "")
                             s3_key = parsed.get("s3_key", "")
-                            is_signed = bool(url) and (
-                                "X-Amz-Signature" in url or "Signature=" in url
-                            )
+                            is_signed = bool(url) and ("X-Amz-Signature" in url or "Signature=" in url)
                             # pdf_generator is the only tool that sets this
                             # discriminator; website_generator also returns a
                             # presigned `url` + `s3_key`, so it is matched
@@ -3604,9 +4007,7 @@ async def _run_pipeline(
                                                 # re-signs from this rather than
                                                 # reusing the link above.
                                                 "report_id": parsed.get("report_id", ""),
-                                                "filename": s3_key.split("/")[-1]
-                                                if s3_key
-                                                else "",
+                                                "filename": s3_key.split("/")[-1] if s3_key else "",
                                             },
                                         )
                                     )
@@ -3749,9 +4150,7 @@ async def _run_pipeline(
                     # existing WebsiteWriterResultCard ("View Website") — no
                     # frontend change required. Deduped on s3_key so a re-run of
                     # the same site does not stack cards.
-                    if not delivered_website or delivered_website.get("s3_key") != value.get(
-                        "s3_key"
-                    ):
+                    if not delivered_website or delivered_website.get("s3_key") != value.get("s3_key"):
                         delivered_website = value
                         import json as _wsjson
 
@@ -3871,6 +4270,19 @@ async def _run_pipeline(
                         "_agent": agent_name,
                     }
                     continue
+                if role == "evaluation":
+                    # Scoring runs last, after the report and PDF are delivered.
+                    # A judge failure must never fail a completed run — note it
+                    # and finish cleanly with the report intact.
+                    yield {
+                        "data": (
+                            f"\n\n> **Evaluation step failed** ({detail}).\n>\n"
+                            f"> Your report is complete and delivered above — only the automated "
+                            f"quality score is unavailable this run.\n\n"
+                        ),
+                        "_agent": agent_name,
+                    }
+                    continue
                 yield {"status": "error", "error": f"{agent_name} failed — {detail}"}
                 return
         finally:
@@ -3943,6 +4355,19 @@ async def _run_pipeline(
                         yield {"_ui": {"component": "ServicesCatalog", "props": parsed_catalog}}
                 except Exception as qc_exc:  # QC must never break the pipeline
                     logger.debug("Catalog QC failed: %s", qc_exc)
+                accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
+            elif agent_name == "evaluator":
+                # Turn the judge's streamed markdown scorecard into a structured
+                # Bedrock evaluation card. The markdown already streamed into the
+                # trace; this adds the gauge/bars card in chat and lights up the
+                # flow panel's evaluation tile. Parsing must never break the run.
+                try:
+                    criteria = _extract_plan_criteria(initial_accumulated or accumulated)
+                    scorecard = _parse_evaluation_scorecard(agent_text, phase_model_id, criteria)
+                    if scorecard:
+                        yield {"_ui": {"component": "EvaluationScorecard", "props": scorecard}}
+                except Exception as eval_exc:
+                    logger.debug("Evaluation scorecard parse failed: %s", eval_exc)
                 accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
             elif menu_designer_output:
                 accumulated = (

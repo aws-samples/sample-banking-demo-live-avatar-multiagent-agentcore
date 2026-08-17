@@ -48,6 +48,35 @@ export interface FeatureFlags {
      * funded (testnet) wallet the operator has to supply.
      */
     payments: boolean;
+    /**
+     * AgentCore Policy engine on the Gateway. When true, provisions a Cedar
+     * policy engine associated with the Gateway that evaluates every tool call
+     * for authorization. Ships in LOG_ONLY mode — it records allow/deny traces
+     * on real traffic WITHOUT enforcing, which is the AWS-recommended way to
+     * validate policies before flipping to ENFORCE (ENFORCE is default-deny, so
+     * it must not be enabled until a complete permit set + per-agent identities
+     * are in place). Defaults to true; set false to skip if the preview
+     * PolicyEngine resource is unavailable in the target account.
+     */
+    policy: boolean;
+    /**
+     * Enforcement mode for the Policy engine: "LOG_ONLY" (default, safe) or
+     * "ENFORCE". Only flip to ENFORCE after validating the LOG_ONLY traces —
+     * Cedar is default-deny, so ENFORCE without complete permit policies blocks
+     * every tool call.
+     */
+    policyMode: "LOG_ONLY" | "ENFORCE";
+    /**
+     * AgentCore Harness (managed agent loop). When true, provisions a small
+     * customer-facing "Quick Assistant" harness via a CDK custom resource so the
+     * Harness console page shows a real managed agent alongside the Runtime
+     * agents. It is additive (a new external experience), not a conversion of
+     * any existing agent, and has no in-app UI — it exists to demonstrate the
+     * config-only managed-loop build path. Provisioning is best-effort: if the
+     * preview control-plane API is unavailable in the account, the deploy still
+     * succeeds and the entry simply does not appear. Defaults to true.
+     */
+    harness: boolean;
 }
 
 export interface ModelConfig {
@@ -72,6 +101,9 @@ const DEFAULT_FEATURES: FeatureFlags = {
     browser: true,
     sample_tool: false,
     payments: false,
+    policy: true,
+    policyMode: "LOG_ONLY",
+    harness: true,
 };
 
 const DEFAULT_MODELS: ModelConfig = {

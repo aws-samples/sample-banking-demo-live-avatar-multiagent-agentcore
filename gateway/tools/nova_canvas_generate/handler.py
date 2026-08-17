@@ -51,6 +51,17 @@ def _nearest_aspect_ratio(width: int, height: int) -> str:
     return min(_STABILITY_ASPECT_RATIOS, key=lambda k: abs(_STABILITY_ASPECT_RATIOS[k] - target))
 
 
+# Diffusion models render lettering as plausible-looking gibberish — a catalog
+# image came back reading "Trinity M?naged / SOTEROIAFLI OEN MANCIA fadSTB". Since
+# every caller here wants clean product imagery with captions supplied by the PDF
+# and web templates, text is suppressed centrally rather than trusting each
+# prompt to remember.
+NO_TEXT_NEGATIVE = (
+    "text, words, letters, lettering, typography, captions, labels, watermark, "
+    "signature, logo, brand name, numbers, writing, subtitles"
+)
+
+
 def _generate_image(
     prompt: str,
     width: int,
@@ -72,8 +83,10 @@ def _generate_image(
         "aspect_ratio": _nearest_aspect_ratio(width, height),
         "output_format": "png",
     }
-    if negative_prompt:
-        request_payload["negative_prompt"] = negative_prompt
+    # Always suppress text, keeping any caller-supplied terms as well.
+    request_payload["negative_prompt"] = (
+        f"{negative_prompt}, {NO_TEXT_NEGATIVE}" if negative_prompt else NO_TEXT_NEGATIVE
+    )
 
     logger.info(f"Generating image with {IMAGE_MODEL_ID} ({IMAGE_MODEL_REGION}): {prompt[:100]}...")
 

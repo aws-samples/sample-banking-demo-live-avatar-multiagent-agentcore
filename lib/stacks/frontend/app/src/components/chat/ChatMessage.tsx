@@ -52,6 +52,15 @@ export function ChatMessage({
                     if (!UIComponent) return null;
                     return <UIComponent key={seg.key} {...seg.props} onAction={onUIAction} />;
                 }
+                // A tool card with no arguments and no result has nothing to
+                // show. Sub-agent calls (the parallel researcher's workers) are
+                // reported for metrics only and never stream either, so without
+                // this guard the transcript fills with empty dropdowns. Real
+                // calls receive their arguments in the same tick, so this costs
+                // nothing visible for them.
+                const { input, result } = seg.toolCall;
+                if (!input && !result) return null;
+
                 const render = getToolRenderer(seg.toolCall.name);
                 if (!render) return null;
                 return (

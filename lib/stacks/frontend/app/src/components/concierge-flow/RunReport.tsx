@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
+import { EvaluationSummary } from "@/components/common/evaluation/EvaluationScorecard";
 
 /**
  * Out-of-the-box run report for the AI Agent.
@@ -156,6 +157,11 @@ export function RunReport() {
                 Metrics derived from live run telemetry. Cost is an estimate based on documented
                 per-unit assumptions.
             </p>
+
+            {/* Bedrock LLM-as-a-judge score for this run, when the evaluator has
+                reported. Rendered inside the Run Report so every experience's
+                flow panel shows the same evaluation readout. */}
+            <EvaluationSummary />
         </section>
     );
 }

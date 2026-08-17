@@ -77,8 +77,13 @@ export class ApplicationStage extends Stage {
             ...(this.node.getContext("accounts")?.[this.stageName ?? ""]?.midway
                 ? { VITE_COGNITO_IDENTITY_PROVIDER: "AmazonFederate" }
                 : {}),
-            // Backend runtime ARNs (cross-stack references).
+            // Backend runtime ARNs (cross-stack references). One per agent
+            // experience; the frontend picks the ARN by mode. ORCHESTRATOR is
+            // kept as a back-compat alias pointing at the Deep Research runtime.
             VITE_RUNTIME_ARN_ORCHESTRATOR: backend.orchestratorRuntimeArn,
+            VITE_RUNTIME_ARN_RESEARCH: backend.researchRuntimeArn,
+            VITE_RUNTIME_ARN_ASSISTANT: backend.assistantRuntimeArn,
+            VITE_RUNTIME_ARN_AGENT: backend.agentRuntimeArn,
             ...(features.avatar && backend.avatarRuntimeArn
                 ? { VITE_RUNTIME_ARN_AVATAR: backend.avatarRuntimeArn }
                 : {}),

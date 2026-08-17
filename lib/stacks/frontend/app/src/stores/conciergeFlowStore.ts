@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { normalizeToolName } from "@/components/concierge-flow/flow-types";
+import type { EvaluationData } from "@/components/common/evaluation/types";
 
 export type NodeActivity = "idle" | "active" | "completed";
 
@@ -32,6 +33,12 @@ interface ConciergeFlowState {
      * inference cost.
      */
     paymentSpend: { spent: string; budget: string; currency: string; sessions: number } | null;
+    /**
+     * Bedrock LLM-as-a-judge result for the current/last run, or null before the
+     * evaluator phase reports. Drives the Run Report's evaluation tile so every
+     * experience shows the same score without an extra fetch.
+     */
+    evaluation: EvaluationData | null;
 
     // actions
     runtimeStart(): void;
@@ -44,6 +51,7 @@ interface ConciergeFlowState {
         currency: string;
         sessions: number;
     }): void;
+    setEvaluation(evaluation: EvaluationData): void;
     reset(): void;
 }
 
@@ -56,16 +64,19 @@ export const useConciergeFlowStore = create<ConciergeFlowState>((set) => ({
     runStartedAt: null,
     runEndedAt: null,
     paymentSpend: null,
+    evaluation: null,
 
     setPaymentSpend: (spend) => set({ paymentSpend: spend }),
+    setEvaluation: (evaluation) => set({ evaluation }),
 
     runtimeStart: () =>
         set({
             runtimeActive: true,
             runStartedAt: Date.now(),
             runEndedAt: null,
-            // Clear last run's spend so a new run never shows a stale figure.
+            // Clear last run's spend and score so a new run never shows stale data.
             paymentSpend: null,
+            evaluation: null,
         }),
     runtimeEnd: () => set({ runtimeActive: false, activeTool: null, runEndedAt: Date.now() }),
 
@@ -107,5 +118,6 @@ export const useConciergeFlowStore = create<ConciergeFlowState>((set) => ({
             runStartedAt: null,
             runEndedAt: null,
             paymentSpend: null,
+            evaluation: null,
         }),
 }));
