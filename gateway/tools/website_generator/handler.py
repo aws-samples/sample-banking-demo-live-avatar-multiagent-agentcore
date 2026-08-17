@@ -19,8 +19,56 @@ logger.setLevel(logging.INFO)
 s3_client = boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 REPORTS_BUCKET = os.environ.get("REPORTS_BUCKET", "")
 IMAGES_BUCKET = os.environ.get("IMAGES_BUCKET", "")
+METADATA_TABLE = os.environ.get("METADATA_TABLE", "")
 
 DIETARY_LABELS = {"V": "Vegetarian", "VG": "Vegan", "GF": "Gluten-Free", "DF": "Dairy-Free"}
+
+# Run records outlive the S3 lifecycle on reports, matching pdf_generator.
+_WEBSITE_RECORD_TTL_DAYS = 89
+
+
+def _section_anchor(name: str) -> str:
+    """Slug used as the section's HTML id — must match the render functions."""
+    return name.lower().replace(" ", "-")
+
+
+def _record_website_run(user_id: str, s3_key: str, title: str, section_names: list) -> None:
+    """Persist a durable pointer to a generated services website.
+
+    The Avatar/Digital Human retrieves the latest one (via lambdas/reports-history
+    GET /website-latest) and deep-links to a section as the customer asks about a
+    product category. Only the S3 key is stored — never a presigned URL — so the
+    link is re-signed fresh on every fetch, exactly like the PDF run records.
+
+    Best-effort: a failure here must not break website generation, so it is
+    logged rather than raised.
+    """
+    if not METADATA_TABLE or not user_id:
+        logger.info(
+            "Skipping website run record (table=%s, user=%s)", bool(METADATA_TABLE), bool(user_id)
+        )
+        return
+
+    now = datetime.now(timezone.utc)
+    sections = [{"heading": n, "anchor": _section_anchor(n)} for n in section_names if n]
+    try:
+        boto3.resource("dynamodb").Table(METADATA_TABLE).put_item(
+            Item={
+                "PK": f"user#{user_id}",
+                # Distinct SK prefix from PDFs (`report#`) so the two histories
+                # never mix; timestamp-first for a newest-first descending query.
+                "SK": f"website#{now.isoformat()}#{uuid.uuid4().hex[:8]}",
+                "s3_key": s3_key,
+                "bucket": REPORTS_BUCKET,
+                "title": title,
+                "sections": sections,
+                "created_at": now.isoformat(),
+                "ttl": int(now.timestamp()) + _WEBSITE_RECORD_TTL_DAYS * 86400,
+            }
+        )
+        logger.info("Recorded website run for history (%d sections)", len(sections))
+    except Exception as e:  # noqa: BLE001 - never fail generation over history
+        logger.warning("Could not record website run: %s", e)
 
 
 def _get_image_url(s3_key: str, image_url: str = "") -> str:
@@ -714,6 +762,9 @@ def handler(event, context):
                 presigned_url = _upload_html(html, s3_key, user_id, layout="menu")
                 section_names = [s["name"] for s in menu.get("sections", [])]
                 item_count = sum(len(s.get("items", [])) for s in menu.get("sections", []))
+                # Record it so the Avatar/Digital Human can retrieve and deep-link
+                # into this catalog site as the customer asks about a category.
+                _record_website_run(user_id, s3_key, title, section_names)
                 return {
                     "content": [
                         {

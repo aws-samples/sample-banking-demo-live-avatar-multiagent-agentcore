@@ -25,21 +25,6 @@ const EXAMPLE_PROMPTS = [
         question:
             "Using our Trinity Reserve strategy report, build the full client services catalog — everyday checking, high-yield savings, retirement, and managed investing — with an image for each product",
     },
-    {
-        title: "Deposit Products",
-        question:
-            "Create a services catalog for our retail deposit products — Everyday Checking and the 4.15% APY High-Yield Savings — using the deposit trends from our research, with an image for each",
-    },
-    {
-        title: "Retirement & Investing",
-        question:
-            "Design a services catalog for our retirement and investment services — Traditional and Roth IRAs and Trinity Managed Portfolios — grounded in the strategy report, with imagery for each product",
-    },
-    {
-        title: "Private Client Wealth",
-        question:
-            "Build a Private Client wealth management catalog aligned to the client segments identified in our research, with an image for each service",
-    },
 ];
 
 export default function MenuWelcomeScreen({ onExampleClick }: MenuWelcomeScreenProps): JSX.Element {
@@ -103,8 +88,8 @@ export default function MenuWelcomeScreen({ onExampleClick }: MenuWelcomeScreenP
                         </Alert>
                     ) : (
                         <Alert type="warning" header="No deep research report yet">
-                            Run the Deep Research Agent first to ground the catalog in your strategy.
-                            You can still design from the standing product set.
+                            Run the Deep Research Agent first to ground the catalog in your
+                            strategy. You can still design from the standing product set.
                         </Alert>
                     )}
                 </div>

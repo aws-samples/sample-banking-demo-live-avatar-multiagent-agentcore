@@ -39,21 +39,6 @@ export const SAMPLE_PROMPTS: Record<SamplePromptKey, SamplePrompt[]> = {
             question:
                 "Using our Trinity Reserve strategy report, build the full client services catalog — everyday checking, high-yield savings, retirement, and managed investing — with an image for each product",
         },
-        {
-            label: "Deposit products",
-            question:
-                "Create a services catalog for our retail deposit products — Everyday Checking and the 4.15% APY High-Yield Savings — using the deposit trends from our research, with an image for each",
-        },
-        {
-            label: "Retirement & investing",
-            question:
-                "Design a services catalog for our retirement and investment services — Traditional and Roth IRAs and Trinity Managed Portfolios — grounded in the strategy report, with imagery for each product",
-        },
-        {
-            label: "Private client wealth",
-            question:
-                "Build a Private Client wealth management catalog aligned to the client segments identified in our research, with an image for each service",
-        },
     ],
     chatbot: [
         { label: "Savings rate", question: "What is the High-Yield Savings APY?" },

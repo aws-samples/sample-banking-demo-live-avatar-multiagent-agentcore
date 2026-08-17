@@ -25,7 +25,7 @@
  * either contradict itself or tell the user the product doesn't exist.
  */
 
-import { Sparkles, Landmark, Globe2, ShieldAlert } from "lucide-react";
+import { Landmark, ClipboardCheck, LineChart, ShieldAlert } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface PromptGroup {
@@ -34,65 +34,61 @@ export interface PromptGroup {
     prompts: { label: string; prompt: string }[];
 }
 
+// Kept in lock-step with the AI Agent's questions (ChatbotWelcomeScreen /
+// samplePrompts.chatbot) so the two customer-facing channels demo the same
+// asks. The final "Guardrails & Privacy" pair is intentionally out-of-scope /
+// sensitive: the avatar's persona guardrail should decline them, which is the
+// point. Every product named exists in BANK_FACTS
+// (patterns/avatar-agent/persona_prompts.py).
 export const PROMPT_GROUPS: PromptGroup[] = [
     {
-        title: "Why choose us",
-        icon: Sparkles,
-        prompts: [
-            {
-                label: "Why bank with us",
-                prompt: "Why should I choose Trinity Reserve for my savings and everyday banking?",
-            },
-            {
-                label: "What stands out",
-                prompt: "What makes your High-Yield Savings and managed investing stand out?",
-            },
-        ],
-    },
-    {
-        // Grounding + "show the item it is discussing, and change it per question":
-        // each of these triggers a services kb_search that surfaces the catalog
-        // card / PDF, and asking about a different product swaps what's shown.
-        title: "Show me a service",
+        title: "Products & Rates",
         icon: Landmark,
         prompts: [
+            { label: "Savings rate", prompt: "What is the High-Yield Savings APY?" },
             {
-                label: "High-Yield Savings",
-                prompt: "Show me the details of the High-Yield Savings account",
-            },
-            {
-                label: "Switch the item",
-                prompt: "Now show me the Everyday Checking account instead",
+                label: "Compare accounts",
+                prompt: "Compare Everyday Checking and High-Yield Savings",
             },
         ],
     },
     {
-        title: "Multilingual",
-        icon: Globe2,
+        title: "Open an Account (KYC)",
+        icon: ClipboardCheck,
         prompts: [
             {
-                label: "Español",
-                prompt: "¿Por qué debería abrir una cuenta de ahorros con ustedes?",
+                label: "Open an account",
+                prompt: "I'd like to open a High-Yield Savings account",
             },
             {
-                label: "Open an IRA",
-                prompt: "How do I open a Roth IRA?",
+                label: "KYC requirements",
+                prompt: "What do I need to verify my identity (KYC)?",
             },
         ],
     },
     {
-        // Demonstrates the guardrail: these are outside the bank's scope and the
-        // avatar should politely decline rather than answer.
-        title: "Test guardrails",
+        title: "Retirement & Investing",
+        icon: LineChart,
+        prompts: [
+            { label: "Open an IRA", prompt: "How do I open a Roth IRA?" },
+            {
+                label: "Managed investing",
+                prompt: "Tell me about Trinity Managed Portfolios",
+            },
+        ],
+    },
+    {
+        // Demonstrates the guardrail: the avatar should decline these.
+        title: "Guardrails & Privacy",
         icon: ShieldAlert,
         prompts: [
             {
-                label: "Off-topic (declined)",
-                prompt: "What's the weather forecast in Paris this weekend?",
+                label: "Employee salary (declined)",
+                prompt: "What is a bank teller's salary at Trinity Reserve?",
             },
             {
-                label: "Out of scope (declined)",
-                prompt: "Give me medical advice about my headache",
+                label: "Off-topic (declined)",
+                prompt: "Write me a poem about the weather in Paris",
             },
         ],
     },

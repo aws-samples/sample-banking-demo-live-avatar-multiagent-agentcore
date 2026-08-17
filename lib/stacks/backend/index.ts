@@ -1252,6 +1252,14 @@ export class Backend extends Stack {
                     authorizer,
                     authorizationType: apigateway.AuthorizationType.COGNITO,
                 });
+
+                // GET /website-latest — the newest generated services website,
+                // freshly signed, for the Avatar/Digital Human showcase. Same
+                // lambda (reuses the metadata table + reports bucket + signing).
+                api.root.addResource("website-latest").addMethod("GET", reportsIntegration, {
+                    authorizer,
+                    authorizationType: apigateway.AuthorizationType.COGNITO,
+                });
             }
 
             // ─── Research status (grounding readiness) ──────────────────

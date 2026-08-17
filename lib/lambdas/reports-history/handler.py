@@ -87,6 +87,55 @@ def _sign(s3_key: str, filename: str, disposition: str = "inline") -> str | None
         return None
 
 
+def _sign_html(s3_key: str) -> str | None:
+    """Sign a generated website for inline display in an iframe.
+
+    text/html + inline so the browser renders it in the avatar's showcase iframe
+    rather than downloading it. No forced disposition filename — the page is
+    embedded, not saved.
+    """
+    try:
+        return s3_client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": REPORTS_BUCKET,
+                "Key": s3_key,
+                "ResponseContentType": "text/html",
+            },
+            ExpiresIn=URL_TTL_SECONDS,
+        )
+    except ClientError as e:
+        logger.warning("Could not sign website %s: %s", s3_key, e)
+        return None
+
+
+def _latest_website(table, user_id: str) -> dict:
+    """The caller's most recent generated services website, freshly signed.
+
+    Returns {"website": null} when the user has generated none. The URL is signed
+    per request (never stored), same as the PDF path, so an embed opened long
+    after generation still loads.
+    """
+    resp = table.query(
+        KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues={":pk": f"user#{user_id}", ":sk": "website#"},
+        ScanIndexForward=False,  # newest first
+        Limit=1,
+    )
+    items = resp.get("Items", [])
+    if not items:
+        return {"website": None}
+    rec = items[0]
+    return {
+        "website": {
+            "title": rec.get("title", "Services"),
+            "url": _sign_html(rec.get("s3_key", "")),
+            "sections": rec.get("sections", []),
+            "createdAt": rec.get("created_at", ""),
+        }
+    }
+
+
 def _to_item(record: dict, disposition: str = "inline") -> dict:
     s3_key = record.get("s3_key", "")
     filename = s3_key.rsplit("/", 1)[-1] or "report.pdf"
@@ -114,6 +163,18 @@ def handler(event, _context):
         return _response(401, {"error": "Unauthenticated"})
 
     table = dynamodb.Table(METADATA_TABLE)
+
+    # GET /website-latest — the newest generated services website, for the
+    # Avatar/Digital Human showcase. Same lambda so it reuses the table + bucket
+    # + signing; branched on the API resource path.
+    resource = event.get("resource") or event.get("path") or ""
+    if "website-latest" in resource:
+        try:
+            return _response(200, _latest_website(table, user_id))
+        except ClientError as e:
+            logger.error("DynamoDB error (website-latest): %s", e, exc_info=True)
+            return _response(500, {"error": "Could not read website history"})
+
     report_id = (event.get("pathParameters") or {}).get("reportId")
 
     # ?disposition=attachment returns a link the browser downloads instead of

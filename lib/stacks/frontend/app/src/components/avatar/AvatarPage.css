@@ -8,6 +8,53 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    /* Anchors the absolutely-positioned website showcase overlay. */
+    position: relative;
+}
+
+/* ============================
+   Website showcase (Digital Human)
+   When the customer asks about a product category, the generated services
+   website is shown here and the live avatar shrinks into a floating corner
+   thumbnail. The avatar canvas is only repositioned (see the --showcase rule
+   below), never remounted, so its video/audio track keeps playing.
+   ============================ */
+.avatar-page__showcase {
+    position: absolute;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    padding: 12px;
+    background: rgba(6, 9, 13, 0.72);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.avatar-page--showcase .avatar-page__avatar-canvas {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    width: 260px;
+    height: 196px;
+    /* Override the responsive min/max-height floors so the thumbnail stays
+       small on tablet/mobile. */
+    min-height: 0;
+    max-height: none;
+    z-index: 1001;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+}
+
+@media (max-width: 767px) {
+    .avatar-page--showcase .avatar-page__avatar-canvas {
+        width: 150px;
+        height: 113px;
+        min-height: 0;
+        max-height: none;
+        top: 10px;
+        right: 10px;
+    }
 }
 
 .avatar-page__controls {

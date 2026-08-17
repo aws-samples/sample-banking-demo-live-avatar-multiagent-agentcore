@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import ChatInterface from "@/components/chat/ChatInterface";
 import { PipelineFlowSidebar } from "@/components/common/flow/PipelineFlowSidebar";
 import { useResearchState } from "@/hooks/useResearchState";
-import { SAMPLE_PROMPTS } from "@/config/samplePrompts";
 import ResizablePanelLayout, {
     type ResizablePanelConfig,
 } from "@/components/common/resizable/ResizablePanelLayout";
@@ -41,10 +40,7 @@ export default function ResearchPage(): JSX.Element {
             className="h-full w-full"
         >
             <div className="h-full w-full min-w-0">
-                <ChatInterface
-                    title="Deep Research Agent"
-                    samplePrompts={SAMPLE_PROMPTS.research}
-                />
+                <ChatInterface title="Deep Research Agent" />
             </div>
             {showSidebar ? (
                 <PipelineFlowSidebar

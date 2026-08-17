@@ -63,6 +63,12 @@ import { createPCMProcessorUrl, arrayBufferToBase64 } from "@/lib/websocket-clie
 import AvatarTextInput from "./AvatarTextInput";
 import AvatarSuggestedPrompts from "./AvatarSuggestedPrompts";
 import AvatarServicesCatalog, { useAvatarCatalog, findActiveItem } from "./AvatarServicesCatalog";
+import WebsiteShowcase from "./WebsiteShowcase";
+import {
+    fetchLatestWebsite,
+    sectionAnchor,
+    type LatestWebsite,
+} from "@/services/websiteShowcaseService";
 import AvatarPromptsDialog from "./AvatarPromptsDialog";
 import ToolCallCard from "./ToolCallCard";
 import { useAuth } from "react-oidc-context";
@@ -165,6 +171,12 @@ export default function AvatarInterface(): JSX.Element {
     // that names a catalog item wins, so the highlight tracks what is being said
     // and persists through follow-ups that don't repeat the name.
     const catalogSections = useAvatarCatalog();
+    // Generated services website from the AI Assistant step, and the section
+    // the user has dismissed (so it does not immediately reopen). The showcase
+    // shrinks the avatar and shows the relevant section as the customer asks
+    // about a product category.
+    const [website, setWebsite] = useState<LatestWebsite | null>(null);
+    const [dismissedAnchor, setDismissedAnchor] = useState<string | null>(null);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [showPromptEditor, setShowPromptEditor] = useState(false);
     const [systemPrompt, setSystemPrompt] = useState(() => {
@@ -305,6 +317,42 @@ export default function AvatarInterface(): JSX.Element {
         }
         return null;
     }, [transcript, catalogSections]);
+
+    // Fetch the latest generated services website once, so the showcase can
+    // deep-link into it as the conversation moves. State is set from the fetch
+    // callback (external system), never synchronously in the effect body.
+    const idToken = auth.user?.id_token;
+    useEffect(() => {
+        if (!idToken) return;
+        let cancelled = false;
+        void fetchLatestWebsite(idToken).then((w) => {
+            if (!cancelled) setWebsite(w);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [idToken]);
+
+    // Which website section (if any) matches what the avatar is currently
+    // discussing. Maps the active catalog item → its section → the website
+    // anchor, so speaking about "high-yield savings" surfaces that section.
+    const showcaseTarget = useMemo(() => {
+        if (!website?.url || !activeCatalogItem) return null;
+        const section = catalogSections.find((s) =>
+            s.items.some((it) => it.name === activeCatalogItem)
+        );
+        if (!section) return null;
+        const anchor = sectionAnchor(section.category);
+        const match = website.sections.find(
+            (ws) =>
+                ws.anchor === anchor || ws.heading.toLowerCase() === section.category.toLowerCase()
+        );
+        return match ? { anchor: match.anchor, label: match.heading } : null;
+    }, [website, activeCatalogItem, catalogSections]);
+
+    // Open unless the user dismissed this exact section; a new section reopens
+    // it automatically because the dismissed anchor no longer matches.
+    const showcaseOpen = !!showcaseTarget && showcaseTarget.anchor !== dismissedAnchor;
 
     // --- Smart auto-scroll ---
     useEffect(() => {
@@ -1367,7 +1415,22 @@ export default function AvatarInterface(): JSX.Element {
     }, [pdfPreview]);
 
     return (
-        <div className="avatar-page">
+        <div className={`avatar-page${showcaseOpen ? " avatar-page--showcase" : ""}`}>
+            {/* Website showcase: shrinks the avatar to a corner and shows the
+                section of the generated site the customer is asking about. The
+                avatar canvas is only repositioned by CSS (never unmounted), so
+                the live video track survives. */}
+            {showcaseOpen && showcaseTarget && website?.url && (
+                <div className="avatar-page__showcase">
+                    <WebsiteShowcase
+                        url={website.url}
+                        anchor={showcaseTarget.anchor}
+                        label={showcaseTarget.label}
+                        onClose={() => setDismissedAnchor(showcaseTarget.anchor)}
+                    />
+                </div>
+            )}
+
             {/* Controls bar */}
             <div className="avatar-page__controls">
                 <SpaceBetween direction="horizontal" size="s">

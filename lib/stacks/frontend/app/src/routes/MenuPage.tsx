@@ -6,7 +6,6 @@ import { PipelineFlowSidebar } from "@/components/common/flow/PipelineFlowSideba
 import MenuWelcomeScreen from "@/components/menu/MenuWelcomeScreen";
 import CatalogStudio from "@/components/menu/CatalogStudio";
 import ContinuousFeedbackLoop from "@/components/menu/ContinuousFeedbackLoop";
-import { SAMPLE_PROMPTS } from "@/config/samplePrompts";
 import { useToolRenderer } from "@/hooks/useToolRenderer";
 import { CanvasResultCard } from "@/components/chat/structured/CanvasResultCard";
 import { MENU_PIPELINE } from "@/components/chat/types";
@@ -89,7 +88,6 @@ export default function MenuPage(): JSX.Element {
                 <ChatInterface
                     mode="menu"
                     title="AI Assistant"
-                    samplePrompts={SAMPLE_PROMPTS.menu}
                     renderWelcome={(onExampleClick) => (
                         <MenuWelcomeScreen onExampleClick={onExampleClick} />
                     )}
