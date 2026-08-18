@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 import { EvaluationSummary } from "@/components/common/evaluation/EvaluationScorecard";
+import { ModelsInPlay } from "@/components/common/flow/ModelsInPlay";
+import { GroundedSources } from "@/components/common/flow/GroundedSources";
 
 /**
  * Out-of-the-box run report for the AI Agent.
@@ -129,7 +131,10 @@ export function RunReport() {
     };
 
     return (
-        <section className="border-b border-slate-800 px-4 py-3" aria-label="Run report">
+        <>
+            {/* Which foundation models are running, lit up as they engage. */}
+            <ModelsInPlay />
+            <section className="border-b border-slate-800 px-4 py-3" aria-label="Run report">
             <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-xs font-semibold text-slate-100">Run Report</h3>
                 <span className="text-[10px] uppercase tracking-wider text-slate-500">
@@ -157,11 +162,15 @@ export function RunReport() {
                 Metrics derived from live run telemetry. Cost is an estimate based on documented
                 per-unit assumptions.
             </p>
+            </section>
 
-            {/* Bedrock LLM-as-a-judge score for this run, when the evaluator has
-                reported. Rendered inside the Run Report so every experience's
-                flow panel shows the same evaluation readout. */}
+            {/* The concrete documents/domains the answer was grounded in. */}
+            <GroundedSources />
+
+            {/* Bedrock LLM-as-a-judge score for this run — a live "Evaluating…"
+                state while the judge runs, then the score. Rendered here so every
+                experience's flow panel shows the same evaluation readout. */}
             <EvaluationSummary />
-        </section>
+        </>
     );
 }

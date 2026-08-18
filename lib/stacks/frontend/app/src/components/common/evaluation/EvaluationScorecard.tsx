@@ -27,7 +27,7 @@ const JUDGE_LABEL: Record<string, string> = {
     "us.anthropic.claude-sonnet-4-6": "Claude Sonnet 4.6",
 };
 
-function judgeLabel(modelId: string): string {
+export function judgeLabel(modelId: string): string {
     if (!modelId) return "Bedrock judge";
     return JUDGE_LABEL[modelId] ?? modelId.split(/[/.:]/).slice(-2, -1)[0] ?? modelId;
 }
@@ -259,6 +259,42 @@ function DimensionRow({ dim }: { dim: EvaluationDimension }): JSX.Element {
  */
 export function EvaluationSummary(): JSX.Element | null {
     const evaluation = useConciergeFlowStore((s) => s.evaluation);
+    const evaluating = useConciergeFlowStore((s) => s.evaluating);
+
+    // Live pending state: the judge is running but has not reported yet. Makes
+    // evaluation a visible, in-progress moment instead of a card that only
+    // appears once it finishes.
+    if (!evaluation && evaluating) {
+        return (
+            <section
+                className="border-t border-slate-800 px-4 py-3"
+                aria-label="Bedrock evaluation in progress"
+            >
+                <div className="flex items-center gap-2">
+                    <Scale size={13} className="animate-pulse text-amber-300" />
+                    <span className="text-xs font-semibold text-slate-100">Bedrock Evaluation</span>
+                    <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium text-amber-300">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300" />
+                        Evaluating…
+                    </span>
+                </div>
+                <p className="mt-1.5 text-[10.5px] leading-snug text-slate-500">
+                    An LLM-as-a-judge model is scoring the report against the brief and the evidence
+                    gathered.
+                </p>
+                {/* Skeleton dimension bars so the panel has visible, animated
+                    substance while the judge runs. */}
+                <div className="mt-2 flex flex-col gap-1.5">
+                    {[0, 1, 2].map((i) => (
+                        <div key={i} className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                            <div className="h-full w-1/3 animate-pulse rounded-full bg-slate-600" />
+                        </div>
+                    ))}
+                </div>
+            </section>
+        );
+    }
+
     if (!evaluation) return null;
 
     const pass = evaluation.verdict === "pass";

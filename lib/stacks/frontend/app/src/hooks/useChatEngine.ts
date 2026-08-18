@@ -11,6 +11,7 @@ import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 import type { EvaluationData } from "@/components/common/evaluation/types";
 import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
 import { normalizeToolName } from "@/components/concierge-flow/flow-types";
+import { extractGroundedSources } from "@/components/common/flow/grounding";
 
 export type { ResearchAction };
 
@@ -260,6 +261,15 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                     tc.status = "complete";
                                 }
                                 useConciergeFlowStore.getState().toolEnd(event.toolUseId);
+                                // Capture the concrete sources a grounding tool
+                                // pulled (KB docs, web domains) so the flow
+                                // panel can show provenance, not just counts.
+                                if (tc?.name) {
+                                    const grounded = extractGroundedSources(tc.name, event.result);
+                                    if (grounded.length) {
+                                        useConciergeFlowStore.getState().addSources(grounded);
+                                    }
+                                }
                                 updateMessage();
                                 break;
                             }
@@ -365,6 +375,15 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                 break;
                             }
                             case "agent_phase": {
+                                // Light the shared Run Report's "Evaluating…"
+                                // state the moment the judge phase begins. The
+                                // scorecard (setEvaluation) or runtimeEnd clears
+                                // it; an evaluator error clears it below.
+                                if (event.agent === "evaluator") {
+                                    useConciergeFlowStore
+                                        .getState()
+                                        .setEvaluating(event.status === "start");
+                                }
                                 if (event.status === "start") {
                                     // Remember the in-flight phase so a terminal
                                     // stream error can close it out (see

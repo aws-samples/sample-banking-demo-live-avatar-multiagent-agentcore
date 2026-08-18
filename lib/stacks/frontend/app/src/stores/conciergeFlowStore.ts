@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { normalizeToolName } from "@/components/concierge-flow/flow-types";
 import type { EvaluationData } from "@/components/common/evaluation/types";
+import type { GroundedSource } from "@/components/common/flow/grounding";
 
 export type NodeActivity = "idle" | "active" | "completed";
 
@@ -11,6 +12,8 @@ export interface ToolEvent {
     startedAt: number;
     completedAt?: number;
 }
+
+export type { GroundedSource };
 
 interface ConciergeFlowState {
     /** Active mode for which tools are being tracked. Cleared on reset. */
@@ -39,6 +42,16 @@ interface ConciergeFlowState {
      * experience shows the same score without an extra fetch.
      */
     evaluation: EvaluationData | null;
+    /**
+     * True while the evaluator phase is running but before its scorecard has
+     * arrived. Drives the Run Report's "Evaluating…" pending state and the
+     * judge model chip's live pulse, so evaluation is visibly happening rather
+     * than only appearing once finished. Only pipeline modes (research/menu)
+     * run an evaluator; the AI Agent never sets this.
+     */
+    evaluating: boolean;
+    /** Concrete sources the run grounded in, aggregated across grounding tools. */
+    sources: GroundedSource[];
 
     // actions
     runtimeStart(): void;
@@ -52,6 +65,8 @@ interface ConciergeFlowState {
         sessions: number;
     }): void;
     setEvaluation(evaluation: EvaluationData): void;
+    setEvaluating(evaluating: boolean): void;
+    addSources(sources: GroundedSource[]): void;
     reset(): void;
 }
 
@@ -65,20 +80,41 @@ export const useConciergeFlowStore = create<ConciergeFlowState>((set) => ({
     runEndedAt: null,
     paymentSpend: null,
     evaluation: null,
+    evaluating: false,
+    sources: [],
 
     setPaymentSpend: (spend) => set({ paymentSpend: spend }),
-    setEvaluation: (evaluation) => set({ evaluation }),
+    // A finished score supersedes the pending state.
+    setEvaluation: (evaluation) => set({ evaluation, evaluating: false }),
+    setEvaluating: (evaluating) => set({ evaluating }),
+    addSources: (incoming) =>
+        set((s) => {
+            const seen = new Set(s.sources.map((x) => `${x.kind}|${x.title}|${x.url ?? ""}`));
+            const merged = [...s.sources];
+            for (const src of incoming) {
+                const key = `${src.kind}|${src.title}|${src.url ?? ""}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                merged.push(src);
+            }
+            return { sources: merged };
+        }),
 
     runtimeStart: () =>
         set({
             runtimeActive: true,
             runStartedAt: Date.now(),
             runEndedAt: null,
-            // Clear last run's spend and score so a new run never shows stale data.
+            // Clear last run's spend, score, and sources so a new run never shows stale data.
             paymentSpend: null,
             evaluation: null,
+            evaluating: false,
+            sources: [],
         }),
-    runtimeEnd: () => set({ runtimeActive: false, activeTool: null, runEndedAt: Date.now() }),
+    // Clear the pending eval flag too: if the run ended without a scorecard
+    // (judge failed or was skipped), the "Evaluating…" state must not stick.
+    runtimeEnd: () =>
+        set({ runtimeActive: false, activeTool: null, runEndedAt: Date.now(), evaluating: false }),
 
     toolStart: (toolUseId, name) =>
         set((s) => {
@@ -119,5 +155,7 @@ export const useConciergeFlowStore = create<ConciergeFlowState>((set) => ({
             runEndedAt: null,
             paymentSpend: null,
             evaluation: null,
+            evaluating: false,
+            sources: [],
         }),
 }));
