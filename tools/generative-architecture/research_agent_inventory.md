@@ -160,9 +160,6 @@ Routing lives in `patterns/orchestrator-agent/orchestrator_agent.py` (`_handle_c
 | 3   | `pdf_generator`         | `pdf-generator`         | `handler.handler`            | 900 s   | 512 MB | Generate a formatted PDF (ReportLab) and upload to S3; returns presigned URL. Supports `research` (12-section) and `menu` formats. Tags S3 object metadata with `pipeline`.                                               |
 | 4   | `image_generate`        | `image-generate`        | `handler.handler`            | 300 s   | 512 MB | Generate a new image from a text prompt using Stability SD3.5 (Stable Diffusion) on Bedrock; saves to S3 and returns presigned URL.                                                                                       |
 | 5   | `image_history`         | `image-history`         | `handler.handler`            | 60 s    | 128 MB | Retrieve image generation history for a session with fresh presigned URLs.                                                                                                                                                |
-| 6   | `video_generate`        | `video-generate`        | `handler.handler`            | 300 s   | 256 MB | Generate a video from a text prompt via Nova Reel (async, returns invocation ARN). 6–120 s @ 24 fps, 1280×720.                                                                                                            |
-| 7   | `video_status`          | `video-status`          | `handler.handler`            | 60 s    | 128 MB | Check status of an async Nova Reel job; returns presigned URL if complete.                                                                                                                                                |
-| 8   | `video_history`         | `video-history`         | `handler.handler`            | 60 s    | 128 MB | Retrieve video generation history for a session with current job statuses + presigned URLs.                                                                                                                               |
 | 10  | `save_memory`           | `save-memory`           | `handler.handler`            | 300 s   | 256 MB | Persist a fact/preference/context to AgentCore Memory (the tool_spec still references Neptune verbally; actual storage is `AgentMemory`).                                                                                 |
 | 11  | `recall_memories`       | `recall-memories`       | `handler.handler`            | 300 s   | 256 MB | Retrieve saved memories from AgentCore Memory with optional query filter.                                                                                                                                                 |
 | 12  | `analyze_patterns`      | `analyze-patterns`      | `handler.handler`            | 300 s   | 256 MB | Analyze conversation patterns and trends via Neptune/Memory analytics queries.                                                                                                                                            |
@@ -246,9 +243,6 @@ For each tool in section 4 rows 1–18: `Gateway → Tool_{dir} Lambda (lambda:I
 - `Tool_pdf_generator → ReportsBucket (put object with pipeline metadata)`
 - `Tool_image_generate → Bedrock Stability SD3.5 + ImagesBucket (put)`
 - `Tool_image_history → ImagesBucket + MetadataTable`
-- `Tool_video_generate → Bedrock Nova Reel (StartAsyncInvoke) + ImagesBucket`
-- `Tool_video_status → Bedrock (GetAsyncInvoke)`
-- `Tool_video_history → MetadataTable + ImagesBucket`
 - `Tool_save_memory → AgentMemory (CreateEvent)`
 - `Tool_recall_memories → AgentMemory (RetrieveMemoryRecords / ListEvents)`
 - `Tool_analyze_patterns → AgentMemory (+ Neptune when feature enabled)`

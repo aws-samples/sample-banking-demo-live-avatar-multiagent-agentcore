@@ -39,18 +39,6 @@ you created in one sentence. If the user asks for something ambiguous, clarify
 the subject and style before generating.
 """
 
-VIDEO_SECTION = """
-
-## Video Generation
-
-You can generate short videos using Nova Reel. Video generation takes time,
-typically one to two minutes. Let the user know it will take a moment, and they
-will be notified when the video is ready.
-
-Confirm the video concept with the user before generating. Be specific about
-the visual content and any motion or transitions.
-"""
-
 VISION_SECTION = """
 
 ## Vision Capabilities
@@ -94,7 +82,6 @@ report the accounts you find.
 _AUGMENTATION_MAP: list[tuple[list[str], str]] = [
     (["save_memory", "recall_memories", "memory"], MEMORY_SECTION),
     (["image_generate", "image_history"], CANVAS_SECTION),
-    (["video_generate", "video_status", "video_history"], VIDEO_SECTION),
     (["data_sources"], DATA_SOURCES_SECTION),
     (["retrieve_user_profile", "user_profile"], PROFILE_SECTION),
 ]

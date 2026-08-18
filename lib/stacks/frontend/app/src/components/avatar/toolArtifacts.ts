@@ -10,7 +10,6 @@
  *
  * Field names come from the tool handlers in `gateway/tools/*`:
  *   image_generate                    -> image_url
- *   video_status                      -> video_url
  *   website_generator / pdf_generator -> url, or website_url on the
  *                                        pipeline path
  */
@@ -34,8 +33,6 @@ const ASSET_TOOLS = [
     "website_generator",
     "pdf_generator",
     "image_generate",
-    "video_generate",
-    "video_status",
     "extract_pdf_images",
 ];
 

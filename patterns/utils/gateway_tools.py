@@ -41,8 +41,6 @@ USER_SCOPED_TOOLS: frozenset[str] = frozenset(
         "retrieve_user_profile",
         "image_generate",
         "image_history",
-        "video_generate",
-        "video_history",
         "place_order",
     }
 )

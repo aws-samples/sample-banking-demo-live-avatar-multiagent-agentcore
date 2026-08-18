@@ -130,19 +130,6 @@ gateway_kb_search. Treat it as shared context, not a separate archive.
 - Use when the user asks about previously generated images in this session.
 - Example intents: "Show me my images", "What images have we created?"
 
-### Video Generation (gateway_video_generate)
-- Use when the user asks to create or generate a video.
-- Confirm the subject and duration before generating.
-- Example intents: "Create a video of...", "Generate a video showing..."
-
-### Video Status (gateway_video_status)
-- Use to check the progress of a video generation job.
-- Example intents: "Is my video ready?", "Check the video status"
-
-### Video History (gateway_video_history)
-- Use when the user asks about previously generated videos in this session.
-- Example intents: "Show me my videos", "What videos have we created?"
-
 ### Save Memory (gateway_save_memory)
 - Use when the user explicitly asks you to remember something for future conversations.
 - Example intents: "Remember that I...", "Save this for later", "Keep in mind that..."

@@ -107,51 +107,10 @@ class TestImageHistory:
         assert "user_id" in result["error"]
 
 
-class TestVideoHistory:
-    def test_reads_the_callers_partition(self):
-        module = _load("video_history")
-        module.METADATA_TABLE = "stub"
-        table = _stub_table(module, [])
-
-        module._get_video_history(USER, 10)
-
-        assert _partition_of(table) == f"user#{USER}"
-        assert table.query.call_args.kwargs["ScanIndexForward"] is False
-
-    def test_maps_the_stored_video_id_not_the_sort_key(self):
-        module = _load("video_history")
-        module.METADATA_TABLE = "stub"
-        _stub_table(
-            module,
-            [
-                {
-                    "PK": f"user#{USER}",
-                    "SK": "video#2026-08-05T09:28:00#req-9",
-                    "videoId": "req-9",
-                    "prompt": "a branch lobby",
-                }
-            ],
-        )
-
-        result = json.loads(module._get_video_history(USER, 10))
-
-        assert result["videos"][0]["video_id"] == "req-9"
-        assert result["user_id"] == USER
-
-    def test_refuses_without_a_verified_caller(self):
-        module = _load("video_history")
-        module.METADATA_TABLE = "stub"
-
-        result = module.handler({"limit": 10}, _lambda_context("video_history"))
-
-        assert "user_id" in result["error"]
-
-
 @pytest.mark.parametrize(
     ("tool", "event"),
     [
         ("image_generate", {"prompt": "a vault door"}),
-        ("video_generate", {"prompt": "a branch lobby"}),
         ("place_order", {"items": [{"name": "Everyday Checking"}]}),
     ],
 )

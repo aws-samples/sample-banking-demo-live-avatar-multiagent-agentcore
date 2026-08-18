@@ -28,8 +28,6 @@ REGISTERED_SCOPED_TOOLS = (
     "gateway_retrieve-user-profile___retrieve_user_profile",
     "gateway_image-generate___image_generate",
     "gateway_image-history___image_history",
-    "gateway_video-generate___video_generate",
-    "gateway_video-history___video_history",
     "gateway_place-order___place_order",
 )
 
@@ -55,12 +53,10 @@ def test_user_scoped_tools_covers_all_tenant_sensitive_tools():
         "analyze_patterns",
         "retrieve_user_profile",
         "image_generate",
-        # The history tools read per-user data and so belong here. They used to
-        # take a model-supplied session_id as their only key, which meant a
+        # The history tool reads per-user data and so belongs here. It used to
+        # take a model-supplied session_id as its only key, which meant a
         # caller handing over someone else's id read their media.
         "image_history",
-        "video_generate",
-        "video_history",
         "place_order",
     }
     assert set(USER_SCOPED_TOOLS) == expected

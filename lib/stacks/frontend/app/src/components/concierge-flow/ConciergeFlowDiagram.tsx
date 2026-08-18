@@ -40,7 +40,6 @@ const TOOL_NAMES: string[] = [
     "save_memory",
     "recall_memories",
     "image_generate",
-    "video_generate",
     "extract_pdf_images",
     "website_generator",
     "pdf_generator",

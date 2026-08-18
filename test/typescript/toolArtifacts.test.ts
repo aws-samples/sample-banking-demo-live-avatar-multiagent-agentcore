@@ -137,7 +137,7 @@ describe("asset link catch-all", () => {
 
     it("uses the title as the button label when one is given", () => {
         const artifacts = extractToolArtifacts(
-            "video-status___video_status",
+            "extract-pdf-images___extract_pdf_images",
             JSON.stringify({ presigned_url: URL, title: "Branch lobby" })
         );
 

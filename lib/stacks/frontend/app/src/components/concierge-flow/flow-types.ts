@@ -54,19 +54,7 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
         label: "Image History",
         description: "Retrieves the history of images generated during the session.",
     },
-    video_generate: {
-        label: "Generate Video",
-        description:
-            "Generates short-form video via Amazon Nova Reel. Asynchronous job that returns a job id for status polling.",
-    },
-    video_status: {
-        label: "Video Status",
-        description: "Polls a Nova Reel generation job for completion status.",
-    },
-    video_history: {
-        label: "Video History",
-        description: "Retrieves the history of videos generated during the session.",
-    },
+
     save_memory: {
         label: "Save Memory",
         description:
