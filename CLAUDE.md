@@ -58,7 +58,7 @@ All agents run in-process within the orchestrator runtime. No HTTP between agent
 1. Request 1 (`mode=research`): Planner Agent → emits plan JSON for user review/edit
 2. Request 2 (`mode=research_execute`): Researcher → Synthesizer → PDF Writer → 12-section PDF report
 
-**Menu pipeline** (`mode=menu`): Menu Designer → Menu PDF Writer (with Nova Canvas dish photos)
+**Menu pipeline** (`mode=menu`): Menu Designer → Menu PDF Writer (with Stability SD3.5 product images)
 
 **Chatbot** (`mode=chatbot`): Single conversational agent with Bedrock Guardrails applied at model level.
 
@@ -72,12 +72,11 @@ All Lambda tools: Python 3.13, ARM64, auto-bundled with `requirements.txt` durin
 | `kb_ingest`             |        |         | S3 event → copy to KB bucket → start ingest |
 | `web_search`            | 256 MB | 5 min   | Nova Pro with web grounding                 |
 | `pdf_generator`         | 512 MB | 15 min  | ReportLab PDF generation → S3 presigned URL |
-| `nova_canvas_generate`  | 512 MB | 5 min   | Image generation via Nova Canvas            |
-| `nova_canvas_edit`      | 512 MB | 5 min   | Image editing (inpainting, outpainting)     |
-| `nova_canvas_history`   | 128 MB | 1 min   | Session image history                       |
-| `nova_reel_generate`    | 256 MB | 5 min   | Video generation via Nova Reel              |
-| `nova_reel_status`      | 128 MB | 1 min   | Async video job status                      |
-| `nova_reel_history`     | 128 MB | 1 min   | Session video history                       |
+| `image_generate`        | 512 MB | 5 min   | Image generation via Stability SD3.5        |
+| `image_history`         | 128 MB | 1 min   | Session image history                       |
+| `video_generate`        | 256 MB | 5 min   | Video generation via Nova Reel              |
+| `video_status`          | 128 MB | 1 min   | Async video job status                      |
+| `video_history`         | 128 MB | 1 min   | Session video history                       |
 | `save_memory`           | 256 MB | 5 min   | Persist to AgentCore Memory                 |
 | `recall_memories`       | 256 MB | 5 min   | Retrieve from AgentCore Memory              |
 | `analyze_patterns`      | 256 MB | 5 min   | Conversation pattern analysis               |

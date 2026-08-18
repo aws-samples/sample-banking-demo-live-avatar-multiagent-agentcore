@@ -1,7 +1,7 @@
 [
     {
-        "name": "nova_canvas_history",
-        "description": "Retrieve the images this user has generated or edited. Returns metadata and fresh presigned URLs, newest first. The caller is identified by the runtime, so no identifier is needed.",
+        "name": "image_history",
+        "description": "Retrieve the images this user has generated. Returns metadata and fresh presigned URLs, newest first. The caller is identified by the runtime, so no identifier is needed.",
         "inputSchema": {
             "type": "object",
             "properties": {

@@ -84,7 +84,7 @@ class TestCanvasHandlerSuppressesTextCentrally:
 
     @pytest.fixture(scope="class")
     def canvas(self):
-        path = REPO_ROOT / "gateway" / "tools" / "nova_canvas_generate" / "handler.py"
+        path = REPO_ROOT / "gateway" / "tools" / "image_generate" / "handler.py"
         source = path.read_text(encoding="utf-8")
         return source
 

@@ -65,7 +65,7 @@ def _generate_video(prompt: str, duration_seconds: int, session_id: str, user_id
             created_at = datetime.utcnow().isoformat()
             table.put_item(
                 Item={
-                    # Keyed by the verified caller — see nova_canvas_generate for
+                    # Keyed by the verified caller — see image_generate for
                     # why session_id cannot be the partition.
                     "PK": f"user#{user_id}",
                     "SK": f"video#{created_at}#{request_id}",
@@ -91,7 +91,7 @@ def _generate_video(prompt: str, duration_seconds: int, session_id: str, user_id
             "status": "InProgress",
             "invocation_arn": invocation_arn,
             "request_id": request_id,
-            "message": f"Video generation job submitted. Use nova_reel_status with the invocation_arn to check progress. Estimated time: {duration_seconds * 10}-{duration_seconds * 20} seconds.",
+            "message": f"Video generation job submitted. Use video_status with the invocation_arn to check progress. Estimated time: {duration_seconds * 10}-{duration_seconds * 20} seconds.",
             "metadata": {
                 "prompt": prompt,
                 "duration_seconds": duration_seconds,
@@ -106,7 +106,7 @@ def handler(event, context):
     Nova Reel video generation tool Lambda handler.
 
     Submits an asynchronous video generation job using Amazon Nova Reel.
-    Returns the job ARN immediately without polling. Use nova_reel_status
+    Returns the job ARN immediately without polling. Use video_status
     to check job progress.
     """
     logger.info(f"Received event: {json.dumps(event)}")
@@ -118,7 +118,7 @@ def handler(event, context):
 
         logger.info(f"Processing tool: {tool_name}")
 
-        if tool_name == "nova_reel_generate":
+        if tool_name == "video_generate":
             prompt = event.get("prompt", "")
             duration_seconds = event.get("duration_seconds", 6)
             session_id = event.get("session_id", str(uuid.uuid4())[:8])
@@ -137,7 +137,7 @@ def handler(event, context):
             result = _generate_video(prompt, duration_seconds, session_id, user_id)
             return {"content": [{"type": "text", "text": result}]}
         else:
-            return {"error": f"This Lambda only supports 'nova_reel_generate', received: {tool_name}"}
+            return {"error": f"This Lambda only supports 'video_generate', received: {tool_name}"}
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)

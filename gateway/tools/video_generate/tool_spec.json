@@ -1,7 +1,7 @@
 [
     {
-        "name": "nova_reel_generate",
-        "description": "Generate a video from a text prompt using Amazon Nova Reel. Submits an asynchronous job and returns the job ARN immediately. Use nova_reel_status to check progress. Videos are 6-120 seconds long at 24fps and 1280x720 resolution.",
+        "name": "video_generate",
+        "description": "Generate a video from a text prompt using Amazon Nova Reel. Submits an asynchronous job and returns the job ARN immediately. Use video_status to check progress. Videos are 6-120 seconds long at 24fps and 1280x720 resolution.",
         "inputSchema": {
             "type": "object",
             "properties": {

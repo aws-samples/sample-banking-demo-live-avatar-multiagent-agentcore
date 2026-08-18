@@ -145,7 +145,7 @@ def _generate_image(
                     # Partitioned by the verified caller, not by session_id.
                     # session_id is supplied by the model and defaults to a fresh
                     # uuid that is never returned, so anything written under
-                    # PK=session#{session_id} was unreachable: nova_canvas_history
+                    # PK=session#{session_id} was unreachable: image_history
                     # had no way to name the partition. Keying on the caller also
                     # removes a cross-user read, since the old history query
                     # trusted whatever session id it was handed.
@@ -186,10 +186,11 @@ def _generate_image(
 
 def handler(event, context):
     """
-    Nova Canvas image generation tool Lambda handler.
+    Image generation tool Lambda handler.
 
-    Generates images using Amazon Nova Canvas, uploads them to S3,
-    and returns a presigned URL. Stores metadata in DynamoDB.
+    Generates images using Stability SD3.5 (Stable Diffusion) on Amazon
+    Bedrock, uploads them to S3, and returns a presigned URL. Stores
+    metadata in DynamoDB.
     """
     logger.info(f"Received event: {json.dumps(event)}")
 
@@ -200,7 +201,7 @@ def handler(event, context):
 
         logger.info(f"Processing tool: {tool_name}")
 
-        if tool_name == "nova_canvas_generate":
+        if tool_name == "image_generate":
             prompt = event.get("prompt", "")
             width = event.get("width", 512)
             height = event.get("height", 512)
@@ -222,7 +223,7 @@ def handler(event, context):
             result = _generate_image(prompt, width, height, style, negative_prompt, session_id, user_id)
             return {"content": [{"type": "text", "text": result}]}
         else:
-            return {"error": f"This Lambda only supports 'nova_canvas_generate', received: {tool_name}"}
+            return {"error": f"This Lambda only supports 'image_generate', received: {tool_name}"}
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)

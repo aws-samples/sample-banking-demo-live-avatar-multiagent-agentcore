@@ -68,7 +68,7 @@ export default function MenuPage(): JSX.Element {
         return configs.map((c) => ({ ...c, defaultSize: (c.defaultSize / total) * 100 }));
     }, [showSidebar, sidebarCollapsed]);
 
-    useToolRenderer("nova_canvas_generate", ({ result }) => (
+    useToolRenderer("image_generate", ({ result }) => (
         <CanvasResultCard
             result={result ?? "{}"}
             onAddToMenu={(imageUrl) => {

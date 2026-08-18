@@ -285,12 +285,11 @@ gateway/tools/
 ├── kb_search/              # Bedrock Knowledge Base hybrid search
 ├── web_search/             # Nova Pro with web grounding
 ├── pdf_generator/          # ReportLab PDF generation → S3 presigned URL
-├── nova_canvas_generate/   # Image generation via Nova Canvas
-├── nova_canvas_edit/       # Image editing (inpainting, outpainting)
-├── nova_canvas_history/    # Session image history
-├── nova_reel_generate/     # Video generation via Nova Reel
-├── nova_reel_status/       # Async video job status
-├── nova_reel_history/      # Session video history
+├── image_generate/         # Image generation via Stability SD3.5
+├── image_history/          # Session image history
+├── video_generate/         # Video generation via Nova Reel
+├── video_status/           # Async video job status
+├── video_history/          # Session video history
 ├── save_memory/            # Persist to AgentCore Memory
 ├── recall_memories/        # Retrieve from Memory
 ├── analyze_patterns/       # Conversation pattern analysis

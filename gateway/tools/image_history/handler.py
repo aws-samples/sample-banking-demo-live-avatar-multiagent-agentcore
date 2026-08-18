@@ -78,7 +78,7 @@ def _get_image_history(user_id: str, limit: int) -> str:
 
 def handler(event, context):
     """
-    Nova Canvas image history tool Lambda handler.
+    Image history tool Lambda handler.
 
     Queries DynamoDB for image generation history within a session,
     returning metadata and fresh presigned URLs for each image.
@@ -92,7 +92,7 @@ def handler(event, context):
 
         logger.info(f"Processing tool: {tool_name}")
 
-        if tool_name == "nova_canvas_history":
+        if tool_name == "image_history":
             user_id = event.get("user_id", "")
             limit = event.get("limit", 10)
 
@@ -105,7 +105,7 @@ def handler(event, context):
             result = _get_image_history(user_id, limit)
             return {"content": [{"type": "text", "text": result}]}
         else:
-            return {"error": f"This Lambda only supports 'nova_canvas_history', received: {tool_name}"}
+            return {"error": f"This Lambda only supports 'image_history', received: {tool_name}"}
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)

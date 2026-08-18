@@ -45,32 +45,27 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
         description:
             "Generates 12-section research PDF reports via ReportLab and uploads to S3, returning a presigned URL. Handles cover page, TOC, findings, citations, and appendices.",
     },
-    nova_canvas_generate: {
+    image_generate: {
         label: "Generate Image",
         description:
             "Generates product or design imagery via Stability SD3.5 (Stable Diffusion) on Bedrock. Images are stored in S3 with session-scoped history.",
     },
-    nova_canvas_edit: {
-        label: "Canvas Edit",
-        description:
-            "Edits existing images via Nova Canvas inpainting / outpainting for localized or expansive image modifications.",
+    image_history: {
+        label: "Image History",
+        description: "Retrieves the history of images generated during the session.",
     },
-    nova_canvas_history: {
-        label: "Canvas History",
-        description: "Retrieves the history of Nova Canvas images generated during the session.",
-    },
-    nova_reel_generate: {
-        label: "Reel Generate",
+    video_generate: {
+        label: "Generate Video",
         description:
             "Generates short-form video via Amazon Nova Reel. Asynchronous job that returns a job id for status polling.",
     },
-    nova_reel_status: {
-        label: "Reel Status",
+    video_status: {
+        label: "Video Status",
         description: "Polls a Nova Reel generation job for completion status.",
     },
-    nova_reel_history: {
-        label: "Reel History",
-        description: "Retrieves the history of Nova Reel videos generated during the session.",
+    video_history: {
+        label: "Video History",
+        description: "Retrieves the history of videos generated during the session.",
     },
     save_memory: {
         label: "Save Memory",

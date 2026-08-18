@@ -16,7 +16,7 @@
 import { extractToolArtifacts } from "../../lib/stacks/frontend/app/src/components/avatar/toolArtifacts";
 
 const WEBSITE = "website-generator___website_generator";
-const CANVAS = "nova-canvas-generate___nova_canvas_generate";
+const CANVAS = "image-generate___image_generate";
 const URL = "https://example.s3.amazonaws.com/sites/hys/index.html?X-Amz-Signature=abc";
 
 describe("extractToolArtifacts", () => {
@@ -137,7 +137,7 @@ describe("asset link catch-all", () => {
 
     it("uses the title as the button label when one is given", () => {
         const artifacts = extractToolArtifacts(
-            "nova-reel-status___nova_reel_status",
+            "video-status___video_status",
             JSON.stringify({ presigned_url: URL, title: "Branch lobby" })
         );
 

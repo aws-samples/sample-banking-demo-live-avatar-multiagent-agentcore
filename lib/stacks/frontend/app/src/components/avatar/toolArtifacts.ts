@@ -9,10 +9,10 @@
  * the tool output verbatim, so the parsing happens here instead.
  *
  * Field names come from the tool handlers in `gateway/tools/*`:
- *   nova_canvas_generate / nova_canvas_edit -> image_url
- *   nova_reel_status                        -> video_url
- *   website_generator / pdf_generator       -> url, or website_url on the
- *                                              pipeline path
+ *   image_generate                    -> image_url
+ *   video_status                      -> video_url
+ *   website_generator / pdf_generator -> url, or website_url on the
+ *                                        pipeline path
  */
 
 /** Segments this module can produce. Mirrors TranscriptSegment in AvatarInterface. */
@@ -33,10 +33,9 @@ export type ToolArtifact =
 const ASSET_TOOLS = [
     "website_generator",
     "pdf_generator",
-    "nova_canvas_generate",
-    "nova_canvas_edit",
-    "nova_reel_generate",
-    "nova_reel_status",
+    "image_generate",
+    "video_generate",
+    "video_status",
     "extract_pdf_images",
 ];
 

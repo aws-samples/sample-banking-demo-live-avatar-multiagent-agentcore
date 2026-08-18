@@ -64,7 +64,7 @@ def _partition_of(table: MagicMock) -> str:
 
 class TestImageHistory:
     def test_reads_the_callers_partition(self):
-        module = _load("nova_canvas_history")
+        module = _load("image_history")
         module.METADATA_TABLE = "stub"
         module.IMAGES_BUCKET = ""
         table = _stub_table(module, [])
@@ -76,7 +76,7 @@ class TestImageHistory:
 
     def test_maps_the_stored_image_id_not_the_sort_key(self):
         """The sort key carries a timestamp, so parsing it would misreport the id."""
-        module = _load("nova_canvas_history")
+        module = _load("image_history")
         module.METADATA_TABLE = "stub"
         module.IMAGES_BUCKET = ""
         _stub_table(
@@ -99,17 +99,17 @@ class TestImageHistory:
         assert result["user_id"] == USER
 
     def test_refuses_without_a_verified_caller(self):
-        module = _load("nova_canvas_history")
+        module = _load("image_history")
         module.METADATA_TABLE = "stub"
 
-        result = module.handler({"limit": 10}, _lambda_context("nova_canvas_history"))
+        result = module.handler({"limit": 10}, _lambda_context("image_history"))
 
         assert "user_id" in result["error"]
 
 
 class TestVideoHistory:
     def test_reads_the_callers_partition(self):
-        module = _load("nova_reel_history")
+        module = _load("video_history")
         module.METADATA_TABLE = "stub"
         table = _stub_table(module, [])
 
@@ -119,7 +119,7 @@ class TestVideoHistory:
         assert table.query.call_args.kwargs["ScanIndexForward"] is False
 
     def test_maps_the_stored_video_id_not_the_sort_key(self):
-        module = _load("nova_reel_history")
+        module = _load("video_history")
         module.METADATA_TABLE = "stub"
         _stub_table(
             module,
@@ -139,10 +139,10 @@ class TestVideoHistory:
         assert result["user_id"] == USER
 
     def test_refuses_without_a_verified_caller(self):
-        module = _load("nova_reel_history")
+        module = _load("video_history")
         module.METADATA_TABLE = "stub"
 
-        result = module.handler({"limit": 10}, _lambda_context("nova_reel_history"))
+        result = module.handler({"limit": 10}, _lambda_context("video_history"))
 
         assert "user_id" in result["error"]
 
@@ -150,9 +150,8 @@ class TestVideoHistory:
 @pytest.mark.parametrize(
     ("tool", "event"),
     [
-        ("nova_canvas_generate", {"prompt": "a vault door"}),
-        ("nova_reel_generate", {"prompt": "a branch lobby"}),
-        ("nova_canvas_edit", {"image_url": "https://example.invalid/i.png", "edit_prompt": "brighten"}),
+        ("image_generate", {"prompt": "a vault door"}),
+        ("video_generate", {"prompt": "a branch lobby"}),
         ("place_order", {"items": [{"name": "Everyday Checking"}]}),
     ],
 )

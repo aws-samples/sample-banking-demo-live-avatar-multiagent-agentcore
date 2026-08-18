@@ -39,11 +39,10 @@ USER_SCOPED_TOOLS: frozenset[str] = frozenset(
         "recall_memories",
         "analyze_patterns",
         "retrieve_user_profile",
-        "nova_canvas_generate",
-        "nova_canvas_edit",
-        "nova_canvas_history",
-        "nova_reel_generate",
-        "nova_reel_history",
+        "image_generate",
+        "image_history",
+        "video_generate",
+        "video_history",
         "place_order",
     }
 )

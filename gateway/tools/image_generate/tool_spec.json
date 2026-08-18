@@ -1,6 +1,6 @@
 [
     {
-        "name": "nova_canvas_generate",
+        "name": "image_generate",
         "description": "Generate a brand new image from a text prompt using Stability SD3.5 (Stable Diffusion) on Amazon Bedrock. The image is saved to S3 and a presigned URL is returned. Supports optional style, dimensions, and negative prompts.",
         "inputSchema": {
             "type": "object",

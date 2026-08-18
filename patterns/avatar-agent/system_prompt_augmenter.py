@@ -30,15 +30,13 @@ memories naturally, as if you simply remember previous conversations.
 
 CANVAS_SECTION = """
 
-## Visual Canvas
+## Image Generation
 
-You can generate and edit images using Nova Canvas. When you create an image,
-the user will see it in their interface automatically. After generating an image,
-briefly describe what you created in one sentence.
-
-You can also edit existing images by referencing them. Ask the user what changes
-they want before editing. If the user asks for something ambiguous, clarify before
-generating.
+You can generate images from a text prompt using Stability SD3.5 (Stable
+Diffusion) on Amazon Bedrock. When you create an image, the user will see it in
+their interface automatically. After generating an image, briefly describe what
+you created in one sentence. If the user asks for something ambiguous, clarify
+the subject and style before generating.
 """
 
 VIDEO_SECTION = """
@@ -95,8 +93,8 @@ report the accounts you find.
 # A section is appended if ANY of its associated tool patterns match an available tool.
 _AUGMENTATION_MAP: list[tuple[list[str], str]] = [
     (["save_memory", "recall_memories", "memory"], MEMORY_SECTION),
-    (["nova_canvas_generate", "nova_canvas_edit", "canvas"], CANVAS_SECTION),
-    (["nova_reel_generate", "nova_reel"], VIDEO_SECTION),
+    (["image_generate", "image_history"], CANVAS_SECTION),
+    (["video_generate", "video_status", "video_history"], VIDEO_SECTION),
     (["data_sources"], DATA_SOURCES_SECTION),
     (["retrieve_user_profile", "user_profile"], PROFILE_SECTION),
 ]
@@ -111,7 +109,7 @@ def augment_system_prompt(
 
     Scans the list of available tool names and appends relevant instruction sections
     to the base prompt. Tool names are matched with substring containment, so
-    'gateway_nova_canvas_generate' matches the 'nova_canvas_generate' pattern.
+    'gateway_image_generate' matches the 'image_generate' pattern.
 
     Args:
         base_prompt: The persona system prompt to augment.

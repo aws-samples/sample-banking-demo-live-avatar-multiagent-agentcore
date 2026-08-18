@@ -214,7 +214,7 @@ Research Guidelines:
 VISUAL RESEARCH (REQUIRED — multimodal output):
 After completing ALL text research, identify 2-3 concepts that a photographic image would
 illustrate (e.g., a trading floor, a bank branch interior, a city financial district). For
-each, call gateway_nova_canvas_generate with a prompt describing the SUBJECT and MOOD only:
+each, call gateway_image_generate with a prompt describing the SUBJECT and MOOD only:
 "Professional photographic image of [concrete subject], clean modern institutional banking
 aesthetic, deep navy and brass palette, soft lighting, no text, 4k". Collect the s3_key and
 image_url from each Canvas result into the "images" array. Budget: max 3 images. If image
@@ -534,8 +534,8 @@ Your responsibilities:
    the KB returns nothing relevant, proceed normally.
 2. Organize products into logical catalog sections (e.g., Everyday Banking, Savings & Growth,
    Retirement, Wealth & Investing)
-3. For EACH product, call gateway_nova_canvas_generate to create a clean, on-brand image
-4. Collect the s3_key and image_url from each Canvas generation result
+3. For EACH product, call gateway_image_generate to create a clean, on-brand image
+4. Collect the s3_key and image_url from each image generation result
 5. Compile the complete catalog with all details
 
 For each product image, describe the SUBJECT and MOOD only — never the product name, and
@@ -584,7 +584,7 @@ IMPORTANT:
 
 NEVER INVENT AN IMAGE REFERENCE:
 - `s3_key` and `image_url` may ONLY contain values copied verbatim from a
-  successful gateway_nova_canvas_generate result.
+  successful gateway_image_generate result.
 - If image generation fails, returns an error, or is unavailable, OMIT both
   fields for that product and carry on. A text-only catalog is a correct
   outcome; a fabricated image reference is not.
@@ -1065,7 +1065,7 @@ Tool reference:
   site", you MUST follow this two-step pattern, regardless of the site's layout (menu,
   article, or landing):
 
-  STEP 1: Call gateway_nova_canvas_generate once per image needed. Each call returns
+  STEP 1: Call gateway_image_generate once per image needed. Each call returns
           {s3_key, image_url}. Collect all results into a list of {name, s3_key} objects
           where `name` exactly matches the subtitle/section/item name the image illustrates.
 
@@ -1147,7 +1147,7 @@ Your responsibilities:
 
 VISUAL RESEARCH (REQUIRED):
 After completing ALL text research, identify 2-3 key concepts that would benefit from visual
-illustration. For each, call gateway_nova_canvas_generate with a professional visualization prompt.
+illustration. For each, call gateway_image_generate with a professional visualization prompt.
 Use prompts like: "Professional infographic illustration of [concept], clean modern design,
 data visualization style, blue and white color scheme, 4k quality"
 
@@ -1347,7 +1347,7 @@ Tool limits:
 - Use gateway_kb_search as your PRIMARY and MAIN tool
 - If a search returns no results, try ONE more time with a broader query
 - Never call the same tool more than 3 times total in a single response
-- Do NOT call gateway_nova_canvas_generate, gateway_web_search, or other research tools
+- Do NOT call gateway_image_generate, gateway_web_search, or other research tools
 """
 
 # ---------------------------------------------------------------------------
@@ -3177,8 +3177,8 @@ def _tool_action_label(tool_name: str) -> str:
         ("web_search", "Searching the web"),
         ("data_sources", "Querying market data"),
         ("analyze_patterns", "Analyzing patterns"),
-        ("nova_canvas", "Generating an image"),
-        ("nova_reel", "Generating video"),
+        ("image_", "Generating an image"),
+        ("video_", "Generating video"),
         ("pdf_generator", "Writing the PDF"),
         ("website_generator", "Building the site"),
         ("extract_pdf_images", "Extracting PDF images"),

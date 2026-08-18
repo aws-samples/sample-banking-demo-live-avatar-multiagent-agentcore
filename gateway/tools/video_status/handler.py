@@ -100,7 +100,7 @@ def handler(event, context):
 
         logger.info(f"Processing tool: {tool_name}")
 
-        if tool_name == "nova_reel_status":
+        if tool_name == "video_status":
             invocation_arn = event.get("invocation_arn", "")
 
             if not invocation_arn:
@@ -109,7 +109,7 @@ def handler(event, context):
             result = _check_video_status(invocation_arn)
             return {"content": [{"type": "text", "text": result}]}
         else:
-            return {"error": f"This Lambda only supports 'nova_reel_status', received: {tool_name}"}
+            return {"error": f"This Lambda only supports 'video_status', received: {tool_name}"}
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)

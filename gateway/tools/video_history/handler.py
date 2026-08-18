@@ -109,7 +109,7 @@ def handler(event, context):
 
         logger.info(f"Processing tool: {tool_name}")
 
-        if tool_name == "nova_reel_history":
+        if tool_name == "video_history":
             user_id = event.get("user_id", "")
             limit = event.get("limit", 10)
 
@@ -122,7 +122,7 @@ def handler(event, context):
             result = _get_video_history(user_id, limit)
             return {"content": [{"type": "text", "text": result}]}
         else:
-            return {"error": f"This Lambda only supports 'nova_reel_history', received: {tool_name}"}
+            return {"error": f"This Lambda only supports 'video_history', received: {tool_name}"}
 
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}", exc_info=True)

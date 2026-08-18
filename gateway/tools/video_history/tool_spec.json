@@ -1,6 +1,6 @@
 [
     {
-        "name": "nova_reel_history",
+        "name": "video_history",
         "description": "Retrieve the videos this user has generated. Returns metadata, current job statuses, and fresh presigned URLs for completed videos, newest first. The caller is identified by the runtime, so no identifier is needed.",
         "inputSchema": {
             "type": "object",
