@@ -36,7 +36,7 @@ const TOOL_NAMES: string[] = [
     "kb_search",
     "web_search",
     "retrieve_user_profile",
-    "place_order",
+    "open_account",
     "save_memory",
     "recall_memories",
     "image_generate",

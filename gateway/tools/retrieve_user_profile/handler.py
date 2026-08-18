@@ -21,7 +21,7 @@ def _recent_accounts(user_id: str, limit: int = 10) -> list[dict]:
     """Applications this caller has opened, newest first.
 
     Without this nothing could read back an account the Client Advisor had just
-    created: place_order writes the record, and no tool returned it. The
+    created: open_account writes the record, and no tool returned it. The
     Relationship Manager would ask the knowledge base — which holds reports, not
     accounts — and truthfully say it had never heard of it.
 
@@ -35,7 +35,7 @@ def _recent_accounts(user_id: str, limit: int = 10) -> list[dict]:
     try:
         response = dynamodb.Table(METADATA_TABLE).query(
             KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
-            ExpressionAttributeValues={":pk": f"user#{user_id}", ":sk": "order#"},
+            ExpressionAttributeValues={":pk": f"user#{user_id}", ":sk": "application#"},
             ScanIndexForward=False,  # SK carries an ISO timestamp
             Limit=limit,
         )
@@ -45,11 +45,11 @@ def _recent_accounts(user_id: str, limit: int = 10) -> list[dict]:
 
     return [
         {
-            "orderId": item.get("orderId", ""),
-            "products": [i.get("name", "") for i in item.get("items", []) or []],
+            "applicationId": item.get("applicationId", ""),
+            "products": [p.get("name", "") for p in item.get("products", []) or []],
             "status": item.get("status", ""),
             "openedAt": item.get("timestamp", ""),
-            "applicantName": item.get("guestName", ""),
+            "applicantName": item.get("applicantName", ""),
         }
         for item in response.get("Items", [])
     ]

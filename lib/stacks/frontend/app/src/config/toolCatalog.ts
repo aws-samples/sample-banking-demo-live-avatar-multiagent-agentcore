@@ -140,7 +140,7 @@ export const TOOL_SERVICES: Record<string, string[]> = {
     recall_memories: ["agentcore_gateway", "lambda", "agentcore_memory"],
     analyze_patterns: ["agentcore_gateway", "lambda", "agentcore_memory"],
     retrieve_user_profile: ["agentcore_gateway", "lambda", "dynamodb"],
-    place_order: ["agentcore_gateway", "lambda", "dynamodb"],
+    open_account: ["agentcore_gateway", "lambda", "dynamodb"],
     data_sources: ["agentcore_gateway", "lambda"],
     extract_pdf_images: ["agentcore_gateway", "lambda", "agentcore_code_interpreter", "s3"],
     website_generator: ["agentcore_gateway", "lambda", "s3"],

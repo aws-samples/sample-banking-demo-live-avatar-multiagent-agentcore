@@ -164,7 +164,7 @@ Routing lives in `patterns/orchestrator-agent/orchestrator_agent.py` (`_handle_c
 | 11  | `recall_memories`       | `recall-memories`       | `handler.handler`            | 300 s   | 256 MB | Retrieve saved memories from AgentCore Memory with optional query filter.                                                                                                                                                 |
 | 12  | `analyze_patterns`      | `analyze-patterns`      | `handler.handler`            | 300 s   | 256 MB | Analyze conversation patterns and trends via Neptune/Memory analytics queries.                                                                                                                                            |
 | 13  | `retrieve_user_profile` | `retrieve-user-profile` | `handler.handler`            | 60 s    | 128 MB | Retrieve the current user's profile from DynamoDB (`CustomersTable`).                                                                                                                                                     |
-| 14  | `place_order`           | `place-order`           | `handler.handler`            | 300 s   | 256 MB | Place a food/drink order at Ocean View Bistro (writes to `MetadataTable`).                                                                                                                                                |
+| 14  | `open_account`          | `open-account`          | `handler.handler`            | 300 s   | 256 MB | Submit a synthetic bank account application / service enrollment for Trinity Reserve Bank (writes to `MetadataTable`).                                                                                                     |
 | 15  | `data_sources`          | `data-sources`          | `handler.handler`            | 30 s    | 128 MB | Query public data sources (Wikipedia, arXiv) — no API keys required.                                                                                                                                                      |
 | 16  | `website_generator`     | `website-generator`     | `handler.handler`            | 900 s   | 512 MB | Generate or update a static website on S3 (layouts: `article`, `landing`, `menu`); `create` / `update` (+ `edit_instructions`) / `add_images` modes.                                                                      |
 | 17  | `extract_pdf_images`    | `extract-pdf-images`    | `handler.handler`            | 900 s   | 256 MB | Extract dish images from a menu PDF via **AgentCore Code Interpreter**; returns `{name, s3_key}[]` for `website_generator add_images`.                                                                                    |
@@ -247,7 +247,7 @@ For each tool in section 4 rows 1–18: `Gateway → Tool_{dir} Lambda (lambda:I
 - `Tool_recall_memories → AgentMemory (RetrieveMemoryRecords / ListEvents)`
 - `Tool_analyze_patterns → AgentMemory (+ Neptune when feature enabled)`
 - `Tool_retrieve_user_profile → CustomersTable`
-- `Tool_place_order → MetadataTable + CustomersTable`
+- `Tool_open_account → MetadataTable + CustomersTable`
 - `Tool_data_sources → Wikipedia + arXiv (external, read-only)`
 - `Tool_website_generator → ReportsBucket + ImagesBucket`
 - `Tool_extract_pdf_images → ReportsBucket (read PDF) + AgentCore Code Interpreter (sandbox execution) + ImagesBucket (put extracted dish images)`

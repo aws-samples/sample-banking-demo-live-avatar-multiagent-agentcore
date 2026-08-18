@@ -28,7 +28,7 @@ REGISTERED_SCOPED_TOOLS = (
     "gateway_retrieve-user-profile___retrieve_user_profile",
     "gateway_image-generate___image_generate",
     "gateway_image-history___image_history",
-    "gateway_place-order___place_order",
+    "gateway_open-account___open_account",
 )
 
 REGISTERED_UNSCOPED_TOOLS = (
@@ -57,7 +57,7 @@ def test_user_scoped_tools_covers_all_tenant_sensitive_tools():
         # take a model-supplied session_id as its only key, which meant a
         # caller handing over someone else's id read their media.
         "image_history",
-        "place_order",
+        "open_account",
     }
     assert set(USER_SCOPED_TOOLS) == expected
 
@@ -101,8 +101,8 @@ class TestUserScopeHookInjection:
         assert "user_id" not in event.tool_use["input"]
 
 
-class TestPlaceOrderScoped:
-    """place_order writes per-user data, so it must be scoped."""
+class TestOpenAccountScoped:
+    """open_account writes per-user data, so it must be scoped."""
 
-    def test_place_order_is_user_scoped(self):
-        assert bare_tool_name("gateway_place-order___place_order") in USER_SCOPED_TOOLS
+    def test_open_account_is_user_scoped(self):
+        assert bare_tool_name("gateway_open-account___open_account") in USER_SCOPED_TOOLS

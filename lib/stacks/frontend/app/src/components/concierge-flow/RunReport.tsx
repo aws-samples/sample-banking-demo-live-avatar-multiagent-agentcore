@@ -59,7 +59,7 @@ export function RunReport() {
     const kbLookups = callCounts["kb_search"] ?? 0;
     const webLookups = callCounts["web_search"] ?? 0;
     const groundingSources = kbLookups + webLookups;
-    const openedAccount = (callCounts["place_order"] ?? 0) > 0;
+    const openedAccount = (callCounts["open_account"] ?? 0) > 0;
 
     // Comprehensiveness: how many grounded sources the answer drew on.
     const comprehensiveness =

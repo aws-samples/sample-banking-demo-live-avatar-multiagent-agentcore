@@ -326,7 +326,7 @@ known tool set (`GATEWAY_TOOL_NAMES` in `avatar_agent.py`, must stay in sync wit
 | `gateway_image_generate` / `_history`                            | Image generation (Stability SD3.5) / session history.                                                                                                |
 | `gateway_save_memory` / `_recall_memories` / `_analyze_patterns` | AgentCore Memory (episodic / semantic / preference).                                                                                                 |
 | `gateway_retrieve_user_profile`                                  | User profile **and the accounts they've opened** (DynamoDB) — the only source for account records.                                                   |
-| `gateway_place_order`                                            | Open an account / enroll after KYC (demo intake).                                                                                                    |
+| `gateway_open_account`                                           | Open an account / enroll after KYC (demo intake).                                                                                                    |
 
 Gateway authenticates agents via **Cognito M2M OAuth2 (client‑credentials)**;
 tokens are fetched per session (`utils.auth.get_gateway_access_token`) and are

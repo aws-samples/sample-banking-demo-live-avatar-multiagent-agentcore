@@ -111,13 +111,13 @@ class TestImageHistory:
     ("tool", "event"),
     [
         ("image_generate", {"prompt": "a vault door"}),
-        ("place_order", {"items": [{"name": "Everyday Checking"}]}),
+        ("open_account", {"products": [{"name": "Everyday Checking"}]}),
     ],
 )
 def test_writers_refuse_without_a_verified_caller(tool, event):
     """A missing user_id must fail visibly, never write to a `user#` partition.
 
-    place_order returned exactly this for every call before the scope hook was
+    open_account returned exactly this for every call before the scope hook was
     fixed, and the Client Advisor narrated success anyway — so the failure has to
     stay loud enough that a caller cannot mistake it for a completed write.
     """

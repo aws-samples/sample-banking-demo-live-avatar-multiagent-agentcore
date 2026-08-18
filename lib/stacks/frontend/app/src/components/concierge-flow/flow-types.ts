@@ -74,10 +74,10 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
         description:
             "Looks up the authenticated customer profile from DynamoDB to personalize the response (preferences, account history).",
     },
-    place_order: {
+    open_account: {
         label: "Open Account",
         description:
-            "Opens a bank account on behalf of the customer after KYC verification and records it in DynamoDB.",
+            "Submits a bank account application on behalf of the customer after KYC verification and records it in DynamoDB.",
     },
     data_sources: {
         label: "Data Sources",

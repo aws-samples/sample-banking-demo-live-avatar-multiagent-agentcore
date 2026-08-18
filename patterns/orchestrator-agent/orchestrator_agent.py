@@ -879,7 +879,7 @@ def _qc_validate_catalog(designer_output: str) -> dict:
 # ---------------------------------------------------------------------------
 # Trinity Reserve Bank — baked-in facts for the AI Client Advisor
 # ---------------------------------------------------------------------------
-# The advisor prefers tool data (KB search, web search, place_order, browser
+# The advisor prefers tool data (KB search, web search, open_account, browser
 # automation) whenever it's available. But on a fresh demo session the services
 # KB is empty, no customer profile exists, and there's no application flow to
 # drive yet. Without grounded facts the LLM either fabricates or refuses —
@@ -952,7 +952,7 @@ Advisor behavior
   first (pipeline=services). If the KB returns a match, prefer it; if the KB
   is empty or irrelevant, fall back to the standing product set above — label
   it as "our current standing product set" so the answer is honest.
-- When the user asks to open an account or enroll, use gateway_place_order
+- When the user asks to open an account or enroll, use gateway_open_account
   with the product they named. Confirm the product and stated details, note
   that KYC verification is required, and never ask for a real SSN or account
   number.
@@ -960,9 +960,9 @@ Advisor behavior
   1. Ask for any missing detail (product, applicant name) in a single sentence.
   2. If they provide a website URL or the session already has a generated
      application/product website, call browser_start and drive the form.
-  3. Otherwise call gateway_place_order, then report what it returned.
+  3. Otherwise call gateway_open_account, then report what it returned.
      Confirm only if the call succeeded. Build the reference code from the
-     returned orderId — TRB- plus its first 5 hex characters, uppercased — so
+     returned applicationId — TRB- plus its first 5 hex characters, uppercased — so
      the code names a record that exists. State the product, the stated
      applicant name, that KYC verification will follow, and that a confirmation
      email was sent to the address on file. This is a simulated application:
@@ -1033,7 +1033,7 @@ Tool reference:
   account, and services questions from catalog PDFs). Include "url" fields from results so
   users can view source PDFs.
 - gateway_web_search: current/real-time information from the web. Use automatically — never ask first.
-- gateway_place_order: submit an account application or service enrollment for the user.
+- gateway_open_account: submit an account application or service enrollment for the user.
 - gateway_retrieve_user_profile: the user's own records. The result carries an `accounts`
   list of applications they have already opened (product, applicant name, status, when).
   Use it for any question about the user's accounts — never gateway_kb_search, which holds

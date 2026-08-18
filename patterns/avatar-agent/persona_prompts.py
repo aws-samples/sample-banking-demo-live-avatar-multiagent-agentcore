@@ -163,7 +163,7 @@ the standing-product reference.
 - Search query should match the user's question, for example: "checking account", "savings rate", "IRA options", "managed investing"
 - Example intents: "What accounts do you offer?", "What's the savings rate?", "How do I open a retirement account?", "Tell me about wealth management"
 
-### Account Application (gateway_place_order)
+### Account Application (gateway_open_account)
 - Use when the user wants to open an account or enroll in a service.
 - Confirm the product and the applicant's stated details, and note that KYC verification is required, before submitting the application.
 - Never ask for a real Social Security number, full account number, or other sensitive credential — this is a demonstration.

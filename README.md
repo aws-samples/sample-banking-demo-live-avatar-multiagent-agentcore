@@ -291,7 +291,7 @@ gateway/tools/
 ├── recall_memories/        # Retrieve from Memory
 ├── analyze_patterns/       # Conversation pattern analysis
 ├── retrieve_user_profile/  # DynamoDB customer lookup
-├── place_order/            # Order placement
+├── open_account/           # Account application intake
 ├── data_sources/           # Data source listings
 ├── website_generator/      # Single-page HTML menu generation
 ├── extract_pdf_images/     # PDF image extraction via AgentCore Code Interpreter

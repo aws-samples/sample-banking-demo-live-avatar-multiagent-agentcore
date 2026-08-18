@@ -1,11 +1,11 @@
 [
     {
-        "name": "place_order",
+        "name": "open_account",
         "description": "Submit an account application or service enrollment at Trinity Reserve Bank. Use this when a user wants to open an account (checking, savings, IRA) or enroll in a service (managed investing, private client). This is a synthetic demonstration intake — never request a real Social Security number, full account number, or other sensitive credential.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "items": {
+                "products": {
                     "type": "array",
                     "description": "List of products or services to apply for or enroll in",
                     "items": {
@@ -20,7 +20,7 @@
                                 "description": "Number of accounts of this type to open",
                                 "default": 1
                             },
-                            "modifications": {
+                            "options": {
                                 "type": "string",
                                 "description": "Any options or preferences (e.g., 'joint account', 'paperless statements')"
                             }
@@ -28,20 +28,16 @@
                         "required": ["name"]
                     }
                 },
-                "special_instructions": {
+                "notes": {
                     "type": "string",
-                    "description": "Special instructions or notes for the entire application"
+                    "description": "Notes for the entire application"
                 },
-                "guest_name": {
+                "applicant_name": {
                     "type": "string",
                     "description": "Name of the applicant submitting the application"
-                },
-                "table_number": {
-                    "type": "string",
-                    "description": "Optional reference such as a branch code or advisor name"
                 }
             },
-            "required": ["items"]
+            "required": ["products"]
         }
     }
 ]

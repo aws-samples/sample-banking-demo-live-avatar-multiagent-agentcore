@@ -55,7 +55,7 @@ GATEWAY_TOOL_NAMES = [
     "gateway_recall_memories",
     "gateway_analyze_patterns",
     "gateway_retrieve_user_profile",
-    "gateway_place_order",
+    "gateway_open_account",
 ]
 
 logger = logging.getLogger(__name__)

@@ -78,7 +78,7 @@ All Lambda tools: Python 3.13, ARM64, auto-bundled with `requirements.txt` durin
 | `recall_memories`       | 256 MB | 5 min   | Retrieve from AgentCore Memory              |
 | `analyze_patterns`      | 256 MB | 5 min   | Conversation pattern analysis               |
 | `retrieve_user_profile` | 128 MB | 1 min   | DynamoDB customer lookup                    |
-| `place_order`           | 256 MB | 5 min   | Order placement                             |
+| `open_account`          | 256 MB | 5 min   | Account application intake                  |
 | `data_sources`          | 128 MB | 30 s    | Data source listings                        |
 | `sample_tool`           | 128 MB | 1 min   | Example tool template                       |
 
