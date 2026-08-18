@@ -51,7 +51,6 @@ GATEWAY_TOOL_NAMES = [
     "gateway_extract_pdf_images",
     "gateway_image_generate",
     "gateway_image_history",
-    "gateway_save_memory",
     "gateway_recall_memories",
     "gateway_analyze_patterns",
     "gateway_retrieve_user_profile",

@@ -1,4 +1,6 @@
-import type { AgentId, ChunkParser, ResearchPhase } from "../types";
+import type { AgentId, ChunkParser, ResearchPhase, StreamEvent } from "../types";
+
+type PromptOptEvent = Extract<StreamEvent, { type: "prompt_opt" }>;
 
 function extractDataPayload(line: string): string | null {
     const trimmed = line.trimStart();
@@ -83,6 +85,45 @@ export const parseStrandsChunk: ChunkParser = (line, callback) => {
                 phase: json.phase_progress.phase as ResearchPhase,
                 progress: json.phase_progress.progress,
             });
+            return;
+        }
+
+        // A2A collaboration: the account-opening agent consulting the
+        // fraud-research agent over the agent-to-agent protocol.
+        if (json.a2a_call) {
+            const rawStatus = json.a2a_call.status;
+            const status: "start" | "end" | "error" =
+                rawStatus === "end" || rawStatus === "error" ? rawStatus : "start";
+            callback({
+                type: "a2a_call",
+                agent: json.a2a_call.agent as AgentId,
+                phase: "collaboration",
+                status,
+                identityForwarded: json.a2a_call.identity_forwarded === true,
+            });
+            return;
+        }
+
+        // Prompt Optimization showcase: per-model OptimizePrompt analysis /
+        // optimized prompt, step lifecycle, and before/after sample answers.
+        // Maps the snake_case backend payload to the typed camelCase event,
+        // mirroring the a2a_call branch above.
+        if (json.prompt_opt) {
+            const p = json.prompt_opt;
+            const event: PromptOptEvent = {
+                type: "prompt_opt",
+                targetModelId: typeof p.target_model_id === "string" ? p.target_model_id : "",
+                modelLabel: typeof p.model_label === "string" ? p.model_label : "",
+                kind: p.kind as PromptOptEvent["kind"],
+                text: typeof p.text === "string" ? p.text : "",
+            };
+            if (p.variant === "baseline" || p.variant === "candidate") {
+                event.variant = p.variant;
+            }
+            if (typeof p.optimized_for_model_id === "string") {
+                event.optimizedForModelId = p.optimized_for_model_id;
+            }
+            callback(event);
             return;
         }
 

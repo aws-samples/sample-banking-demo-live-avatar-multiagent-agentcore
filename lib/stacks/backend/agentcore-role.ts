@@ -16,6 +16,37 @@ export interface AgentCoreRoleProps {
     imagesBucketArn: string;
     avatarBucketArn: string;
     machineClientSecretArn: string;
+    /**
+     * Fraud-agent M2M client secret ARN (A2A hop, `features.a2a`). Undefined
+     * when the fraud hop is disabled. Both the fraud runtime (to call the
+     * Gateway as its own principal) and the account-opening agent (to
+     * authenticate to the fraud runtime with the fraud client) read this
+     * secret, and both runtimes share this execution role.
+     */
+    fraudClientSecretArn?: string;
+    /**
+     * Prompt Optimization showcase (`features.prompt_optimization`). When true,
+     * the shared Bedrock statement additionally grants `bedrock:OptimizePrompt`
+     * so the orchestrator runtime can call the Bedrock `OptimizePrompt`
+     * streaming API for the AI Agent's current system prompt. Least-privilege:
+     * the action is added only when the showcase is enabled, so a stack built
+     * without it never holds the permission. Defaults to undefined (off).
+     */
+    enablePromptOptimization?: boolean;
+    /**
+     * Custom SageMaker model for the AI Agent (`features.sagemaker_model`). When
+     * true, the shared role is granted `sagemaker:InvokeEndpoint`
+     * (+ streaming) scoped to `sagemakerEndpointName` so the AI Agent runtime
+     * can invoke a model hosted on that SageMaker inference endpoint. The grant
+     * is added only when enabled (least privilege). Defaults to undefined (off).
+     */
+    enableSagemakerModel?: boolean;
+    /**
+     * Name of the SageMaker inference endpoint the AI Agent invokes. Used to
+     * scope the `sagemaker:InvokeEndpoint` grant when `enableSagemakerModel` is
+     * true. Ignored when the flag is off.
+     */
+    sagemakerEndpointName?: string;
 }
 
 export function createAgentCoreRole(
@@ -72,7 +103,11 @@ export function createAgentCoreRole(
         })
     );
 
-    // Bedrock model invocation
+    // Bedrock model invocation. When the Prompt Optimization showcase is
+    // enabled, `bedrock:OptimizePrompt` is added so the orchestrator runtime
+    // can call the OptimizePrompt streaming API; it is omitted otherwise for
+    // least privilege. OptimizePrompt is not resource-scoped, so it shares the
+    // existing broad Bedrock statement's `*` resource.
     role.addToPolicy(
         new PolicyStatement({
             effect: Effect.ALLOW,
@@ -85,17 +120,38 @@ export function createAgentCoreRole(
                 "bedrock:StartAsyncInvoke",
                 "bedrock:GetAsyncInvoke",
                 "bedrock:ApplyGuardrail",
+                ...(props.enablePromptOptimization ? ["bedrock:OptimizePrompt"] : []),
             ],
             resources: ["*"],
         })
     );
 
-    // Secrets Manager
+    // Custom SageMaker model invocation (features.sagemaker_model). Added only
+    // when the flag is on, scoped to the single configured endpoint so the
+    // stack never holds a broad SageMaker permission by default. Includes the
+    // streaming variant because the Strands SageMakerAIModel streams responses.
+    if (props.enableSagemakerModel && props.sagemakerEndpointName) {
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ["sagemaker:InvokeEndpoint", "sagemaker:InvokeEndpointWithResponseStream"],
+                resources: [
+                    `arn:aws:sagemaker:${Aws.REGION}:${Aws.ACCOUNT_ID}:endpoint/${props.sagemakerEndpointName}`,
+                ],
+            })
+        );
+    }
+
+    // Secrets Manager — the shared machine client secret, plus the fraud-agent
+    // M2M client secret when the A2A fraud hop is enabled.
     role.addToPolicy(
         new PolicyStatement({
             effect: Effect.ALLOW,
             actions: ["secretsmanager:GetSecretValue"],
-            resources: [props.machineClientSecretArn],
+            resources: [
+                props.machineClientSecretArn,
+                ...(props.fraudClientSecretArn ? [props.fraudClientSecretArn] : []),
+            ],
         })
     );
 

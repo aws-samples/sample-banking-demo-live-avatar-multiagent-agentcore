@@ -4,10 +4,15 @@ Authentication utilities for agent patterns.
 Provides:
 - Secure user identity extraction from JWT tokens in the AgentCore Runtime
   RequestContext (prevents impersonation via prompt injection).
-- OAuth2 client credentials flow for machine-to-machine Gateway authentication.
+- Cryptographic verification of a forwarded customer user-pool JWT
+  (`verify_user_pool_jwt`) for the callee side of the A2A hop, distinct from the
+  signature-skipping `extract_user_id_from_token`.
+- OAuth2 client credentials flow for machine-to-machine Gateway authentication,
+  generalized so a caller can mint a token for an arbitrary configured client.
 
 OAuth tokens are cached and reused until they expire, avoiding redundant
-Cognito round-trips on every request.
+Cognito round-trips on every request. User-pool JWKS clients are cached per
+issuer so signature verification does not re-fetch the key set on every call.
 """
 
 import base64
@@ -24,9 +29,24 @@ from utils.ssm import get_ssm_parameter
 
 logger = logging.getLogger(__name__)
 
-# Module-level cache for OAuth token and Secrets Manager client
-_token_cache: dict[str, object] = {}
+# Module-level per-client OAuth token cache, keyed by the client-id SSM
+# parameter name. Each entry is {"access_token": str, "expires_at": float}.
+_token_cache: dict[str, dict[str, object]] = {}
 _secrets_client = None
+
+# Module-level cache of PyJWKClient instances keyed by issuer. PyJWKClient
+# fetches and caches the JWKS itself; caching the client keeps the key set warm
+# across requests within a container instead of re-fetching per verification.
+_jwks_clients: dict[str, "jwt.PyJWKClient"] = {}
+
+
+class IdentityVerificationError(Exception):
+    """Raised when a forwarded customer identity JWT cannot be verified.
+
+    Covers an absent token, a malformed token, an expired token, a bad
+    signature, and issuer/audience mismatches. The callee maps this to a
+    JSON-RPC authorization error and never runs the assessment.
+    """
 
 
 def _get_secrets_client():
@@ -163,38 +183,55 @@ def get_secret(secret_name: str) -> str:
         raise RuntimeError(f"Unexpected error retrieving secret {secret_name}: {str(e)}")
 
 
-def get_gateway_access_token() -> str:
+def get_agent_access_token(client_id_param: str, secret_param: str, *, scope: str | None = None) -> str:
     """
-    Get an OAuth2 access token using the client credentials flow.
+    Mint an OAuth2 access token via client credentials for an arbitrary client.
 
-    Tokens are cached and reused until 60 seconds before expiry. Cognito
-    client_credentials tokens typically last 3600 seconds (1 hour), so this
-    avoids ~3600 redundant token requests per hour under sustained load.
+    Generalizes the machine-to-machine flow so a caller can obtain a token for
+    any configured Cognito app client — the shared machine client, the fraud
+    agent's own client, etc. — by pointing at that client's SSM parameter and
+    Secrets Manager secret. This is what lets the fraud agent reach the Gateway
+    as a *distinct principal* from the account-opening agent.
+
+    Tokens are cached per `client_id_param` and reused until 60 seconds before
+    expiry, avoiding redundant Cognito round-trips under sustained load.
+
+    Args:
+        client_id_param: SSM parameter name holding the Cognito app client id
+            (e.g. `/my-stack/machine_client_id`).
+        secret_param: Secrets Manager secret name holding the client secret
+            (e.g. `/my-stack/machine_client_secret`).
+        scope: OAuth2 scope string. Defaults to the stack's gateway read+write
+            scopes (`<stack>-gateway/read <stack>-gateway/write`).
 
     Returns:
-        str: A valid OAuth2 access token for Gateway authentication.
+        str: A valid OAuth2 access token for the requested client.
 
     Raises:
         KeyError: If the STACK_NAME environment variable is not set.
         Exception: If the token request fails or the response is invalid.
     """
-    # Return cached token if still valid (with 60s safety margin)
-    if _token_cache.get("access_token") and _token_cache.get("expires_at", 0) > time.time():
+    # Return cached token for this client if still valid (with 60s safety margin)
+    cached = _token_cache.get(client_id_param)
+    if cached and cached.get("access_token") and cached.get("expires_at", 0) > time.time():
         logger.info(
-            "Using cached access token (expires in %ds)",
-            int(_token_cache["expires_at"] - time.time()),
+            "Using cached access token for %s (expires in %ds)",
+            client_id_param,
+            int(cached["expires_at"] - time.time()),
         )
-        return _token_cache["access_token"]
+        return cached["access_token"]
 
     stack_name = os.environ["STACK_NAME"]
     region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
 
-    logger.info("Getting access token for stack: %s, region: %s", stack_name, region)
+    logger.info("Getting access token for stack: %s, region: %s, client_param: %s", stack_name, region, client_id_param)
 
     # Get Cognito configuration from SSM and Secrets Manager
     cognito_domain = get_ssm_parameter(f"/{stack_name}/cognito_provider")
-    client_id = get_ssm_parameter(f"/{stack_name}/machine_client_id")
-    client_secret = get_secret(f"/{stack_name}/machine_client_secret")
+    client_id = get_ssm_parameter(client_id_param)
+    client_secret = get_secret(secret_param)
+
+    resolved_scope = scope or f"{stack_name}-gateway/read {stack_name}-gateway/write"
 
     logger.info("Cognito domain: %s", cognito_domain)
     logger.info("Client ID: %s...", client_id[:10])
@@ -213,7 +250,7 @@ def get_gateway_access_token() -> str:
 
     data = {
         "grant_type": "client_credentials",
-        "scope": f"{stack_name}-gateway/read {stack_name}-gateway/write",
+        "scope": resolved_scope,
     }
 
     logger.info("Requesting token from: %s", token_url)
@@ -236,12 +273,156 @@ def get_gateway_access_token() -> str:
 
     # Cache the token with expiry (default 3600s, subtract 60s safety margin)
     expires_in = token_data.get("expires_in", 3600)
-    _token_cache["access_token"] = access_token
-    _token_cache["expires_at"] = time.time() + expires_in - 60
+    _token_cache[client_id_param] = {
+        "access_token": access_token,
+        "expires_at": time.time() + expires_in - 60,
+    }
 
     logger.info(
-        "Successfully got access token (expires in %ds): %s...",
+        "Successfully got access token for %s (expires in %ds): %s...",
+        client_id_param,
         expires_in,
         access_token[:20],
     )
     return access_token
+
+
+def get_gateway_access_token() -> str:
+    """
+    Get an OAuth2 access token for the shared machine (Gateway) client.
+
+    Thin wrapper over `get_agent_access_token` that resolves the shared machine
+    client's SSM parameter and secret from the STACK_NAME environment variable.
+
+    Returns:
+        str: A valid OAuth2 access token for Gateway authentication.
+
+    Raises:
+        KeyError: If the STACK_NAME environment variable is not set.
+        Exception: If the token request fails or the response is invalid.
+    """
+    stack_name = os.environ["STACK_NAME"]
+    return get_agent_access_token(
+        f"/{stack_name}/machine_client_id",
+        f"/{stack_name}/machine_client_secret",
+    )
+
+
+def _get_user_pool_issuer(issuer: str | None) -> str:
+    """Resolve the Cognito user-pool issuer URL from an override or the env.
+
+    Prefers an explicit `issuer`, then `COGNITO_USER_POOL_ISSUER`, then derives
+    it from `COGNITO_USER_POOL_ID` + region as
+    `https://cognito-idp.<region>.amazonaws.com/<user_pool_id>`.
+    """
+    if issuer:
+        return issuer.rstrip("/")
+
+    env_issuer = os.environ.get("COGNITO_USER_POOL_ISSUER")
+    if env_issuer:
+        return env_issuer.rstrip("/")
+
+    user_pool_id = os.environ.get("COGNITO_USER_POOL_ID")
+    if user_pool_id:
+        region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+        return f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}"
+
+    raise IdentityVerificationError(
+        "No user-pool issuer configured. Set COGNITO_USER_POOL_ISSUER or "
+        "COGNITO_USER_POOL_ID, or pass issuer= explicitly."
+    )
+
+
+def _get_jwks_client(issuer: str, jwks_url: str | None) -> "jwt.PyJWKClient":
+    """Get or create a JWKS client for `issuer`, cached per issuer."""
+    if issuer in _jwks_clients:
+        return _jwks_clients[issuer]
+
+    url = jwks_url or f"{issuer}/.well-known/jwks.json"
+    client = jwt.PyJWKClient(url)
+    _jwks_clients[issuer] = client
+    return client
+
+
+def verify_user_pool_jwt(
+    token: str,
+    *,
+    issuer: str | None = None,
+    audience: str | None = None,
+    jwks_url: str | None = None,
+) -> dict:
+    """
+    Cryptographically verify a forwarded customer Cognito user-pool JWT.
+
+    Unlike `extract_user_id_from_token` — which trusts an upstream authenticator
+    and skips signature verification — this is the *callee* side of the A2A hop:
+    the fraud-research agent receives a customer assertion forwarded by another
+    agent, so it must independently verify it. Verification fetches the user
+    pool's JWKS, checks the RS256 signature, the issuer, expiry (`exp`), and the
+    audience, and returns the decoded claims.
+
+    Cognito id tokens carry `aud`; access tokens carry `client_id` instead. When
+    an audience is configured, a match on *either* claim is accepted so both
+    token types verify correctly.
+
+    Configuration is resolved from keyword overrides first, then the
+    environment (`COGNITO_USER_POOL_ISSUER`/`COGNITO_USER_POOL_ID`,
+    `COGNITO_USER_POOL_CLIENT_ID`). The overrides make the function testable
+    against a local key/JWKS fixture.
+
+    Args:
+        token: Raw compact JWT string (no "Bearer " prefix).
+        issuer: Optional issuer URL override.
+        audience: Optional expected audience/client-id override.
+        jwks_url: Optional JWKS URL override (defaults to
+            `<issuer>/.well-known/jwks.json`).
+
+    Returns:
+        dict: The verified JWT claims.
+
+    Raises:
+        IdentityVerificationError: If the token is absent, malformed, expired,
+            has a bad signature, or fails issuer/audience verification.
+    """
+    if not token or not token.strip():
+        raise IdentityVerificationError("Absent customer identity JWT")
+
+    resolved_issuer = _get_user_pool_issuer(issuer)
+    resolved_audience = audience if audience is not None else os.environ.get("COGNITO_USER_POOL_CLIENT_ID")
+
+    try:
+        jwks_client = _get_jwks_client(resolved_issuer, jwks_url)
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        # Verify signature, issuer, and expiry. Audience is checked manually
+        # below so both `aud` (id tokens) and `client_id` (access tokens) work.
+        claims = jwt.decode(
+            jwt=token,
+            key=signing_key.key,
+            algorithms=["RS256"],
+            issuer=resolved_issuer,
+            options={"verify_aud": False, "require": ["exp"]},
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise IdentityVerificationError(f"Expired customer identity JWT: {exc}") from exc
+    except jwt.InvalidIssuerError as exc:
+        raise IdentityVerificationError(f"Invalid issuer on customer identity JWT: {exc}") from exc
+    except jwt.PyJWKClientError as exc:
+        raise IdentityVerificationError(f"Could not resolve signing key for customer identity JWT: {exc}") from exc
+    except jwt.InvalidTokenError as exc:
+        # Covers bad signature, malformed token, missing required claims, etc.
+        raise IdentityVerificationError(f"Invalid customer identity JWT: {exc}") from exc
+
+    if resolved_audience is not None:
+        token_audience = claims.get("aud")
+        token_client_id = claims.get("client_id")
+        audiences = token_audience if isinstance(token_audience, list) else [token_audience]
+        if resolved_audience not in audiences and resolved_audience != token_client_id:
+            raise IdentityVerificationError(
+                "Customer identity JWT audience does not match the expected user-pool client"
+            )
+
+    if not claims.get("sub"):
+        raise IdentityVerificationError("Verified customer identity JWT does not contain a 'sub' claim")
+
+    logger.info("Verified customer identity JWT for sub: %s", claims.get("sub"))
+    return claims

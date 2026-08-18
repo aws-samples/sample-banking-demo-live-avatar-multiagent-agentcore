@@ -20,6 +20,20 @@ const edgeTypes = { conciergeEdge: ConciergeEdge };
 
 const ICON = (name: string) => `/icons/agentcore/${name}.png`;
 
+// The cross-team A2A fraud-research hop only exists when the fraud runtime is
+// deployed. The stack surfaces that as the string "true"/"false", so gate the
+// flow-panel node/edge on the exact string (Requirement 9.1).
+const FRAUD_AGENT_ENABLED = import.meta.env.VITE_FRAUD_AGENT_ENABLED === "true";
+
+// The Bedrock Prompt Optimization showcase is feature-flagged off by default.
+// The stack surfaces the flag as the string "true"/"false" (mirroring
+// VITE_FRAUD_AGENT_ENABLED), so gate the node on the exact string so a "false"
+// value never renders it (Requirement 9.1).
+const PROMPT_OPT_ENABLED = import.meta.env.VITE_PROMPT_OPTIMIZATION_ENABLED === "true";
+
+// A2A status (idle|active|completed|failed) maps 1:1 onto the node activity —
+// `failed` is the terminal error state unique to this node (Req 9.3, 9.4).
+
 // Static architecture layout (vertically stacked, tools fanned horizontally).
 // y-rows: user=0, runtime=1, sidecars=2, gateway=3, tools=4, resources=5
 const ROW_Y: Record<string, number> = {
@@ -37,7 +51,6 @@ const TOOL_NAMES: string[] = [
     "web_search",
     "retrieve_user_profile",
     "open_account",
-    "save_memory",
     "recall_memories",
     "image_generate",
     "extract_pdf_images",
@@ -63,6 +76,8 @@ function ConciergeFlowInner() {
     const invokedTools = useConciergeFlowStore((s) => s.invokedTools);
     const callCounts = useConciergeFlowStore((s) => s.callCounts);
     const anyActivity = useConciergeFlowStore((s) => s.events.length > 0);
+    const a2a = useConciergeFlowStore((s) => s.a2a);
+    const promptOpt = useConciergeFlowStore((s) => s.promptOpt);
 
     const { nodes, edges }: BuildResult = useMemo(() => {
         const ns: Node<ConciergeNodeData>[] = [];
@@ -109,10 +124,66 @@ function ConciergeFlowInner() {
             data: { status: runtimeActive || anyActivity ? "active" : "idle" },
         });
 
+        // Cross-team A2A fraud-research hop — a distinct node to the right of the
+        // runtime, rendered only when the fraud runtime is deployed. Its state is
+        // driven straight from the store's `a2a` lifecycle (Requirement 9).
+        if (FRAUD_AGENT_ENABLED) {
+            ns.push({
+                id: "fraud_research",
+                type: "conciergeNode",
+                position: { x: CENTER_X + 320, y: ROW_Y.sidecar },
+                data: {
+                    id: "fraud_research",
+                    label: "Fraud Research Agent",
+                    sublabel: "A2A · another team's agent",
+                    icon: ICON("runtime"),
+                    category: "a2a",
+                    activity: a2a.status,
+                    identityCarried: a2a.identityForwarded,
+                },
+                draggable: false,
+            });
+            es.push({
+                id: "runtime-fraud_research",
+                source: "runtime",
+                target: "fraud_research",
+                type: "conciergeEdge",
+                data: { status: a2a.status, label: "A2A collaboration" },
+            });
+        }
+
+        // Bedrock Prompt Optimization showcase — a distinct node to the right of
+        // the runtime, rendered only when the feature flag is on. Its state is
+        // driven straight from the store's `promptOpt` lifecycle: active while
+        // OptimizePrompt requests stream, completed when a Variant is applied,
+        // failed when every target fails (Requirement 9).
+        if (PROMPT_OPT_ENABLED) {
+            ns.push({
+                id: "prompt_optimization",
+                type: "conciergeNode",
+                position: { x: CENTER_X + 260, y: ROW_Y.runtime },
+                data: {
+                    id: "prompt_optimization",
+                    label: "Prompt Optimization",
+                    sublabel: "Bedrock · OptimizePrompt",
+                    icon: ICON("ai-agent"),
+                    category: "prompt_opt",
+                    activity: promptOpt.status,
+                },
+                draggable: false,
+            });
+            es.push({
+                id: "runtime-prompt_optimization",
+                source: "runtime",
+                target: "prompt_optimization",
+                type: "conciergeEdge",
+                data: { status: promptOpt.status, label: "Optimize prompt" },
+            });
+        }
+
         // Sidecars: Guardrails (left) + Memory (right)
-        const memoryActive =
-            !!activeTool && ["save_memory", "recall_memories"].includes(activeTool);
-        const memoryUsed = invokedTools.has("save_memory") || invokedTools.has("recall_memories");
+        const memoryActive = activeTool === "recall_memories";
+        const memoryUsed = invokedTools.has("recall_memories");
 
         ns.push({
             id: "guardrails",
@@ -139,7 +210,7 @@ function ConciergeFlowInner() {
                 icon: ICON("memory"),
                 category: "core",
                 activity: memoryActive ? "active" : memoryUsed ? "completed" : "idle",
-                callCount: (callCounts.save_memory ?? 0) + (callCounts.recall_memories ?? 0),
+                callCount: callCounts.recall_memories ?? 0,
             },
             draggable: false,
         });
@@ -159,15 +230,12 @@ function ConciergeFlowInner() {
         });
 
         // Gateway
-        const gatewayActive =
-            !!activeTool && !["save_memory", "recall_memories"].includes(activeTool);
+        const gatewayActive = !!activeTool && activeTool !== "recall_memories";
 
         // Tool count is derived from the nodes actually rendered below. It used
         // to be hardcoded ("16 tools") and had drifted out of step with both the
         // diagram and the tool catalogue, so the label contradicted the picture.
-        const gatewayToolCount = TOOL_NAMES.filter(
-            (t) => !["save_memory", "recall_memories"].includes(t)
-        ).length;
+        const gatewayToolCount = TOOL_NAMES.filter((t) => t !== "recall_memories").length;
 
         ns.push({
             id: "gateway",
@@ -191,10 +259,8 @@ function ConciergeFlowInner() {
             data: { status: gatewayActive ? "active" : anyToolCalled ? "completed" : "idle" },
         });
 
-        // Tools (excluding memory tools — those connect to memory sidecar)
-        const gatewayTools = TOOL_NAMES.filter(
-            (t) => !["save_memory", "recall_memories"].includes(t)
-        );
+        // Tools (excluding the memory tool — it connects to the memory sidecar)
+        const gatewayTools = TOOL_NAMES.filter((t) => t !== "recall_memories");
 
         gatewayTools.forEach((toolName, i) => {
             const meta = TOOL_META[toolName] ?? { label: toolName };
@@ -261,7 +327,7 @@ function ConciergeFlowInner() {
         }
 
         return { nodes: ns, edges: es };
-    }, [runtimeActive, activeTool, invokedTools, callCounts, anyActivity]);
+    }, [runtimeActive, activeTool, invokedTools, callCounts, anyActivity, a2a, promptOpt]);
 
     // Auto-zoom: follow the current phase of execution.
     // Priority: activeTool > runtime (when no tool is running yet).
@@ -283,7 +349,7 @@ function ConciergeFlowInner() {
         };
 
         if (activeTool) {
-            const isMemoryTool = ["save_memory", "recall_memories"].includes(activeTool);
+            const isMemoryTool = activeTool === "recall_memories";
             const parentId = isMemoryTool ? "memory" : "gateway";
             // If this tool reveals a downstream resource, include it in focus.
             const downstream = CONDITIONAL_REVEAL[activeTool];

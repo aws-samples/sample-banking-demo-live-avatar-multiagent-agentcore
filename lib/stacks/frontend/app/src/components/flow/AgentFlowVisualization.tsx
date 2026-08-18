@@ -276,14 +276,19 @@ function AgentFlowInner({
                     fitViewOptions={{ padding: 0.18 }}
                     nodesDraggable={false}
                     nodesConnectable={false}
-                    panOnDrag={false}
+                    // Press-and-hold drag to pan the workflow around the grid
+                    // (up/down/left/right). Panning is independent of the wheel,
+                    // so it does not re-break the scroll bubbling below.
+                    panOnDrag={true}
+                    // Wheel zoom stays OFF so wheel events bubble to the
+                    // sidebar's scroll container — ReactFlow otherwise captures
+                    // the wheel over the pane, which trapped scrolling on the
+                    // diagram and left the panel content below it (lower nodes,
+                    // the run report) unreachable. Zoom is available via the
+                    // on-canvas +/- Controls instead.
                     zoomOnScroll={false}
                     zoomOnPinch={false}
                     zoomOnDoubleClick={false}
-                    // Let wheel events bubble to the sidebar's scroll container.
-                    // ReactFlow otherwise captures the wheel over the pane, which
-                    // trapped scrolling on the diagram and left the panel content
-                    // below it (lower nodes, the run report) unreachable.
                     preventScrolling={false}
                     proOptions={{ hideAttribution: true }}
                 >

@@ -42,7 +42,12 @@ import { Construct } from "constructs";
 import * as fs from "fs";
 import * as path from "path";
 import { Stack } from "../../common/constructs/stack";
-import { getFeatureFlags, getModelConfig, getStackNameBase } from "../../common/feature-flags";
+import {
+    getFeatureFlags,
+    getModelConfig,
+    getSageMakerConfig,
+    getStackNameBase,
+} from "../../common/feature-flags";
 import { createAgentCoreRole } from "./agentcore-role";
 import { Auth } from "../auth";
 import { Shared } from "../shared";
@@ -72,6 +77,7 @@ export class Backend extends Stack {
         const { auth, shared } = props;
         const features = getFeatureFlags(this.node);
         const models = getModelConfig(this.node);
+        const sagemaker = getSageMakerConfig(this.node);
         const stackName = getStackNameBase(this.node);
 
         const userPool = auth.userPool;
@@ -86,6 +92,10 @@ export class Backend extends Stack {
             imagesBucketArn: shared.imagesBucket.bucketArn,
             avatarBucketArn: shared.avatarBucket.bucketArn,
             machineClientSecretArn: auth.machineClientSecret.secretArn,
+            fraudClientSecretArn: auth.fraudMachineClientSecret?.secretArn,
+            enablePromptOptimization: features.prompt_optimization,
+            enableSagemakerModel: features.sagemaker_model,
+            sagemakerEndpointName: sagemaker.endpointName,
         });
         NagSuppressions.addResourceSuppressions(
             agentCoreRole,
@@ -254,7 +264,7 @@ export class Backend extends Stack {
             commonEnv.KNOWLEDGE_BASE_ID = kbId;
         }
 
-        // Pass memory IDs to tool Lambdas (used by recall_memories, save_memory).
+        // Pass memory IDs to tool Lambdas (used by recall_memories).
         // CreateEvent takes no strategy ID — strategies process events
         // asynchronously into records under the namespaces configured above.
         // Retrieval does need those namespaces, and there is no shared
@@ -290,7 +300,6 @@ export class Backend extends Stack {
                 },
             },
             { dir: "image_history", handler: "handler.handler", timeout: 60, memory: 128 },
-            { dir: "save_memory", handler: "handler.handler", timeout: 300, memory: 256 },
             { dir: "recall_memories", handler: "handler.handler", timeout: 300, memory: 256 },
             { dir: "analyze_patterns", handler: "handler.handler", timeout: 300, memory: 256 },
             { dir: "retrieve_user_profile", handler: "handler.handler", timeout: 60, memory: 128 },
@@ -424,7 +433,7 @@ export class Backend extends Stack {
         // logic in that module was already wrong once in a way that returned empty
         // results instead of errors — two copies drifting would silently disable
         // retrieval on one path.
-        for (const memToolDir of ["recall_memories", "save_memory", "analyze_patterns"]) {
+        for (const memToolDir of ["recall_memories", "analyze_patterns"]) {
             const memFn = toolLambdas[memToolDir];
             if (!memFn) continue;
 
@@ -447,9 +456,7 @@ export class Backend extends Stack {
                 })
             );
 
-            if (memToolDir !== "save_memory") {
-                memFn.addLayers(memoryLayer);
-            }
+            memFn.addLayers(memoryLayer);
         }
 
         // ─── AgentCore Gateway ─────────────────────────────────────────
@@ -467,7 +474,15 @@ export class Backend extends Stack {
             authorizerType: "CUSTOM_JWT",
             authorizerConfiguration: {
                 customJwtAuthorizer: {
-                    allowedClients: [auth.machineClient.userPoolClientId],
+                    // The shared machine client plus, when the A2A fraud hop is
+                    // enabled, the fraud agent's own client so it reaches the
+                    // Gateway as a distinct principal (Req 7.4).
+                    allowedClients: [
+                        auth.machineClient.userPoolClientId,
+                        ...(features.a2a && auth.fraudMachineClient
+                            ? [auth.fraudMachineClient.userPoolClientId]
+                            : []),
+                    ],
                     discoveryUrl: `${cognitoIssuer}/.well-known/openid-configuration`,
                 },
             },
@@ -581,17 +596,34 @@ export class Backend extends Stack {
             // gating; on ENFORCE (once agents carry distinct identities) it
             // keeps research agents away from write/PII actions that only the
             // customer-facing AI Agent should reach.
+            // When the A2A fraud hop is enabled, bind the deny to the fraud
+            // agent's OWN principal so the restriction is attributable to it
+            // and, under ENFORCE, the account-opening AI Agent keeps its
+            // open_account access (Req 7.2). The Gateway's Cedar principal is
+            // `AgentCore::OAuthUser`, built from the token `sub`; for a Cognito
+            // client-credentials token the `sub` is the app client id. When the
+            // fraud hop is off, the original unscoped forbid is kept so the
+            // LOG_ONLY "would-deny" demonstration still fires for every caller.
+            const fraudClientId =
+                features.a2a && auth.fraudMachineClient
+                    ? auth.fraudMachineClient.userPoolClientId
+                    : undefined;
+            const forbidPrincipalClause = fraudClientId
+                ? `  principal == AgentCore::OAuthUser::"${fraudClientId}",`
+                : "  principal,";
+
             const forbidSensitive = new CfnPolicy(this, "PolicyDenySensitiveTools", {
                 policyEngineId: policyEngine.attrPolicyEngineId,
                 name: "deny_account_and_pii_tools",
-                description:
-                    "Deny account-opening and customer-profile tools (deterministic tool gating).",
+                description: fraudClientId
+                    ? "Deny account-opening and customer-profile tools to the fraud agent principal (deterministic tool gating)."
+                    : "Deny account-opening and customer-profile tools (deterministic tool gating).",
                 validationMode: "IGNORE_ALL_FINDINGS",
                 definition: {
                     cedar: {
                         statement: [
                             "forbid (",
-                            "  principal,",
+                            forbidPrincipalClause,
                             "  action in [",
                             '    AgentCore::Action::"open-account___open_account",',
                             '    AgentCore::Action::"retrieve-user-profile___retrieve_user_profile"',
@@ -842,6 +874,211 @@ export class Backend extends Stack {
 
         const runtimeArns: Record<string, string> = {};
 
+        // ─── Fraud-Research Runtime (A2A, feature-gated) ───────────────
+        // The headline A2A callee: a dedicated runtime configured with the A2A
+        // server protocol (port 9000, agent-card discovery). Created BEFORE the
+        // orchestrator loop so the account-opening (`ai_agent`) runtime can wire
+        // its ARN into `FRAUD_AGENT_RUNTIME_ARN`. Its inbound authorizer accepts
+        // ONLY the fraud agent's own client (`allowedClients`), and the caller
+        // presents a token minted from that same client. The fraud agent reuses
+        // the shared AgentCore execution role: that role already carries the
+        // Bedrock model / ApplyGuardrail / SSM / Secrets / Memory permissions
+        // the assessment needs, mirroring how the avatar runtime reuses it. The
+        // one extra grant — least-privilege `InvokeAgentRuntime` scoped to this
+        // runtime — is attached below for the caller's A2A hop.
+        let fraudRuntimeArn: string | undefined;
+        if (features.a2a && auth.fraudMachineClient) {
+            const fraudImage = new DockerImageAsset(this, "FraudResearchImage", {
+                directory: repoRoot,
+                file: "patterns/fraud-research-agent/Dockerfile",
+                platform: Platform.LINUX_ARM64,
+            });
+
+            const fraudRuntime = new CfnRuntime(this, "Runtime_fraud_research", {
+                agentRuntimeName: `${stackName.replace(/-/g, "_")}_fraud_research`,
+                agentRuntimeArtifact: {
+                    containerConfiguration: {
+                        containerUri: fraudImage.imageUri,
+                    },
+                },
+                roleArn: agentCoreRole.roleArn,
+                networkConfiguration: {
+                    networkMode: "PUBLIC",
+                },
+                // A2A server protocol — this is what makes the runtime speak
+                // agent-to-agent (card discovery + JSON-RPC message/send) on 9000.
+                protocolConfiguration: "A2A",
+                environmentVariables: {
+                    ...runtimeEnv,
+                    MODEL_ID: models.orchestrator,
+                    AGENT_PROFILE: "fraud_research",
+                    // Gateway URL is also published to SSM (read by the agent at
+                    // call time); passed here for parity with the other runtimes.
+                    GATEWAY_URL: gateway.attrGatewayUrl,
+                    // The fraud agent mints its Gateway token from its OWN client
+                    // (distinct principal, Req 7.4) via these param names.
+                    FRAUD_AGENT_CLIENT_ID_PARAM: `/${stackName}/fraud_agent_client_id`,
+                    FRAUD_AGENT_CLIENT_SECRET_PARAM: `/${stackName}/fraud_agent_client_secret`,
+                    // Cognito issuer + audience so the callee can verify the
+                    // forwarded customer user-pool JWT (Req 5.4).
+                    COGNITO_USER_POOL_ISSUER: cognitoIssuer,
+                    COGNITO_USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+                },
+                authorizerConfiguration: {
+                    customJwtAuthorizer: {
+                        discoveryUrl: jwtDiscoveryUrl,
+                        allowedClients: [auth.fraudMachineClient.userPoolClientId],
+                    },
+                },
+                // Forward the machine bearer to the container so the platform
+                // authorizer validates it (Req 6.2). The customer identity rides
+                // in the JSON-RPC body's metadata, not a header.
+                requestHeaderConfiguration: {
+                    requestHeaderAllowlist: ["Authorization"],
+                },
+                description: `Fraud & Research (A2A) agent for ${stackName}`,
+            });
+
+            fraudRuntime.node.addDependency(agentCoreRole);
+
+            fraudRuntimeArn = fraudRuntime.attrAgentRuntimeArn;
+            runtimeArns["fraud_research"] = fraudRuntimeArn;
+
+            // Publish the fraud client id so both the fraud agent (Gateway
+            // principal) and the account-opening caller (inbound bearer) resolve
+            // it at runtime. The secret lives in Secrets Manager (Auth stack).
+            new StringParameter(this, "FraudAgentClientIdParam", {
+                parameterName: `/${stackName}/fraud_agent_client_id`,
+                stringValue: auth.fraudMachineClient.userPoolClientId,
+            });
+
+            new StringParameter(this, "RuntimeArn_fraud_research", {
+                parameterName: `/${stackName}/runtime_arn_fraud_research`,
+                stringValue: fraudRuntimeArn,
+            });
+
+            new CfnOutput(this, "RuntimeArn_fraud_research_Output", {
+                value: fraudRuntimeArn,
+                description: "Runtime ARN for the Fraud & Research (A2A) agent",
+            });
+
+            // Least-privilege A2A invoke: grant the (shared) execution role the
+            // data-plane InvokeAgentRuntime action scoped to ONLY the fraud
+            // runtime, so the account-opening agent's A2A hop is tightly bounded
+            // (Req 6.5). The `/*` covers the runtime's endpoints/sessions.
+            //
+            // The resource is a CONSTRUCTED ARN (region/account + runtime-name
+            // prefix), NOT `fraudRuntime.attrAgentRuntimeArn`. Referencing the
+            // runtime resource here made the shared role's DefaultPolicy depend
+            // on the fraud runtime, while the fraud runtime already depends on
+            // the role (roleArn + node dependency, which pulls in the role's
+            // DefaultPolicy child) — a CloudFormation circular dependency. The
+            // name-prefixed wildcard keeps the grant scoped to just this runtime.
+            const fraudRuntimeName = `${stackName.replace(/-/g, "_")}_fraud_research`;
+            const fraudRuntimeArnPattern = `arn:aws:bedrock-agentcore:${this.region}:${this.account}:runtime/${fraudRuntimeName}*`;
+            agentCoreRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["bedrock-agentcore:InvokeAgentRuntime"],
+                    resources: [fraudRuntimeArnPattern, `${fraudRuntimeArnPattern}/*`],
+                })
+            );
+        }
+
+        // ─── Section-Researcher Runtime (A2A, feature-gated) ───────────
+        // The callee for the parallel research fan-out. When
+        // features.a2a_parallel_research is on, the orchestrator's researcher
+        // phase replaces its in-process worker sub-agents with A2A invocations
+        // to this runtime (one per shard), forwarding the same customer
+        // identity. Mirrors the fraud runtime (task 10): its own A2A image,
+        // `protocolConfiguration: "A2A"`, a custom-JWT authorizer, and the
+        // Authorization header forwarded so the platform validates the caller's
+        // machine bearer. Gated independently and default-off given the higher
+        // reliability risk; the proven in-process fan-out stays the fallback.
+        //
+        // Least privilege: the caller reuses the SHARED machine client (the same
+        // principal the orchestrator already uses for the Gateway), so no new
+        // Cognito client is minted — the runtime's inbound `allowedClients`
+        // accepts that client and the section agent reaches the Gateway as it.
+        let sectionResearcherRuntimeArn: string | undefined;
+        if (features.a2a_parallel_research) {
+            const sectionImage = new DockerImageAsset(this, "SectionResearcherImage", {
+                directory: repoRoot,
+                file: "patterns/section-researcher-agent/Dockerfile",
+                platform: Platform.LINUX_ARM64,
+            });
+
+            const sectionRuntime = new CfnRuntime(this, "Runtime_section_researcher", {
+                agentRuntimeName: `${stackName.replace(/-/g, "_")}_section_researcher`,
+                agentRuntimeArtifact: {
+                    containerConfiguration: {
+                        containerUri: sectionImage.imageUri,
+                    },
+                },
+                roleArn: agentCoreRole.roleArn,
+                networkConfiguration: {
+                    networkMode: "PUBLIC",
+                },
+                // A2A server protocol — card discovery + JSON-RPC message/send on 9000.
+                protocolConfiguration: "A2A",
+                environmentVariables: {
+                    ...runtimeEnv,
+                    MODEL_ID: models.orchestrator,
+                    AGENT_PROFILE: "section_researcher",
+                    GATEWAY_URL: gateway.attrGatewayUrl,
+                    // The section agent reaches the Gateway with the shared
+                    // machine client (default in section_gateway_access_token).
+                    COGNITO_USER_POOL_ISSUER: cognitoIssuer,
+                    COGNITO_USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+                },
+                authorizerConfiguration: {
+                    customJwtAuthorizer: {
+                        discoveryUrl: jwtDiscoveryUrl,
+                        // The shared machine client is the caller principal.
+                        allowedClients: [auth.machineClient.userPoolClientId],
+                    },
+                },
+                requestHeaderConfiguration: {
+                    requestHeaderAllowlist: ["Authorization"],
+                },
+                description: `Section Researcher (A2A) agent for ${stackName}`,
+            });
+
+            sectionRuntime.node.addDependency(agentCoreRole);
+
+            sectionResearcherRuntimeArn = sectionRuntime.attrAgentRuntimeArn;
+            runtimeArns["section_researcher"] = sectionResearcherRuntimeArn;
+
+            new StringParameter(this, "RuntimeArn_section_researcher", {
+                parameterName: `/${stackName}/runtime_arn_section_researcher`,
+                stringValue: sectionResearcherRuntimeArn,
+            });
+
+            new CfnOutput(this, "RuntimeArn_section_researcher_Output", {
+                value: sectionResearcherRuntimeArn,
+                description: "Runtime ARN for the Section Researcher (A2A) agent",
+            });
+
+            // Least-privilege A2A invoke: grant the (shared) execution role the
+            // data-plane InvokeAgentRuntime action scoped to ONLY the section
+            // runtime, so the orchestrator's fan-out A2A hop is tightly bounded
+            // (Req 6.5). The `/*` covers the runtime's endpoints/sessions.
+            //
+            // Constructed ARN (not the runtime resource attribute) for the same
+            // reason as the fraud runtime above: referencing the resource here
+            // creates a CloudFormation circular dependency via the shared role's
+            // DefaultPolicy.
+            const sectionRuntimeName = `${stackName.replace(/-/g, "_")}_section_researcher`;
+            const sectionRuntimeArnPattern = `arn:aws:bedrock-agentcore:${this.region}:${this.account}:runtime/${sectionRuntimeName}*`;
+            agentCoreRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["bedrock-agentcore:InvokeAgentRuntime"],
+                    resources: [sectionRuntimeArnPattern, `${sectionRuntimeArnPattern}/*`],
+                })
+            );
+        }
+
         // ─── Orchestrator Runtimes (one per agent experience) ──────────
         // The orchestrator is a single codebase whose entrypoint routes by a
         // `mode` field. We deploy it as three dedicated AgentCore Runtimes so
@@ -891,6 +1128,66 @@ export class Backend extends Stack {
                     // Identifies which agent experience this runtime serves.
                     // Surfaced in logs and used to scope the Policy engine.
                     AGENT_PROFILE: profile,
+                    // A2A fraud hop is exposed only in the account-opening
+                    // (`ai_agent`) chatbot path. Enable it there and hand it the
+                    // fraud runtime ARN + the fraud client params it authenticates
+                    // to the fraud runtime with (Req 4.1, 5.1, 6.1). The caller
+                    // and callee share the fraud client, so the fraud runtime's
+                    // inbound `allowedClients` accepts the caller's token.
+                    ENABLE_A2A: features.a2a && profile === "ai_agent" ? "true" : "false",
+                    ...(features.a2a && profile === "ai_agent" && fraudRuntimeArn
+                        ? {
+                              FRAUD_AGENT_RUNTIME_ARN: fraudRuntimeArn,
+                              FRAUD_CALLER_CLIENT_ID_PARAM: `/${stackName}/fraud_agent_client_id`,
+                              FRAUD_CALLER_CLIENT_SECRET_PARAM: `/${stackName}/fraud_agent_client_secret`,
+                          }
+                        : {}),
+                    // Prompt Optimization showcase (Req 1.5, 11.2, 12.2). The
+                    // presenter-driven `optimize_prompt`/`optimize_sample` modes
+                    // target the customer-facing AI Agent; the assistant runtime
+                    // also serves the menu/chatbot path the showcase reads. Enable
+                    // the mode router on both profiles when the flag is on; other
+                    // profiles keep it off so those modes fall through to the
+                    // proven default handling. Mirrors `ENABLE_A2A` targeting.
+                    ENABLE_PROMPT_OPTIMIZATION:
+                        features.prompt_optimization &&
+                        (profile === "ai_agent" || profile === "ai_assistant")
+                            ? "true"
+                            : "false",
+                    // Custom SageMaker model for the customer-facing AI Agent
+                    // (features.sagemaker_model). Enabled only on the `ai_agent`
+                    // profile: when on, `_handle_chatbot` builds a Strands
+                    // SageMakerAIModel against SAGEMAKER_ENDPOINT_NAME instead of
+                    // Bedrock. Off (or any other profile) keeps the proven
+                    // Bedrock path. The endpoint name + region ride along only
+                    // when enabled so nothing changes when the flag is off.
+                    SAGEMAKER_MODEL_ENABLED:
+                        features.sagemaker_model && profile === "ai_agent" ? "true" : "false",
+                    ...(features.sagemaker_model && profile === "ai_agent"
+                        ? {
+                              SAGEMAKER_ENDPOINT_NAME: sagemaker.endpointName,
+                              ...(sagemaker.regionName
+                                  ? { SAGEMAKER_REGION: sagemaker.regionName }
+                                  : {}),
+                              SAGEMAKER_MAX_TOKENS: String(sagemaker.maxTokens),
+                          }
+                        : {}),
+                    // The parallel section-researcher fan-out (Req 10) is
+                    // exercised only by the research pipelines (Deep Research +
+                    // Research Studio), which run under the "research" profile.
+                    // Enable the A2A branch there and hand it the section
+                    // runtime ARN; other profiles keep it off. When off (or the
+                    // runtime is absent), the orchestrator uses the proven
+                    // in-process fan-out as the fallback (Req 10.1, 12.2).
+                    ENABLE_A2A_PARALLEL_RESEARCH:
+                        features.a2a_parallel_research && profile === "deep_research"
+                            ? "true"
+                            : "false",
+                    ...(features.a2a_parallel_research &&
+                    profile === "deep_research" &&
+                    sectionResearcherRuntimeArn
+                        ? { SECTION_RESEARCHER_RUNTIME_ARN: sectionResearcherRuntimeArn }
+                        : {}),
                 },
                 authorizerConfiguration: runtimeAuthorizerConfiguration,
                 // L1 spells this `requestHeaderAllowlist`; the alpha L2 called

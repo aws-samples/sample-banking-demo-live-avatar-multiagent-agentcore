@@ -1,5 +1,13 @@
-export type NodeCategory = "user" | "core" | "tool" | "resource";
-export type NodeActivity = "idle" | "active" | "completed";
+// `a2a` is the cross-team agent-to-agent collaboration node (the fraud-research
+// hop). It is the one node that can reach a terminal `failed` state, so
+// `NodeActivity` carries `failed` in addition to the shared idle/active/completed
+// lifecycle used by every other node (Requirement 9.4).
+//
+// `prompt_opt` is the Bedrock Prompt Optimization showcase node. Like `a2a` it
+// reuses the `failed`-capable `NodeActivity` because it can reach a terminal
+// `failed` state when every target model fails (Requirement 9.4).
+export type NodeCategory = "user" | "core" | "tool" | "resource" | "a2a" | "prompt_opt";
+export type NodeActivity = "idle" | "active" | "completed" | "failed";
 
 export interface ConciergeNodeData {
     id: string;
@@ -12,6 +20,12 @@ export interface ConciergeNodeData {
     /** When true, node is hidden until first activation (conditional reveal). */
     conditional?: boolean;
     revealed?: boolean;
+    /**
+     * When true, render the "identity carried" indicator on the node — used by
+     * the A2A node to show the customer's verified identity travels across the
+     * hop (Requirement 9.2).
+     */
+    identityCarried?: boolean;
     [key: string]: unknown;
 }
 
@@ -55,11 +69,6 @@ export const TOOL_META: Record<string, { label: string; icon?: string; descripti
         description: "Retrieves the history of images generated during the session.",
     },
 
-    save_memory: {
-        label: "Save Memory",
-        description:
-            "Persists a fact or event to AgentCore Memory across episodic, semantic, and user preference strategies. Events auto-expire after 30 days.",
-    },
     recall_memories: {
         label: "Recall Memory",
         description:
@@ -191,5 +200,17 @@ export const CORE_NODE_META: Record<
         label: "User",
         rawName: "client request",
         description: "The end user's message that initiates an orchestration turn.",
+    },
+    fraud_research: {
+        label: "Fraud Research Agent",
+        rawName: "bedrock-agentcore-runtime · A2A callee",
+        description:
+            "Another team's Fraud & Research Agent, deployed as its own AgentCore Runtime and reached over the A2A protocol during account-opening KYC. The account-opening agent discovers it via its agent card and invokes it, carrying the customer's verified identity across the hop so the whole path lands in one trace attributed to two owners.",
+    },
+    prompt_optimization: {
+        label: "Prompt Optimization",
+        rawName: "bedrock · OptimizePrompt",
+        description:
+            "Presenter-driven Bedrock Prompt Optimization showcase. Streams the AI Agent's current system prompt through the OptimizePrompt API for up to three verified foundation models, surfacing each model-tailored analysis and optimized prompt for side-by-side review. The node is active while requests stream, completed when the presenter applies a selected variant to the live agent, and failed when every target model fails.",
     },
 };

@@ -287,7 +287,6 @@ gateway/tools/
 ├── pdf_generator/          # ReportLab PDF generation → S3 presigned URL
 ├── image_generate/         # Image generation via Stability SD3.5
 ├── image_history/          # Session image history
-├── save_memory/            # Persist to AgentCore Memory
 ├── recall_memories/        # Retrieve from Memory
 ├── analyze_patterns/       # Conversation pattern analysis
 ├── retrieve_user_profile/  # DynamoDB customer lookup

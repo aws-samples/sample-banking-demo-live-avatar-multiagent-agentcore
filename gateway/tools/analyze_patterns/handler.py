@@ -11,9 +11,9 @@ Reads both tiers, because they answer different halves of the question:
 * Long term (records) — what the strategies actually extracted, grouped by
   strategy. Populated asynchronously, so it lags the conversation.
 
-Previously this queried a Neptune Analytics graph. That graph is only written by
-save_memory's fallback path, and `neptune` is false in cdk.json, so the endpoint
-was never configured and every call returned
+Previously this queried a Neptune Analytics graph. That graph was only ever
+written by a now-removed memory fallback path, and `neptune` is false in
+cdk.json, so the endpoint was never configured and every call returned
 "NEPTUNE_ENDPOINT environment variable not configured" — a registered tool that
 could not work, surfacing an infrastructure error mid-conversation. The Neptune
 path is removed rather than kept dormant; it also interpolated `user_id` straight

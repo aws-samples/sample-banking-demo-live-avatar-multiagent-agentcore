@@ -77,6 +77,59 @@ export interface FeatureFlags {
      * succeeds and the entry simply does not appear. Defaults to true.
      */
     harness: boolean;
+    /**
+     * A2A fraud hop — the headline agent-to-agent capability. When true, deploys
+     * the dedicated Fraud-Research Agent as its own AgentCore Runtime configured
+     * with the A2A server protocol, a distinct Cognito M2M client (its own Gateway
+     * principal), and a Cedar deny scoped to that principal, and wires the
+     * account-opening agent (`ai_agent`) to discover the fraud agent's card and
+     * call it over A2A during the KYC/fraud step — the requesting customer's
+     * verified identity propagates across the hop. When false, the account-opening
+     * agent runs the proven in-process path and none of the A2A fraud resources
+     * are deployed, so the demo still deploys and destroys cleanly. Defaults to
+     * true.
+     */
+    a2a: boolean;
+    /**
+     * Convert the parallel section researchers from in-process sub-agents to A2A
+     * invocations against a section-researcher runtime. Higher-risk than the fraud
+     * hop (per-call token minting, network/timeout/retry, researcher cold starts,
+     * partial-failure semantics), so it is gated independently of `a2a` and
+     * defaults to FALSE — the proven in-process fan-out stays the fallback until
+     * this is validated in a non-demo environment.
+     */
+    a2a_parallel_research: boolean;
+    /**
+     * Bedrock Prompt Optimization showcase for the customer-facing AI Agent
+     * (the "AI Client Advisor"). When true, the orchestrator accepts the
+     * presenter-driven `optimize_prompt` / `optimize_sample` modes that stream
+     * the Bedrock `OptimizePrompt` analysis + model-tailored optimized prompt
+     * for the AI Agent's current system prompt across the supported target
+     * foundation models, the shared AgentCore role is granted
+     * `bedrock:OptimizePrompt`, and the frontend surfaces the Showcase_Card
+     * entry point and the flow-panel node (`VITE_PROMPT_OPTIMIZATION_ENABLED`).
+     * When false, the AI Agent runs exactly as it does today (the proven
+     * `mode="chatbot"` path), the IAM action is not added, and the UI
+     * affordances are hidden — so the demo still deploys and destroys cleanly.
+     * Defaults to FALSE; enable it in `cdk.json` context to run the showcase.
+     */
+    prompt_optimization: boolean;
+    /**
+     * Custom model on Amazon SageMaker for the customer-facing AI Agent (the
+     * "AI Client Advisor"). When true, the AI Agent runtime (`ai_agent`
+     * profile) drives its chatbot turns against a model deployed on a SageMaker
+     * inference endpoint (via the Strands `SageMakerAIModel` provider) instead
+     * of Bedrock, the shared AgentCore role is granted `sagemaker:InvokeEndpoint`
+     * scoped to that endpoint, and the endpoint name is injected into the
+     * runtime env from the `sagemaker` context block. When false, the AI Agent
+     * runs exactly as it does today on Bedrock — no SageMaker permission, no
+     * env — so the demo still deploys and destroys cleanly.
+     *
+     * Defaults to FALSE. Note: Bedrock Guardrails and the OptimizePrompt
+     * showcase operate on Bedrock invocations only, so they do not apply to the
+     * SageMaker path.
+     */
+    sagemaker_model: boolean;
 }
 
 export interface ModelConfig {
@@ -104,6 +157,10 @@ const DEFAULT_FEATURES: FeatureFlags = {
     policy: true,
     policyMode: "LOG_ONLY",
     harness: true,
+    a2a: true,
+    a2a_parallel_research: false,
+    prompt_optimization: false,
+    sagemaker_model: false,
 };
 
 const DEFAULT_MODELS: ModelConfig = {
@@ -161,6 +218,34 @@ const DEFAULT_TAVUS_CONFIG: TavusConfig = {
 export function getTavusConfig(node: Node): TavusConfig {
     const tavus = node.tryGetContext("tavus") ?? {};
     return { ...DEFAULT_TAVUS_CONFIG, ...tavus };
+}
+
+export interface SageMakerConfig {
+    /**
+     * Name of the SageMaker inference endpoint the AI Agent invokes when
+     * `features.sagemaker_model` is on. This is a PLACEHOLDER by default — point
+     * it at a real deployed endpoint before enabling the flag. The IAM grant is
+     * scoped to this exact name.
+     */
+    endpointName: string;
+    /**
+     * Region the endpoint is deployed in. Defaults to the stack/deploy region
+     * when left empty (the runtime falls back to its own AWS_REGION).
+     */
+    regionName: string;
+    /** Max output tokens for the SageMaker chat completion. */
+    maxTokens: number;
+}
+
+const DEFAULT_SAGEMAKER_CONFIG: SageMakerConfig = {
+    endpointName: "PLACEHOLDER-ai-agent-sagemaker-endpoint",
+    regionName: "",
+    maxTokens: 4096,
+};
+
+export function getSageMakerConfig(node: Node): SageMakerConfig {
+    const sagemaker = node.tryGetContext("sagemaker") ?? {};
+    return { ...DEFAULT_SAGEMAKER_CONFIG, ...sagemaker };
 }
 
 export function getStackNameBase(node: Node): string {

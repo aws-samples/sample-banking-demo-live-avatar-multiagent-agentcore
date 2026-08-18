@@ -4,6 +4,7 @@ import { BrowserSessionNotice } from "./BrowserSessionNotice";
 import { CatalogQualityReportCard } from "./CatalogQualityReportCard";
 import { PdfDeliveryCard } from "./PdfDeliveryCard";
 import { PdfDownloadLinkCard } from "./PdfDownloadLinkCard";
+import { PromptOptimizationCard } from "./PromptOptimizationCard";
 import { ResearchPlanCard } from "./ResearchPlanCard";
 import { ServicesCatalogCard } from "./ServicesCatalogCard";
 import { EvaluationScorecardCard } from "@/components/common/evaluation/EvaluationScorecard";
@@ -23,6 +24,7 @@ const UI_COMPONENTS: Record<string, AnyComponent> = {
     CatalogQualityReport: CatalogQualityReportCard,
     PdfDelivery: PdfDeliveryCard,
     PdfDownloadLink: PdfDownloadLinkCard,
+    PromptOptimizationShowcase: PromptOptimizationCard,
     ResearchPlan: ResearchPlanCard,
     ServicesCatalog: ServicesCatalogCard,
     EvaluationScorecard: EvaluationScorecardCard,

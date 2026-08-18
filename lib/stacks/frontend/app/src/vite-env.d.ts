@@ -24,6 +24,11 @@ interface ImportMetaEnv {
     readonly VITE_COGNITO_SCOPE?: string;
     readonly VITE_COGNITO_AUTOMATIC_SILENT_RENEW?: string;
     readonly VITE_COGNITO_IDENTITY_PROVIDER?: string;
+    // "true" when the A2A fraud hop is deployed; gates the flow-panel node.
+    readonly VITE_FRAUD_AGENT_ENABLED?: string;
+    // "true" when the Prompt Optimization showcase is enabled; gates the
+    // Showcase_Card entry point and the flow-panel "Prompt Optimization" node.
+    readonly VITE_PROMPT_OPTIMIZATION_ENABLED?: string;
 }
 
 interface ImportMeta {

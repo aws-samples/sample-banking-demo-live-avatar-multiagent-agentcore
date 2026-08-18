@@ -27,6 +27,13 @@ const ACTIVITY_STYLES: Record<
         bg: "bg-gradient-to-br from-emerald-500/10 to-slate-900/40",
         iconOpacity: 0.9,
     },
+    // Terminal error state — only the A2A node can reach this today (Req 9.4).
+    failed: {
+        ring: "ring-1 ring-rose-500/70",
+        border: "border-rose-500/80",
+        bg: "bg-gradient-to-br from-rose-500/15 to-slate-900/40",
+        iconOpacity: 0.9,
+    },
 };
 
 const CATEGORY_SIZE: Record<ConciergeNodeData["category"], string> = {
@@ -34,6 +41,8 @@ const CATEGORY_SIZE: Record<ConciergeNodeData["category"], string> = {
     core: "w-[220px]",
     tool: "w-[200px]",
     resource: "w-[190px]",
+    a2a: "w-[230px]",
+    prompt_opt: "w-[220px]",
 };
 
 export function ConciergeNode({ data }: NodeProps<ConciergeNodeType>) {
@@ -55,6 +64,10 @@ export function ConciergeNode({ data }: NodeProps<ConciergeNodeType>) {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.25 }}
+                role="group"
+                aria-label={`${data.label}${data.sublabel ? `, ${data.sublabel}` : ""}, status: ${data.activity}`}
+                aria-busy={data.activity === "active"}
+                data-status={data.activity}
                 className={`relative ${size} cursor-pointer rounded-lg border ${style.border} ${style.bg} ${style.ring} px-2.5 py-2 backdrop-blur-sm transition-all duration-300 hover:brightness-125`}
             >
                 {data.activity === "active" && (
@@ -93,6 +106,28 @@ export function ConciergeNode({ data }: NodeProps<ConciergeNodeType>) {
                         )}
                     </div>
                 </div>
+
+                {data.identityCarried && (
+                    <div
+                        className="mt-1.5 flex items-center gap-1 rounded border border-sky-400/50 bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-300"
+                        role="status"
+                        aria-label="Customer identity carried across the A2A hop"
+                    >
+                        <svg
+                            className="h-2.5 w-2.5 shrink-0"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            aria-hidden="true"
+                        >
+                            <path
+                                fillRule="evenodd"
+                                d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm2.5 8V5.5a2.5 2.5 0 00-5 0V9h5z"
+                                clipRule="evenodd"
+                            />
+                        </svg>
+                        <span className="truncate">Identity carried</span>
+                    </div>
+                )}
             </motion.div>
 
             {showHandles && (

@@ -139,9 +139,9 @@ def _recall_from_agentcore(user_id: str, memory_id: str, query: str, limit: int)
 
     Long-term records carry what the strategies extracted. Short-term events are
     consulted as well because extraction is asynchronous: for the first stretch
-    after `save_memory`, the event is the only record that exists, so a
-    long-term-only reader answers "nothing" about a memory the user just watched
-    being saved.
+    after a conversation turn is captured, the event is the only record that
+    exists, so a long-term-only reader answers "nothing" about something the
+    user just mentioned.
 
     Returns a JSON string when either tier could be read — including an empty
     list, which is the honest answer for a user who has saved nothing. Returns

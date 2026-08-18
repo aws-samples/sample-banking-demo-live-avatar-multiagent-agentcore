@@ -21,8 +21,9 @@ MEMORY_SECTION = """
 ## Memory Context
 
 You have access to persistent memory. At the start of a conversation, proactively
-recall memories to personalize the interaction. When the user shares preferences,
-important context, or asks you to remember something, save it to memory.
+recall memories to personalize the interaction. Preferences and important context
+the user shares are retained automatically across conversations — you do not need
+to take any explicit action to save them.
 
 Do not mention the memory system unless the user asks about it. Use recalled
 memories naturally, as if you simply remember previous conversations.
@@ -80,7 +81,7 @@ report the accounts you find.
 # Mapping from tool name patterns to augmentation sections.
 # A section is appended if ANY of its associated tool patterns match an available tool.
 _AUGMENTATION_MAP: list[tuple[list[str], str]] = [
-    (["save_memory", "recall_memories", "memory"], MEMORY_SECTION),
+    (["recall_memories", "memory"], MEMORY_SECTION),
     (["image_generate", "image_history"], CANVAS_SECTION),
     (["data_sources"], DATA_SOURCES_SECTION),
     (["retrieve_user_profile", "user_profile"], PROFILE_SECTION),

@@ -221,13 +221,10 @@ This is what actually drives the Avatar in the current deploy.
 
 - Framework: `livekit-agents` + `livekit-plugins-aws` (`aws.realtime.RealtimeModel`
   = Amazon Nova Sonic 2).
-- LiveKit dispatches `entrypoint(ctx)` **once per room**. It:
-    1. `await ctx.connect()`, then `_resolve_user_id()` — waits up to 15 s for the
-       browser participant and reads its `identity` (the verified Cognito `sub`).
-    2. Builds an `AgentSession(llm=RealtimeModel(voice=VOICE_ID),
-tools=[_build_gateway_toolset(user_id)])`.
-    3. `session.start(room, Agent(instructions=persona_prompt))` then
-       `generate_reply(GREETING_INSTRUCTIONS)` so the user is greeted first.
+- LiveKit dispatches `entrypoint(ctx)` **once per room**. It: 1. `await ctx.connect()`, then `_resolve_user_id()` — waits up to 15 s for the
+  browser participant and reads its `identity` (the verified Cognito `sub`). 2. Builds an `AgentSession(llm=RealtimeModel(voice=VOICE_ID),
+tools=[_build_gateway_toolset(user_id)])`. 3. `session.start(room, Agent(instructions=persona_prompt))` then
+  `generate_reply(GREETING_INSTRUCTIONS)` so the user is greeted first.
 - **Gateway toolset**: `_build_gateway_toolset` reads the gateway URL from SSM
   (`/{stack}/gateway_url`) and a fresh **M2M OAuth2 bearer** via
   `utils.auth.get_gateway_access_token`, then connects an MCP `streamable_http`
@@ -315,18 +312,18 @@ prefixed `gateway_…` and namespaced by target (`target___tool`). The avatar's
 known tool set (`GATEWAY_TOOL_NAMES` in `avatar_agent.py`, must stay in sync with
 `toolDefs` in `lib/stacks/backend/index.ts`):
 
-| Tool                                                             | Purpose                                                                                                                                              |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gateway_kb_search`                                              | Hybrid search over the Bedrock Knowledge Base (S3 Vectors, Nova multimodal embeddings). User‑scoped; also reaches the user's prior reports/catalogs. |
-| `gateway_web_search`                                             | Live web grounding (Nova) with citations.                                                                                                            |
-| `gateway_data_sources`                                           | Wikipedia / arXiv lookups.                                                                                                                           |
-| `gateway_pdf_generator`                                          | Generate a PDF report → S3 (presigned URL).                                                                                                          |
-| `gateway_website_generator`                                      | Generate/update a static site (landing/article/menu).                                                                                                |
-| `gateway_extract_pdf_images`                                     | Extract PDF images via AgentCore Code Interpreter.                                                                                                   |
-| `gateway_image_generate` / `_history`                            | Image generation (Stability SD3.5) / session history.                                                                                                |
-| `gateway_save_memory` / `_recall_memories` / `_analyze_patterns` | AgentCore Memory (episodic / semantic / preference).                                                                                                 |
-| `gateway_retrieve_user_profile`                                  | User profile **and the accounts they've opened** (DynamoDB) — the only source for account records.                                                   |
-| `gateway_open_account`                                           | Open an account / enroll after KYC (demo intake).                                                                                                    |
+| Tool                                            | Purpose                                                                                                                                              |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateway_kb_search`                             | Hybrid search over the Bedrock Knowledge Base (S3 Vectors, Nova multimodal embeddings). User‑scoped; also reaches the user's prior reports/catalogs. |
+| `gateway_web_search`                            | Live web grounding (Nova) with citations.                                                                                                            |
+| `gateway_data_sources`                          | Wikipedia / arXiv lookups.                                                                                                                           |
+| `gateway_pdf_generator`                         | Generate a PDF report → S3 (presigned URL).                                                                                                          |
+| `gateway_website_generator`                     | Generate/update a static site (landing/article/menu).                                                                                                |
+| `gateway_extract_pdf_images`                    | Extract PDF images via AgentCore Code Interpreter.                                                                                                   |
+| `gateway_image_generate` / `_history`           | Image generation (Stability SD3.5) / session history.                                                                                                |
+| `gateway_recall_memories` / `_analyze_patterns` | AgentCore Memory (episodic / semantic / preference).                                                                                                 |
+| `gateway_retrieve_user_profile`                 | User profile **and the accounts they've opened** (DynamoDB) — the only source for account records.                                                   |
+| `gateway_open_account`                          | Open an account / enroll after KYC (demo intake).                                                                                                    |
 
 Gateway authenticates agents via **Cognito M2M OAuth2 (client‑credentials)**;
 tokens are fetched per session (`utils.auth.get_gateway_access_token`) and are

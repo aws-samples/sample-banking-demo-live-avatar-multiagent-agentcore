@@ -1,0 +1,14 @@
+{
+    // ts-jest compiles test sources with this config so the suite can import
+    // frontend React components (JSX) and modules that use the "@/" path alias,
+    // without changing the build/CDK tsconfig. Extends the root config for the
+    // shared strictness settings.
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "jsx": "react-jsx",
+        "baseUrl": ".",
+        "paths": {
+            "@/*": ["lib/stacks/frontend/app/src/*"]
+        }
+    }
+}

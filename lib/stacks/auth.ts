@@ -20,7 +20,7 @@ import { Construct } from "constructs";
 // @export {"deleteLines": 1}
 import { FederateUserPool, FederateUserPoolClient } from "../common/constructs/federate";
 import { Stack } from "../common/constructs/stack";
-import { getAdminUserEmail, getStackNameBase } from "../common/feature-flags";
+import { getAdminUserEmail, getFeatureFlags, getStackNameBase } from "../common/feature-flags";
 import { createManagedRules } from "../common/utilities";
 
 interface AuthProps extends StackProps {
@@ -37,6 +37,15 @@ export class Auth extends Stack {
     public readonly regionalWebAclArn: string;
     public readonly machineClient: UserPoolClient;
     public readonly machineClientSecret: Secret;
+    /**
+     * Fraud-agent M2M client (A2A hop, `features.a2a`). A separate
+     * client-credentials app client so the Fraud-Research Agent reaches the
+     * Gateway — and is reached over A2A — as a DISTINCT principal from the
+     * shared machine client, which is what lets Cedar attribute its tool calls
+     * to the fraud agent. Undefined when `features.a2a` is off.
+     */
+    public readonly fraudMachineClient?: UserPoolClient;
+    public readonly fraudMachineClientSecret?: Secret;
 
     constructor(scope: Construct, id: string, props: AuthProps) {
         super(scope, id, props);
@@ -44,6 +53,7 @@ export class Auth extends Stack {
         const { urls, hydrationFunction } = props;
         const stackNameBase = getStackNameBase(this.node);
         const adminUserEmail = getAdminUserEmail(this.node);
+        const features = getFeatureFlags(this.node);
 
         // @export {"replace": "FederateUserPool", "with": "UserPool"}
         const userPool = new FederateUserPool(this, "UserPool", {
@@ -159,6 +169,46 @@ export class Auth extends Stack {
                 reason: "Secret value is a Cognito client secret managed by Cognito, not rotatable via Secrets Manager.",
             },
         ]);
+
+        // ─── Fraud-agent M2M client (A2A hop, feature-gated) ──────────
+        // A dedicated client-credentials client for the Fraud-Research Agent.
+        // It carries the SAME Gateway resource-server scopes as the shared
+        // machine client, but is a distinct app client (distinct `client_id`,
+        // and therefore a distinct Cedar `AgentCore::OAuthUser` principal built
+        // from the token `sub`). That distinctness is what lets the Gateway
+        // Cedar policy deny the fraud agent the write/PII tools while leaving
+        // the account-opening agent's access intact. The backend adds this
+        // client to the Gateway `allowedClients` and to the fraud runtime's
+        // inbound `allowedClients`.
+        if (features.a2a) {
+            const fraudMachineClient = userPool.addClient("FraudMachineClient", {
+                userPoolClientName: `${stackNameBase}-fraud-agent-client`,
+                generateSecret: true,
+                oAuth: {
+                    flows: { clientCredentials: true },
+                    scopes: [
+                        OAuthScope.custom(`${stackNameBase}-gateway/read`),
+                        OAuthScope.custom(`${stackNameBase}-gateway/write`),
+                    ],
+                },
+            });
+            fraudMachineClient.node.addDependency(resourceServer);
+
+            const fraudMachineClientSecret = new Secret(this, "FraudMachineClientSecret", {
+                secretName: `/${stackNameBase}/fraud_agent_client_secret`,
+                description: "Fraud-agent M2M client secret for the distinct A2A Gateway principal",
+                secretStringValue: fraudMachineClient.userPoolClientSecret,
+            });
+            NagSuppressions.addResourceSuppressions(fraudMachineClientSecret, [
+                {
+                    id: "AwsSolutions-SMG4",
+                    reason: "Secret value is a Cognito client secret managed by Cognito, not rotatable via Secrets Manager.",
+                },
+            ]);
+
+            this.fraudMachineClient = fraudMachineClient;
+            this.fraudMachineClientSecret = fraudMachineClientSecret;
+        }
 
         // ─── Cognito Identity Pool (for SigV4 WebSocket auth) ─────────
         const identityPool = new CfnIdentityPool(this, "IdentityPool", {

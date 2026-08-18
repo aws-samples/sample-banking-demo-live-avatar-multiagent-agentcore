@@ -102,6 +102,15 @@ export class ApplicationStage extends Stage {
             // "true" enables it, so a stack without payments never offers the
             // user a spend authorization it cannot honour.
             VITE_PAYMENTS_ENABLED: features.payments ? "true" : "false",
+            // Gates the flow-panel "Fraud Research Agent" A2A node. Only "true"
+            // (the A2A fraud hop is deployed) makes the node render, so a stack
+            // built without the fraud runtime never shows a step that cannot fire.
+            VITE_FRAUD_AGENT_ENABLED: features.a2a ? "true" : "false",
+            // Gates the Prompt Optimization Showcase_Card entry point and the
+            // flow-panel "Prompt Optimization" node. Only "true" (the showcase
+            // is enabled) surfaces the affordances, so a stack built without it
+            // never shows a step the backend will not accept.
+            VITE_PROMPT_OPTIMIZATION_ENABLED: features.prompt_optimization ? "true" : "false",
         };
 
         // this stack must be named FrontendDeployment

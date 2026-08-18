@@ -15,6 +15,10 @@ export default [
             // Local experiment sandbox (gitignored) — not part of the project.
             ".sandbox/**",
             "lib/stacks/frontend/app/**",
+            // TypeScript test suite is type-checked and run via jest/ts-jest
+            // (tsconfig.jest.json) — it imports the ignored frontend app's "@/"
+            // modules and JSX, so the root project service can't resolve it.
+            "test/**",
             // Reference implementation used as the base for the Tavus avatar
             // integration; a separate Next.js/Python project with its own
             // toolchain, not part of this monorepo's build or lint.

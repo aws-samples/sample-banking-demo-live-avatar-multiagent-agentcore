@@ -15,7 +15,8 @@ export type AgentId =
     | "synthesizer"
     | "evaluator"
     | "menu_designer"
-    | "menu_pdf_writer";
+    | "menu_pdf_writer"
+    | "fraud_research";
 
 /** All pipeline phases (research + menu) */
 export type PipelinePhase =
@@ -71,6 +72,49 @@ export type StreamEvent =
           budget: string;
           currency: string;
           sessions: number;
+      }
+    /**
+     * Agent-to-agent (A2A) collaboration step. Emitted by the account-opening
+     * agent when it consults the fraud-research agent over A2A during the
+     * KYC/fraud step. `identityForwarded` reflects that the customer's verified
+     * identity is carried across the hop. Drives the dedicated flow-panel node.
+     */
+    | {
+          type: "a2a_call";
+          agent: AgentId;
+          phase: "collaboration";
+          status: "start" | "end" | "error";
+          identityForwarded: boolean;
+      }
+    /**
+     * Prompt Optimization showcase step. Emitted by the orchestrator's
+     * `optimize_prompt` / `optimize_sample` handlers as the AI Agent's
+     * Current_System_Prompt is optimized toward each verified target model via
+     * Bedrock `OptimizePrompt`. Drives the `PromptOptimizationShowcase` card
+     * (per-model analysis → optimized prompt) and the dedicated flow-panel node.
+     * `targetModelId` is `""` for step-level events (`step_start` /
+     * `step_complete` / `step_failed`) and for before/after `sample` events;
+     * `optimizedForModelId` records the model a prompt was optimized for so the
+     * card can flag a provenance mismatch.
+     */
+    | {
+          type: "prompt_opt";
+          targetModelId: string;
+          modelLabel: string;
+          kind:
+              | "step_start"
+              | "analysis"
+              | "optimized"
+              | "in_progress"
+              | "error"
+              | "invalid_target"
+              | "step_complete"
+              | "step_failed"
+              | "sample"
+              | "sample_error";
+          text: string;
+          variant?: "baseline" | "candidate";
+          optimizedForModelId?: string;
       }
     | { type: "_ui"; component: string; props: Record<string, unknown> };
 

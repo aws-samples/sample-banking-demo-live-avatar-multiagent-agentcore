@@ -130,10 +130,6 @@ gateway_kb_search. Treat it as shared context, not a separate archive.
 - Use when the user asks about previously generated images in this session.
 - Example intents: "Show me my images", "What images have we created?"
 
-### Save Memory (gateway_save_memory)
-- Use when the user explicitly asks you to remember something for future conversations.
-- Example intents: "Remember that I...", "Save this for later", "Keep in mind that..."
-
 ### Recall Memories (gateway_recall_memories)
 - Use when the user asks about something you previously discussed or saved.
 - Example intents: "What do you remember about...", "What did we discuss last time?"

@@ -136,7 +136,6 @@ export const TOOL_SERVICES: Record<string, string[]> = {
     pdf_generator: ["agentcore_gateway", "lambda", "s3", "dynamodb"],
     image_generate: ["agentcore_gateway", "lambda", "bedrock_stability", "s3"],
     image_history: ["agentcore_gateway", "lambda", "s3"],
-    save_memory: ["agentcore_gateway", "lambda", "agentcore_memory"],
     recall_memories: ["agentcore_gateway", "lambda", "agentcore_memory"],
     analyze_patterns: ["agentcore_gateway", "lambda", "agentcore_memory"],
     retrieve_user_profile: ["agentcore_gateway", "lambda", "dynamodb"],

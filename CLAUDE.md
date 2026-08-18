@@ -74,7 +74,6 @@ All Lambda tools: Python 3.13, ARM64, auto-bundled with `requirements.txt` durin
 | `pdf_generator`         | 512 MB | 15 min  | ReportLab PDF generation → S3 presigned URL |
 | `image_generate`        | 512 MB | 5 min   | Image generation via Stability SD3.5        |
 | `image_history`         | 128 MB | 1 min   | Session image history                       |
-| `save_memory`           | 256 MB | 5 min   | Persist to AgentCore Memory                 |
 | `recall_memories`       | 256 MB | 5 min   | Retrieve from AgentCore Memory              |
 | `analyze_patterns`      | 256 MB | 5 min   | Conversation pattern analysis               |
 | `retrieve_user_profile` | 128 MB | 1 min   | DynamoDB customer lookup                    |

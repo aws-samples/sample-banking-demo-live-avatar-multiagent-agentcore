@@ -28,6 +28,7 @@
         "node_modules",
         "cdk.out",
         "lib/stacks/frontend/app",
-        "gartner-ai-appdev-platforms-avatar-tavus"
+        "gartner-ai-appdev-platforms-avatar-tavus",
+        "test"
     ]
 }

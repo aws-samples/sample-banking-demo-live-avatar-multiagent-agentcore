@@ -22,7 +22,6 @@ from tool_guard import USER_SCOPED_TOOLS, UserScopeHook
 REGISTERED_SCOPED_TOOLS = (
     "gateway_kb-search___kb_search",
     "gateway_pdf-generator___pdf_generator",
-    "gateway_save-memory___save_memory",
     "gateway_recall-memories___recall_memories",
     "gateway_analyze-patterns___analyze_patterns",
     "gateway_retrieve-user-profile___retrieve_user_profile",
@@ -48,7 +47,6 @@ def test_user_scoped_tools_covers_all_tenant_sensitive_tools():
     expected = {
         "kb_search",
         "pdf_generator",
-        "save_memory",
         "recall_memories",
         "analyze_patterns",
         "retrieve_user_profile",

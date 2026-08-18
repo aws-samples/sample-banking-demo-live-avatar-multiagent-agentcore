@@ -1,6 +1,6 @@
-import { BaseEdge, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
 
-type Status = "idle" | "active" | "completed";
+type Status = "idle" | "active" | "completed" | "failed";
 
 export function ConciergeEdge({
     id,
@@ -13,8 +13,9 @@ export function ConciergeEdge({
     data,
 }: EdgeProps) {
     const status = ((data?.status as Status) ?? "idle") as Status;
+    const label = typeof data?.label === "string" ? data.label : undefined;
 
-    const [edgePath] = getSmoothStepPath({
+    const [edgePath, labelX, labelY] = getSmoothStepPath({
         sourceX,
         sourceY,
         targetX,
@@ -23,6 +24,19 @@ export function ConciergeEdge({
         targetPosition,
         borderRadius: 12,
     });
+
+    const labelEl = label ? (
+        <EdgeLabelRenderer>
+            <div
+                className="nodrag nopan pointer-events-none absolute rounded border border-slate-600/70 bg-slate-900/90 px-1.5 py-0.5 text-[9px] font-medium text-slate-300 shadow"
+                style={{
+                    transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+                }}
+            >
+                {label}
+            </div>
+        </EdgeLabelRenderer>
+    ) : null;
 
     if (status === "active") {
         const gradId = `concierge-grad-${id}`;
@@ -59,22 +73,26 @@ export function ConciergeEdge({
                     }}
                     className="concierge-edge-flow"
                 />
+                {labelEl}
             </>
         );
     }
 
-    const stroke = status === "completed" ? "#34d399" : "#475569";
-    const width = status === "completed" ? 1.5 : 1.25;
+    const stroke = status === "completed" ? "#34d399" : status === "failed" ? "#f43f5e" : "#475569";
+    const width = status === "completed" || status === "failed" ? 1.5 : 1.25;
 
     return (
-        <BaseEdge
-            id={id}
-            path={edgePath}
-            style={{
-                stroke,
-                strokeWidth: width,
-                transition: "stroke 0.3s ease",
-            }}
-        />
+        <>
+            <BaseEdge
+                id={id}
+                path={edgePath}
+                style={{
+                    stroke,
+                    strokeWidth: width,
+                    transition: "stroke 0.3s ease",
+                }}
+            />
+            {labelEl}
+        </>
     );
 }

@@ -8,6 +8,10 @@ import { useModelSelector } from "@/hooks/useModelSelector";
 import { useChatStore } from "@/stores/chatStore";
 import type { ResearchAction } from "@/stores/chatStore";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
+import {
+    usePromptOptimizationStore,
+    deriveAppliedConfig,
+} from "@/stores/usePromptOptimizationStore";
 import type { EvaluationData } from "@/components/common/evaluation/types";
 import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
 import { normalizeToolName } from "@/components/concierge-flow/flow-types";
@@ -141,6 +145,28 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                 const flowStore = useConciergeFlowStore.getState();
                 flowStore.reset();
                 flowStore.runtimeStart();
+
+                // Apply a presenter-selected Prompt Optimization variant to the
+                // live AI Agent for this session. A Candidate_Variant rides on
+                // each subsequent chatbot request via the existing model_id /
+                // system_prompt_override seams; the Baseline_Variant (or no
+                // selection) keeps the Current_Model + Current_System_Prompt.
+                // The selection lives only in the client store for this browser
+                // session, so it never crosses into another presenter's session.
+                const applied =
+                    requestMode === "chatbot"
+                        ? deriveAppliedConfig(usePromptOptimizationStore.getState().selected)
+                        : { model_id: null, system_prompt_override: null };
+                const appliedExtra: Record<string, unknown> = {};
+                if (applied.system_prompt_override) {
+                    appliedExtra.system_prompt_override = applied.system_prompt_override;
+                }
+                if (applied.model_id) {
+                    // A Candidate_Variant is now applied to a live request —
+                    // mark the prompt-optimization flow node completed (design §8:
+                    // applying a Selected_Variant → completed).
+                    flowStore.promptOptComplete();
+                }
 
                 const updateMessage = (): void => {
                     const content = segments
@@ -347,6 +373,25 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                         .setEvaluation(event.props as unknown as EvaluationData);
                                     // No `break` — render the inline card too.
                                 }
+                                // Prompt Optimization showcase: seed the
+                                // Baseline_Variant prompt into the store so the
+                                // card can show the current configuration, then
+                                // FALL THROUGH so the card mounts inline in the
+                                // chat. The card reads live per-model state from
+                                // the store as prompt_opt events stream.
+                                if (event.component === "PromptOptimizationShowcase") {
+                                    const p = event.props as Record<string, unknown>;
+                                    const baseline =
+                                        (p.baselinePrompt as string) ??
+                                        (p.baseline_prompt as string) ??
+                                        "";
+                                    if (baseline) {
+                                        usePromptOptimizationStore
+                                            .getState()
+                                            .setBaselinePrompt(baseline);
+                                    }
+                                    // No `break` — render the inline card too.
+                                }
                                 const uiKey = `ui-${(event.props.agent as string) || event.component}`;
                                 const existingIdx = segments.findIndex(
                                     (s) => s.type === "ui" && s.key === uiKey
@@ -436,6 +481,43 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                 });
                                 break;
                             }
+                            case "a2a_call": {
+                                // Drive the dedicated A2A flow-panel node through
+                                // its lifecycle (Requirement 9). Imperative store
+                                // access mirrors the other cases — this runs in the
+                                // stream callback, never synchronously in an effect.
+                                const flow = useConciergeFlowStore.getState();
+                                if (event.status === "start") {
+                                    flow.a2aStart(event.identityForwarded);
+                                } else if (event.status === "error") {
+                                    flow.a2aError();
+                                } else {
+                                    flow.a2aEnd();
+                                }
+                                break;
+                            }
+                            case "prompt_opt": {
+                                // Fold per-model optimization and before/after
+                                // sample state into the showcase store, and drive
+                                // the dedicated flow-panel node through its
+                                // lifecycle (design §8). Imperative store access
+                                // mirrors the a2a_call case — this runs inside the
+                                // stream callback, never synchronously in an
+                                // effect body (respecting react-hooks purity).
+                                usePromptOptimizationStore.getState().applyEvent(event);
+                                const flow = useConciergeFlowStore.getState();
+                                if (event.kind === "step_start") {
+                                    flow.promptOptStart();
+                                } else if (event.kind === "step_failed") {
+                                    // Terminal failure: every target model failed.
+                                    flow.promptOptFail();
+                                }
+                                // `step_complete` leaves the node active until a
+                                // Selected_Variant is applied (fold: variant_applied
+                                // → completed); the remaining kinds update only the
+                                // per-model / sample store state above.
+                                break;
+                            }
                             case "stream_error": {
                                 // The orchestrator failed and stopped streaming.
                                 // Close the in-flight phase, surface the reason in
@@ -471,7 +553,13 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                             }
                         }
                     },
-                    { mode: requestMode, modelId, ...depthExtra, ...extra }
+                    {
+                        mode: requestMode,
+                        modelId: applied.model_id ?? modelId,
+                        ...depthExtra,
+                        ...appliedExtra,
+                        ...extra,
+                    }
                 );
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -574,6 +662,9 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
         useChatStore.getState().clearSlot(storeKey);
         useConciergeFlowStore.getState().reset();
         useBrowserLiveViewStore.getState().close();
+        // Drop any applied Prompt Optimization variant so a fresh chat starts
+        // on the Current_Model + Current_System_Prompt (Req 8.3, 13.3).
+        usePromptOptimizationStore.getState().clear();
     }, [storeKey]);
 
     const clearError = useCallback((): void => {

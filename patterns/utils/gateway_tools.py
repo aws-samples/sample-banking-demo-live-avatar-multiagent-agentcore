@@ -35,7 +35,6 @@ USER_SCOPED_TOOLS: frozenset[str] = frozenset(
     {
         "kb_search",
         "pdf_generator",
-        "save_memory",
         "recall_memories",
         "analyze_patterns",
         "retrieve_user_profile",

@@ -23,6 +23,12 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
 from bedrock_agentcore.runtime import BedrockAgentCoreApp, RequestContext
 from botocore.config import Config as BotocoreConfig
 from mcp.client.streamable_http import streamablehttp_client
+from optimize_targets import (
+    SUPPORTED_TARGET_MODELS,
+    build_optimize_request,
+    map_optimize_event,
+    validate_optimize_targets,
+)
 
 # ---------------------------------------------------------------------------
 # Monkey-patch StreamingResponse to inject anti-buffering headers.
@@ -32,14 +38,16 @@ from mcp.client.streamable_http import streamablehttp_client
 # See: https://github.com/aws/bedrock-agentcore-sdk-python/issues/246
 # ---------------------------------------------------------------------------
 from starlette.responses import StreamingResponse as _OriginalStreamingResponse
-from strands import Agent
+from strands import Agent, tool
 from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
+from utils import a2a_client
+from utils.a2a_client import A2AHopError, map_error_to_hop
 from utils.auth import extract_user_id_from_context, get_gateway_access_token
 from utils.model_limits import clamp_max_tokens
 from utils.pipeline_scope import PipelineScopeHook, mode_config
 from utils.ssm import get_ssm_parameter
-from utils.tool_guard import UserScopeHook
+from utils.tool_guard import FraudIdentityHook, UserScopeHook
 
 # Browser tools are feature-gated: CDK sets ENABLE_BROWSER_TOOLS from
 # features.browser in cdk.json. When disabled, the chatbot still runs — it
@@ -67,6 +75,35 @@ else:
     def set_browser_ui_queue(_q) -> None: ...
 
     print("[ORCHESTRATOR] Browser tools: disabled (ENABLE_BROWSER_TOOLS=false)")
+
+# The A2A fraud hop is feature-gated: CDK sets ENABLE_A2A from features.a2a in
+# cdk.json (default on). When disabled, the account-opening agent runs exactly as
+# before — the consult_fraud_research tool is neither exposed nor wired. Log the
+# boot-time decision so it is visible in CloudWatch.
+_ENABLE_A2A = os.environ.get("ENABLE_A2A", "true").lower() == "true"
+print(f"[ORCHESTRATOR] A2A fraud hop: {'enabled' if _ENABLE_A2A else 'disabled (ENABLE_A2A=false)'}")
+
+# The A2A section-researcher fan-out is a separate, higher-risk feature gated by
+# features.a2a_parallel_research (default off). CDK sets ENABLE_A2A_PARALLEL_RESEARCH
+# and hands the orchestrator SECTION_RESEARCHER_RUNTIME_ARN. When off (or the
+# runtime ARN is absent), the researcher phase keeps its proven in-process
+# thread-pool fan-out as the fallback (Req 10.1, 12.2).
+_ENABLE_A2A_PARALLEL_RESEARCH = os.environ.get("ENABLE_A2A_PARALLEL_RESEARCH", "false").lower() == "true"
+print(
+    f"[ORCHESTRATOR] A2A parallel research: "
+    f"{'enabled' if _ENABLE_A2A_PARALLEL_RESEARCH else 'disabled (ENABLE_A2A_PARALLEL_RESEARCH=false)'}"
+)
+
+# The Prompt Optimization showcase is gated by features.prompt_optimization
+# (default off). CDK sets ENABLE_PROMPT_OPTIMIZATION. When disabled, the router
+# does not accept the optimize_prompt / optimize_sample modes — they fall
+# through to the existing default handling — so the AI Agent runs exactly as it
+# does today (Req 1.5, 12.2). Log the boot-time decision for CloudWatch.
+_ENABLE_PROMPT_OPTIMIZATION = os.environ.get("ENABLE_PROMPT_OPTIMIZATION", "false").lower() == "true"
+print(
+    f"[ORCHESTRATOR] Prompt optimization showcase: "
+    f"{'enabled' if _ENABLE_PROMPT_OPTIMIZATION else 'disabled (ENABLE_PROMPT_OPTIMIZATION=false)'}"
+)
 
 _SSE_HEADERS = {
     "X-Accel-Buffering": "no",
@@ -1731,9 +1768,7 @@ def _ensure_source_coverage(plan: dict) -> dict:
             break
         if missing == "kb":
             preferred = [
-                q
-                for q in donors
-                if any(word in str(q.get("question", "")).lower() for word in _KB_AFFINITY_WORDS)
+                q for q in donors if any(word in str(q.get("question", "")).lower() for word in _KB_AFFINITY_WORDS)
             ]
             donors = preferred or donors
         # Pull from the most over-represented lane for a stable, sensible choice.
@@ -1956,6 +1991,49 @@ def _build_model(
         kwargs["temperature"] = temperature
 
     return BedrockModel(**kwargs)
+
+
+def _build_sagemaker_model(endpoint_name: str, temperature: float, max_tokens: int):
+    """Build a Strands SageMakerAIModel for a custom model on a SageMaker endpoint.
+
+    Lazily imports `strands.models.sagemaker` so the default Bedrock path never
+    requires the optional `strands-agents[sagemaker]` extra. The endpoint must
+    serve an OpenAI-compatible chat-completion API (per the Strands SageMaker
+    provider); this is what the customer-facing AI Agent runs on when
+    `features.sagemaker_model` is enabled.
+    """
+    from strands.models.sagemaker import SageMakerAIModel
+
+    region = os.environ.get("SAGEMAKER_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+    print(f"[CHATBOT] Using SageMaker endpoint: {endpoint_name} ({region})")
+    return SageMakerAIModel(
+        endpoint_config={"endpoint_name": endpoint_name, "region_name": region},
+        payload_config={"max_tokens": max_tokens, "temperature": temperature, "stream": True},
+    )
+
+
+def _build_chatbot_model(requested_model: str, temperature: float, guardrail_kwargs: dict):
+    """Return the model backing the customer-facing AI Agent's chatbot turn.
+
+    When `SAGEMAKER_MODEL_ENABLED` is "true", an endpoint name is configured, and
+    the presenter has NOT applied an explicit Bedrock candidate (`requested_model`
+    — e.g. from the prompt-optimization showcase), the agent runs against a custom
+    model hosted on a SageMaker inference endpoint. Otherwise it uses the proven
+    Bedrock path exactly as before.
+
+    Note: Bedrock Guardrails and the OptimizePrompt showcase operate on Bedrock
+    invocations only, so `guardrail_kwargs` is applied to the Bedrock path and
+    does not apply to the SageMaker path.
+    """
+    sagemaker_enabled = os.environ.get("SAGEMAKER_MODEL_ENABLED", "false").lower() == "true"
+    endpoint_name = os.environ.get("SAGEMAKER_ENDPOINT_NAME", "").strip()
+    if sagemaker_enabled and endpoint_name and not requested_model:
+        max_tokens = int(os.environ.get("SAGEMAKER_MAX_TOKENS", "4096"))
+        return _build_sagemaker_model(endpoint_name, temperature=temperature, max_tokens=max_tokens)
+
+    model_id = requested_model or os.environ.get("MODEL_ID", "us.anthropic.claude-sonnet-4-6")
+    print(f"[CHATBOT] Using Bedrock model: {model_id}")
+    return _build_model(model_id, temperature=temperature, guardrail_latest_message=True, **guardrail_kwargs)
 
 
 def _create_gateway_mcp_client(access_token: str, tool_filters: dict | None = None) -> MCPClient:
@@ -2257,6 +2335,7 @@ def _create_agent(
     extra_tools: list | None = None,
     pipeline_scope: PipelineScopeHook | None = None,
     plugins: list | None = None,
+    extra_hooks: list | None = None,
 ) -> Agent:
     """Create a Strands Agent with Gateway MCP + Memory (identical to standalone pattern).
 
@@ -2287,6 +2366,8 @@ def _create_agent(
         hooks.append(UserScopeHook(user_id))
     if pipeline_scope is not None:
         hooks.append(pipeline_scope)
+    if extra_hooks:
+        hooks.extend(extra_hooks)
 
     agent = Agent(
         name=f"{name.title().replace('_', '')}Agent",
@@ -2312,8 +2393,173 @@ def _create_agent(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# A2A fraud hop (account-opening → fraud-research agent)
+# ---------------------------------------------------------------------------
+
+# Appended to the advisor prompt ONLY when the fraud hop is wired (features.a2a
+# on). It tells the model to consult the fraud-research agent at the KYC/fraud
+# step and to halt the account-opening decision if the hop reports an error.
+FRAUD_HOP_PROMPT = """
+
+A2A FRAUD/KYC STEP — MANDATORY WHEN OPENING AN ACCOUNT:
+- Before finalizing any account-opening decision (before or right after calling
+  gateway_open_account), call consult_fraud_research with the synthetic applicant details you
+  have (e.g. applicant name, the product, and any stated attributes) to get an independent
+  fraud/research assessment from the dedicated Fraud & Research Agent.
+- Pass ONLY the applicant details. Do NOT pass any user id, token, sub, or identity field — the
+  customer's verified identity is attached automatically by the platform.
+- Incorporate the returned assessment (assessment, risk_score, signals, rationale) into your
+  decision and briefly reflect the outcome to the user.
+- If the tool returns an error state (a JSON object with an "error" that names the A2A hop),
+  STOP: do not open the account or claim it succeeded. Tell the user the fraud/KYC check could
+  not be completed and the application is on hold pending that step. Never fabricate an
+  assessment or proceed as if the check passed.
+"""
+
+
+def _extract_customer_jwt(context: RequestContext) -> str:
+    """Return the raw customer JWT from the request Authorization header.
+
+    Mirrors the header handling in ``extract_user_id_from_context`` but returns
+    the compact token itself so it can be forwarded verbatim as the A2A
+    ``identity_context`` for the callee to re-verify. The token is never logged.
+    Returns "" when no Authorization header is present, in which case the hop's
+    precondition check surfaces the missing assertion.
+    """
+    request_headers = getattr(context, "request_headers", None)
+    if not request_headers:
+        return ""
+    auth_header = request_headers.get("Authorization")
+    if not auth_header:
+        return ""
+    return auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else auth_header
+
+
+def _a2a_error_state(exc: A2AHopError) -> dict:
+    """Build the tool-result error state for a failed A2A hop.
+
+    Names the A2A hop as the failing step and signals that the dependent
+    account-opening decision must halt (Req 4.4, 4.5, 8.5). Returned to the model
+    (rather than raised) so the advisor can tell the user the check could not be
+    completed instead of the whole turn aborting.
+    """
+    return {
+        "error": "a2a_hop_failed",
+        "step": exc.step,
+        "kind": exc.kind,
+        "halts_decision": exc.halts_decision,
+        "message": (
+            f"The fraud/KYC assessment could not be completed (A2A {exc.kind} failure). "
+            "Do not proceed with the account-opening decision or claim it succeeded."
+        ),
+    }
+
+
+def _start_a2a_child_span(*, user_id: str, session_id: str):
+    """Open the A2A child span for the fraud hop, before any invocation.
+
+    The caller step is attributed to owner ``ai_agent`` and carries the customer
+    ``sub`` so the caller and callee spans land in one trace under one identity.
+    If the trace context cannot be established, raises
+    ``A2AHopError(kind="tracing", halts_decision=True)`` so the dependent decision
+    halts and zero invocations are issued (Req 8.5).
+    """
+    try:
+        from opentelemetry import trace  # noqa: PLC0415 — lazy; OTel ships with Strands
+
+        tracer = trace.get_tracer("orchestrator.a2a")
+        return tracer.start_as_current_span(
+            "a2a.consult_fraud_research",
+            attributes={
+                "a2a.step": "a2a",
+                "a2a.agent": "fraud_research",
+                "a2a.phase": "collaboration",
+                "a2a.owner": "ai_agent",
+                "user.id": user_id,
+                "session.id": session_id or "",
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 — any tracing setup failure halts the hop
+        raise A2AHopError("tracing", f"Could not establish A2A trace context: {exc}", halts_decision=True) from exc
+
+
+def _build_fraud_research_tool(*, user_id: str, customer_jwt: str, session_id: str, emit):
+    """Build the ``consult_fraud_research`` Strands tool for the account-opening path.
+
+    The returned tool closes over the verified customer identity captured at
+    request time (``user_id``/``customer_jwt`` derived server-side from the
+    request JWT), so the identity that crosses the A2A hop never comes from
+    model-produced arguments (Req 5.1, 5.2). The A2A child span is opened before
+    invoking; ``a2a_call`` stream telemetry is emitted at start/end/error; and any
+    A2A failure returns an error state that names the hop and halts the dependent
+    decision (Req 4.3, 4.4, 4.5, 8.5, 9.1).
+
+    Args:
+        user_id: The verified customer ``sub`` (telemetry/logging only).
+        customer_jwt: The verified customer JWT forwarded as ``identity_context``.
+        session_id: The A2A session id for isolation.
+        emit: Callable ``emit(status, *, identity_forwarded, kind=None)`` that
+            pushes an ``a2a_call`` stream event onto the SSE queue.
+    """
+    identity_forwarded = bool(customer_jwt)
+
+    @tool(
+        name="consult_fraud_research",
+        description=(
+            "Consult the dedicated Fraud & Research Agent over A2A for an independent fraud/KYC "
+            "assessment of a synthetic account-opening applicant. Pass ONLY the applicant details "
+            "(the customer's verified identity is attached automatically). Call this before "
+            "finalizing any account-opening decision."
+        ),
+    )
+    def consult_fraud_research(applicant: dict) -> dict:
+        """Delegate to the A2A client, forwarding the verified customer identity."""
+        emit("start", identity_forwarded=identity_forwarded)
+
+        # Open the A2A child span BEFORE invoking. A tracing failure halts the
+        # decision and issues zero invocations (Req 8.5).
+        try:
+            span_cm = _start_a2a_child_span(user_id=user_id, session_id=session_id)
+        except A2AHopError as exc:
+            logger.warning("A2A tracing precondition failed: %s", exc.detail)
+            emit("error", identity_forwarded=identity_forwarded, kind=exc.kind)
+            return _a2a_error_state(exc)
+
+        try:
+            with span_cm:
+                assessment = asyncio.run(
+                    a2a_client.consult_fraud_research(
+                        applicant if isinstance(applicant, dict) else {"applicant": applicant},
+                        user_id=user_id,
+                        customer_jwt=customer_jwt,
+                        session_id=session_id or None,
+                    )
+                )
+        except A2AHopError as exc:
+            logger.warning("A2A fraud hop failed [%s]: %s", exc.kind, exc.detail)
+            emit("error", identity_forwarded=identity_forwarded, kind=exc.kind)
+            return _a2a_error_state(exc)
+        except Exception as exc:  # noqa: BLE001 — funnel any stray failure through the hop error
+            hop = map_error_to_hop(exc)
+            logger.warning("A2A fraud hop failed [%s]: %s", hop.kind, hop.detail)
+            emit("error", identity_forwarded=identity_forwarded, kind=hop.kind)
+            return _a2a_error_state(hop)
+
+        emit("end", identity_forwarded=identity_forwarded)
+        return assessment
+
+    return consult_fraud_research
+
+
 async def _handle_chatbot(
-    query, user_id, session_id, requested_model="", system_prompt_override=None, mode: str = "chatbot"
+    query,
+    user_id,
+    session_id,
+    requested_model="",
+    system_prompt_override=None,
+    mode: str = "chatbot",
+    customer_jwt: str = "",
 ):
     """Handle chatbot mode — streams text, tool calls, and thinking in real time.
 
@@ -2336,10 +2582,11 @@ async def _handle_chatbot(
         access_token = get_gateway_access_token()
         gateway_client = _create_gateway_mcp_client(access_token)
 
-        model_id = requested_model or os.environ.get("MODEL_ID", "us.anthropic.claude-sonnet-4-6")
-        print(f"[CHATBOT] Using model: {model_id}")
         guardrail_kwargs = _load_guardrail_params()
-        bedrock_model = _build_model(model_id, temperature=0.3, guardrail_latest_message=True, **guardrail_kwargs)
+        # Bedrock by default; a custom SageMaker-hosted model when
+        # features.sagemaker_model is enabled for this runtime (Bedrock
+        # guardrails do not apply to the SageMaker path — see _build_chatbot_model).
+        bedrock_model = _build_chatbot_model(requested_model, temperature=0.3, guardrail_kwargs=guardrail_kwargs)
     except Exception as e:
         print(f"[CHATBOT] Setup failed: {e}")
         traceback.print_exc()
@@ -2470,6 +2717,38 @@ async def _handle_chatbot(
     # browser usage, so we don't attach the tools there either.
     browser_tools = BROWSER_TOOLS if mode == "chatbot" else []
 
+    # A2A fraud hop — wired only for the account-opening / client-advisor path
+    # (mode="chatbot") and only when features.a2a is on. The customer identity is
+    # captured server-side here (verified user_id + raw JWT from the request
+    # context) so the tool closes over it, and a FraudIdentityHook strips any
+    # model-supplied identity args before dispatch (Req 5.1, 5.2).
+    extra_tools = list(browser_tools)
+    extra_hooks: list = []
+    if mode == "chatbot" and _ENABLE_A2A:
+
+        def _emit_a2a(status: str, *, identity_forwarded: bool, kind: str | None = None) -> None:
+            a2a_event: dict = {
+                "agent": "fraud_research",
+                "phase": "collaboration",
+                "status": status,
+                "identity_forwarded": identity_forwarded,
+            }
+            if kind is not None:
+                a2a_event["kind"] = kind
+            tq.put(("stream", {"a2a_call": a2a_event}))
+
+        extra_tools.append(
+            _build_fraud_research_tool(
+                user_id=user_id,
+                customer_jwt=customer_jwt,
+                session_id=session_id,
+                emit=_emit_a2a,
+            )
+        )
+        extra_hooks.append(FraudIdentityHook())
+        chatbot_prompt = chatbot_prompt + FRAUD_HOP_PROMPT
+        print("[CHATBOT] A2A fraud hop tool wired (features.a2a on)")
+
     try:
         agent = _create_agent(
             "chatbot",
@@ -2478,8 +2757,9 @@ async def _handle_chatbot(
             session_id,
             gateway_client,
             bedrock_model,
-            extra_tools=browser_tools,
+            extra_tools=extra_tools,
             pipeline_scope=_pipeline_scope,
+            extra_hooks=extra_hooks,
         )
         # Attach our streaming callback handler
         agent.callback_handler = _callback_handler
@@ -2549,6 +2829,205 @@ async def _handle_chatbot(
             set_browser_ui_queue(None)
 
     yield {"result": {"stop_reason": "end_turn"}}
+
+
+# Human label for the Baseline_Variant model (the AI Agent's current default,
+# an inference profile that is never itself an optimize target — Req 2.4, 4.4).
+_CURRENT_MODEL_LABEL = "Claude Sonnet 4.6 (current)"
+
+
+def _optimize_error_reason(exc: Exception) -> str:
+    """Extract a short, non-sensitive reason string from a Bedrock error.
+
+    Prefers the botocore error message when present; falls back to the class
+    name. Never includes credentials or request internals (Req: do not log
+    secrets).
+    """
+    response = getattr(exc, "response", None)
+    if isinstance(response, dict):
+        message = response.get("Error", {}).get("Message")
+        if message:
+            return str(message)
+    text = str(exc).strip()
+    return text or exc.__class__.__name__
+
+
+def _is_validation_exception(exc: Exception) -> bool:
+    """True when a Bedrock error is a ValidationException (an invalid target).
+
+    Recognizes both a botocore `ClientError` whose error code is
+    `ValidationException` and any exception class named `ValidationException`
+    (the client-specific modeled exception).
+    """
+    response = getattr(exc, "response", None)
+    if isinstance(response, dict) and response.get("Error", {}).get("Code") == "ValidationException":
+        return True
+    return exc.__class__.__name__ == "ValidationException"
+
+
+async def _handle_optimize_prompt(user_id, session_id, prompt_text: str | None = None):
+    """Stream Bedrock Prompt Optimization for the AI Agent's current prompt.
+
+    Async generator, same shape as `_handle_chatbot` — yields SSE-ready dicts.
+    Takes the Current_System_Prompt (`CHATBOT_PROMPT` by default; the client
+    never supplies prompt content — Req 1.1, 13.1) and, for each supported
+    target foundation model, streams the `OptimizePrompt` analysis then the
+    model-tailored optimized prompt as `prompt_opt` events. A per-model
+    try/except isolates failures so one target's error never aborts the others
+    (Req 10.1, 10.2, 10.4).
+    """
+    prompt_text = prompt_text if prompt_text is not None else CHATBOT_PROMPT
+
+    print(f"[OPTIMIZE] Starting prompt optimization for user: {user_id}, session: {session_id}")
+
+    # Mount the Showcase_Card with the Baseline_Variant prompt (Req 4.1) and
+    # open the flow-panel step (Req 9.1, 9.2).
+    yield {
+        "_ui": {
+            "component": "PromptOptimizationShowcase",
+            "props": {
+                "baselinePrompt": prompt_text,
+                "baselineModelLabel": _CURRENT_MODEL_LABEL,
+            },
+        }
+    }
+    yield {"prompt_opt": {"kind": "step_start", "target_model_id": "", "model_label": "", "text": ""}}
+
+    # Validate the fixed supported targets. In practice all three are valid
+    # foundation-model ids, but handle drops generically (Req 2.2, 10.3).
+    validation = validate_optimize_targets([tm.optimize_target_id for tm in SUPPORTED_TARGET_MODELS])
+    for dropped in validation.invalid:
+        yield {
+            "prompt_opt": {
+                "kind": "invalid_target",
+                "target_model_id": dropped.id,
+                "model_label": "",
+                "text": dropped.reason,
+            }
+        }
+
+    region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION") or "us-east-1"
+    any_optimized = False
+
+    for tm in validation.submit:
+        try:
+            import boto3
+
+            client = boto3.client("bedrock-agent-runtime", region_name=region)
+            response = client.optimize_prompt(**build_optimize_request(prompt_text, tm))
+            for item in response["optimizedPrompt"]:
+                mapped = map_optimize_event(item, tm.optimize_target_id, tm.label)
+                if mapped is not None:
+                    if mapped.get("kind") == "optimized":
+                        any_optimized = True
+                    yield {"prompt_opt": mapped}
+        except Exception as exc:  # noqa: BLE001 — isolate this model, continue to the next
+            if _is_validation_exception(exc):
+                print(f"[OPTIMIZE] Invalid target {tm.optimize_target_id}: {exc.__class__.__name__}")
+                yield {
+                    "prompt_opt": {
+                        "kind": "invalid_target",
+                        "target_model_id": tm.optimize_target_id,
+                        "model_label": tm.label,
+                        "text": _optimize_error_reason(exc),
+                    }
+                }
+            else:
+                print(f"[OPTIMIZE] Error optimizing for {tm.optimize_target_id}: {exc.__class__.__name__}")
+                yield {
+                    "prompt_opt": {
+                        "kind": "error",
+                        "target_model_id": tm.optimize_target_id,
+                        "model_label": tm.label,
+                        "text": _optimize_error_reason(exc),
+                    }
+                }
+            continue
+
+    # Terminal flow event: complete when any model produced an optimized prompt,
+    # failed when none did (Req 9.3, 9.4).
+    if any_optimized:
+        yield {"prompt_opt": {"kind": "step_complete", "target_model_id": "", "model_label": "", "text": ""}}
+    else:
+        yield {"prompt_opt": {"kind": "step_failed", "target_model_id": "", "model_label": "", "text": ""}}
+
+
+async def _handle_optimize_sample(
+    sample_question,
+    user_id,
+    session_id,
+    candidate_invoke_id: str,
+    candidate_prompt: str,
+    candidate_label: str,
+):
+    """Run one synthetic Sample_Question through the Baseline then the Candidate.
+
+    Async generator that reuses `_handle_chatbot` twice — the ONLY model-
+    invocation seam this feature uses (Req 13.2) — so both answers are produced
+    by a live model invocation, not a stored/fabricated one (Req 7.4):
+
+    - Baseline: the Current_Model with no `system_prompt_override`
+      (`requested_model=""` → the runtime default), tagged `variant="baseline"`
+      with the Baseline Provenance_Label (Req 7.1, 7.5).
+    - Candidate: the chosen candidate's `invoke_id` as `requested_model` and its
+      Optimized_Prompt as `system_prompt_override`, tagged `variant="candidate"`
+      with the Candidate Provenance_Label (Req 7.2, 7.5).
+
+    Each run is isolated in its own `try/except`: a failure on one side emits a
+    `sample_error` for that variant while the other side still runs and streams
+    (Req 7.6). Only the underlying agent's text `data` events are translated into
+    `sample` events; non-text events are ignored — the goal is the answer text
+    per side. Throwaway `session_id` suffixes keep the comparison out of the live
+    conversation memory; the Sample_Question is synthetic (Req 12.4).
+    """
+    baseline_label = f"{_CURRENT_MODEL_LABEL} · current prompt"
+
+    async def _run_variant(variant, model_label, requested_model, system_prompt_override, sub_session_id):
+        try:
+            async for event in _handle_chatbot(
+                sample_question,
+                user_id,
+                sub_session_id,
+                requested_model=requested_model,
+                system_prompt_override=system_prompt_override,
+                mode="chatbot",
+            ):
+                if not isinstance(event, dict):
+                    continue
+                text = event.get("data")
+                # Only surface real answer text — skip heartbeats and any
+                # non-text event (tool calls, thinking, message, result).
+                if text and not event.get("heartbeat"):
+                    yield {
+                        "prompt_opt": {
+                            "kind": "sample",
+                            "variant": variant,
+                            "target_model_id": "",
+                            "model_label": model_label,
+                            "text": text,
+                        }
+                    }
+        except Exception as exc:  # noqa: BLE001 — isolate this side; still run the other
+            print(f"[OPTIMIZE_SAMPLE] {variant} run failed: {exc.__class__.__name__}")
+            yield {
+                "prompt_opt": {
+                    "kind": "sample_error",
+                    "variant": variant,
+                    "target_model_id": "",
+                    "model_label": model_label,
+                    "text": _optimize_error_reason(exc),
+                }
+            }
+
+    # Baseline: Current_Model, no prompt override.
+    async for event in _run_variant("baseline", baseline_label, "", None, f"{session_id}-optbase"):
+        yield event
+
+    # Candidate: the chosen candidate's invoke_id + its Optimized_Prompt.
+    async for event in _run_variant(
+        "candidate", candidate_label, candidate_invoke_id, candidate_prompt, f"{session_id}-optcand"
+    ):
+        yield event
 
 
 async def _run_plan_only(query, user_id, session_id, requested_model="", research_depth="standard", mode: str = ""):
@@ -2788,6 +3267,14 @@ async def orchestrate(payload: dict, context: RequestContext):
         yield {"status": "error", "error": str(e)}
         return
 
+    # Capture the raw customer JWT server-side (never logged) so the fraud hop can
+    # forward the verified identity as the A2A identity_context. Best-effort: a
+    # missing assertion surfaces at the hop's precondition check, not here.
+    try:
+        customer_jwt = _extract_customer_jwt(context)
+    except Exception:  # noqa: BLE001 — identity forwarding is best-effort
+        customer_jwt = ""
+
     # ── Archive chat mode: KB search across all research reports ──
     if mode == "archive_chat":
         async for event in _handle_chatbot(
@@ -2803,7 +3290,42 @@ async def orchestrate(payload: dict, context: RequestContext):
 
     # ── Chatbot mode: single conversational agent ──
     if mode == "chatbot":
-        async for event in _handle_chatbot(query, user_id, session_id, requested_model, mode="chatbot"):
+        # An applied Candidate_Variant reaches the live agent purely through the
+        # existing per-request seams: `model_id` → `requested_model` (already
+        # mapped above) and `system_prompt_override` forwarded here (Req 8.1,
+        # 8.2, 8.3, 13.2). Baseline sends neither, so this is a no-op for it.
+        system_prompt_override = payload.get("system_prompt_override") or None
+        async for event in _handle_chatbot(
+            query,
+            user_id,
+            session_id,
+            requested_model,
+            system_prompt_override=system_prompt_override,
+            mode="chatbot",
+            customer_jwt=customer_jwt,
+        ):
+            yield event
+        return
+
+    # ── Prompt Optimization showcase (flag-gated) ──
+    #
+    # Both modes are accepted only when features.prompt_optimization is on. When
+    # off they fall through to the existing default handling below, so the AI
+    # Agent behaves exactly as it does without this feature (Req 1.5, 12.2).
+    if _ENABLE_PROMPT_OPTIMIZATION and mode == "optimize_prompt":
+        async for event in _handle_optimize_prompt(user_id, session_id):
+            yield event
+        return
+
+    if _ENABLE_PROMPT_OPTIMIZATION and mode == "optimize_sample":
+        async for event in _handle_optimize_sample(
+            query,
+            user_id,
+            session_id,
+            candidate_invoke_id=payload.get("candidate_model_id", ""),
+            candidate_prompt=payload.get("candidate_prompt", ""),
+            candidate_label=payload.get("candidate_label", ""),
+        ):
             yield event
         return
 
@@ -2836,6 +3358,7 @@ async def orchestrate(payload: dict, context: RequestContext):
             initial_accumulated=initial_accumulated,
             mode="generic_research_execute",
             payment_budget_usd=payment_budget_usd,
+            customer_jwt=customer_jwt,
         ):
             yield event
         return
@@ -2867,6 +3390,7 @@ async def orchestrate(payload: dict, context: RequestContext):
             initial_accumulated=initial_accumulated,
             mode="research_execute",
             payment_budget_usd=payment_budget_usd,
+            customer_jwt=customer_jwt,
         ):
             yield event
         return
@@ -2927,6 +3451,7 @@ async def orchestrate(payload: dict, context: RequestContext):
         requested_model,
         mode=mode,
         pinned_report_ids=pinned,
+        customer_jwt=customer_jwt,
     ):
         yield event
 
@@ -3183,7 +3708,6 @@ def _tool_action_label(tool_name: str) -> str:
         ("website_generator", "Building the site"),
         ("extract_pdf_images", "Extracting PDF images"),
         ("recall_memories", "Recalling prior context"),
-        ("save_memory", "Saving context"),
         ("retrieve_user_profile", "Loading the client profile"),
     ):
         if fragment in name:
@@ -3357,6 +3881,422 @@ def _merge_research_findings(payloads: list[str]) -> str:
     return json.dumps(merged)
 
 
+# ---------------------------------------------------------------------------
+# Section-researcher A2A fan-out (Requirement 10, gated by
+# features.a2a_parallel_research → ENABLE_A2A_PARALLEL_RESEARCH).
+#
+# When the flag is on AND a section-researcher runtime ARN is configured, the
+# researcher fan-out replaces its in-process sub-agent workers with A2A
+# invocations to a dedicated section-researcher runtime, forwarding the same
+# customer identity_context. Everything else is preserved so the merge and
+# telemetry are unchanged and the flag-off path stays the proven fallback:
+# the round-robin sharding (`_shard_round_robin`), the per-worker researcher
+# JSON result shape, `_merge_research_findings`, per-section-failure-continue,
+# and the two-tier watchdog (WORKER_IDLE_TIMEOUT_SEC idle +
+# PARALLEL_PHASE_WALL_CLOCK_SEC wall clock).
+#
+# The pure seams below (`require_concurrency`, `_create_section_tasks`,
+# `dispatch_sections_concurrently`) isolate the concurrency-required check and
+# the concurrent dispatch so they can be driven by tests with the A2A client
+# mocked (task 16), independent of the network and the streaming generator.
+# ---------------------------------------------------------------------------
+
+# Minimum number of section invocations that must be able to overlap for the
+# A2A fan-out to run at all (Req 10.3).
+_MIN_CONCURRENCY = 2
+
+
+class ConcurrencyUnavailableError(RuntimeError):
+    """The runtime cannot run the section A2A invocations concurrently.
+
+    Per Requirement 10.6 the orchestrator MUST fail rather than fall back to
+    invoking the section researchers one at a time. Raised by
+    :func:`require_concurrency` before any invocation is issued, so a missing
+    concurrency primitive never silently degrades to sequential execution
+    (Property 15).
+    """
+
+
+def _default_concurrency_capacity() -> int:
+    """Best-effort probe of how many section invocations can truly overlap.
+
+    A running asyncio event loop schedules the I/O-bound A2A calls concurrently;
+    the loop's default thread-pool executor bounds any synchronous work. Returns
+    0 when there is no running loop (no concurrency primitive at all), otherwise
+    the executor's worker count — defaulting to the standard ThreadPoolExecutor
+    sizing (``min(32, cpu_count + 4)``, always >= 2 on a real deployment) when no
+    executor has been instantiated yet.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return 0
+    executor = getattr(loop, "_default_executor", None)
+    max_workers = getattr(executor, "_max_workers", None)
+    if isinstance(max_workers, int) and max_workers > 0:
+        return max_workers
+    return min(32, (os.cpu_count() or 1) + 4)
+
+
+def require_concurrency(capacity: int, *, needed: int = _MIN_CONCURRENCY) -> None:
+    """Assert the runtime can overlap at least ``needed`` invocations.
+
+    Raises:
+        ConcurrencyUnavailableError: If ``capacity < needed`` — the fan-out must
+            fail rather than degrade to sequential (Req 10.6 / Property 15).
+    """
+    if capacity < needed:
+        raise ConcurrencyUnavailableError(
+            f"Section-researcher A2A fan-out requires concurrent execution "
+            f"(capacity >= {needed}) but only {capacity} is available; refusing "
+            f"to degrade to sequential execution (Req 10.6)."
+        )
+
+
+def _section_a2a_enabled() -> bool:
+    """True when the section-researcher A2A path should replace the in-process one.
+
+    Gated on the feature flag (ENABLE_A2A_PARALLEL_RESEARCH) AND a configured
+    section-researcher runtime ARN, so the proven in-process fan-out remains the
+    fallback whenever the flag is off or the runtime is not deployed (Req 10.1,
+    12.2).
+    """
+    return _ENABLE_A2A_PARALLEL_RESEARCH and bool(os.environ.get("SECTION_RESEARCHER_RUNTIME_ARN"))
+
+
+def _create_section_tasks(shards: list[list[str]], invoke_section):  # noqa: ANN001 - async callable
+    """Schedule one A2A invocation per shard, dispatched before any is awaited.
+
+    Creating every task up front is what makes the invocations overlap rather
+    than run one at a time — the awaiting happens afterwards (Req 10.3 /
+    Property 13). Returns a ``{task: shard_index}`` mapping.
+    """
+    return {asyncio.ensure_future(invoke_section(shard, index)): index for index, shard in enumerate(shards)}
+
+
+async def dispatch_sections_concurrently(
+    shards: list[list[str]],
+    invoke_section,  # noqa: ANN001 - async callable (shard, index) -> str
+    *,
+    concurrency_provider=_default_concurrency_capacity,  # noqa: ANN001
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Fan out one section A2A invocation per shard, concurrently.
+
+    The pure dispatcher seam behind the researcher A2A branch. It:
+
+    * requires true concurrency and raises :class:`ConcurrencyUnavailableError`
+      (issuing zero invocations) when the primitive is unavailable, never
+      degrading to sequential (Req 10.6 / Property 15);
+    * dispatches ALL invocations before awaiting any (Req 10.3 / Property 13);
+    * collects each section's result and continues past a per-section failure,
+      so no single failure aborts the rest (Req 10.5 / Property 14).
+
+    Args:
+        shards: The per-section sub-question lists (one invocation per shard).
+        invoke_section: Async callable ``(shard, index) -> str`` returning that
+            section's researcher JSON payload. Injected so tests can drive it
+            with the A2A client mocked.
+        concurrency_provider: Returns the available concurrency capacity;
+            injected so tests can simulate an unavailable primitive.
+
+    Returns:
+        ``(results_by_index, errors_by_index)`` — the successful section payloads
+        keyed by shard index, and the failure details keyed by shard index.
+    """
+    require_concurrency(concurrency_provider())
+
+    tasks = _create_section_tasks(shards, invoke_section)
+
+    results: dict[int, str] = {}
+    errors: dict[int, str] = {}
+    for task, index in tasks.items():
+        try:
+            results[index] = await task
+        except Exception as exc:  # noqa: BLE001 — per-section-failure-continue (Req 10.5)
+            errors[index] = str(exc)
+    return results, errors
+
+
+def _section_a2a_prompt(shard: list[str], section_no: int, total: int) -> str:
+    """Instruction text for one section-researcher A2A invocation.
+
+    Carries this section's sub-questions and asks the callee to return the same
+    per-worker researcher JSON shape the merge already consumes, so
+    `_merge_research_findings` is unchanged.
+    """
+    assigned = "\n".join(f"  {i + 1}. {q}" for i, q in enumerate(shard))
+    return (
+        f"You are section {section_no} of {total} in a parallel research fan-out. "
+        f"Research ONLY the sub-question(s) below and return the researcher JSON "
+        f"document (questions_researched, meta_analysis, key_insights, citations, "
+        f"images, paid_sources).\n\nYOUR ASSIGNED SUB-QUESTIONS:\n{assigned}"
+    )
+
+
+def _build_section_a2a_invoker(
+    *,
+    customer_jwt: str,
+    session_id: str,
+    card,  # noqa: ANN001 - a2a_client.AgentCard
+    bearer: str,
+    total: int,
+    region: str | None = None,
+    agent_factory=None,  # noqa: ANN001
+):
+    """Build an async ``invoke(shard, index) -> str`` that runs one section over A2A.
+
+    Closes over a single discovered card + machine bearer so every shard shares
+    one discovery and forwards the same customer ``identity_context``. Returns
+    the section's researcher JSON string (the existing per-worker shape) so the
+    merge is unchanged.
+    """
+    import json as _json  # noqa: PLC0415
+    import uuid as _uuid  # noqa: PLC0415
+
+    from utils.identity_context import build_identity_context  # noqa: PLC0415
+
+    identity_context = build_identity_context(customer_jwt)
+
+    async def _invoke(shard: list[str], index: int) -> str:
+        message = {
+            "role": "user",
+            "parts": [{"kind": "text", "text": _section_a2a_prompt(shard, index + 1, total)}],
+            "messageId": str(_uuid.uuid4()),
+        }
+        result = await a2a_client.invoke_a2a(
+            card,
+            message,
+            bearer=bearer,
+            identity_context=identity_context,
+            session_id=f"{session_id}-p{index}" if session_id else None,
+            agent_factory=agent_factory,
+        )
+        return _json.dumps(result.data) if result.data is not None else result.text
+
+    return _invoke
+
+
+async def _run_parallel_research_a2a(
+    phase: dict,
+    shards: list[list[str]],
+    *,
+    query: str,
+    accumulated: str,
+    user_id: str,
+    customer_jwt: str,
+    session_id: str,
+    region: str | None = None,
+    invoke_section=None,  # noqa: ANN001 - injectable async callable for tests
+    concurrency_provider=_default_concurrency_capacity,  # noqa: ANN001
+    runtime_arn: str | None = None,
+    bearer: str | None = None,
+    agent_factory=None,  # noqa: ANN001
+):
+    """Run the researcher phase as concurrent A2A section invocations.
+
+    Async generator yielding the same event shapes as the in-process fan-out
+    (`thinking`/`_ui`/`phase_progress`/heartbeats) plus `a2a_call` collaboration
+    telemetry, finishing with a terminal ``{"__result__": merged_json}``. The
+    two-tier watchdog (idle + wall clock) wraps the dispatch, per-section
+    failures are reported and merged around (Req 10.5), and true concurrency is
+    required before any invocation (Req 10.6) — a missing concurrency primitive
+    raises :class:`ConcurrencyUnavailableError` and never degrades to sequential.
+    """
+    agent_name = phase["name"]
+    role = phase["role"]
+    messages = phase["messages"]
+    estimated_duration = phase["estimated_duration"]
+    worker_count = len(shards)
+
+    yield {
+        "thinking": {
+            "agent": agent_name,
+            "content": (
+                f"Dispatching {worker_count} research sections over A2A to the "
+                f"section-researcher agent, one invocation each."
+            ),
+        }
+    }
+    for i, shard in enumerate(shards):
+        yield {
+            "thinking": {
+                "agent": agent_name,
+                "content": "Section {} of {} will investigate:\n{}".format(
+                    i + 1, worker_count, "\n".join(f"- {q}" for q in shard)
+                ),
+            }
+        }
+
+    # Build the real invoker (discovery happens here, strictly before invoke —
+    # Req 3.1 carries over). Tests inject `invoke_section` and skip discovery.
+    if invoke_section is None:
+        resolved_arn = runtime_arn or os.environ.get("SECTION_RESEARCHER_RUNTIME_ARN")
+        if not resolved_arn:
+            # Precondition failure — fall back to the in-process path rather than
+            # blocking research (this is not a concurrency-primitive failure).
+            yield {"__fallback__": True}
+            return
+        resolved_bearer = bearer or a2a_client.resolve_caller_bearer()
+        card = await a2a_client.fetch_agent_card(
+            resolved_arn, resolved_bearer, region=region, agent_factory=agent_factory
+        )
+        invoke_section = _build_section_a2a_invoker(
+            customer_jwt=customer_jwt,
+            session_id=session_id,
+            card=card,
+            bearer=resolved_bearer,
+            total=worker_count,
+            region=region,
+            agent_factory=agent_factory,
+        )
+
+    # True concurrency required BEFORE any invocation (Req 10.6). Propagates
+    # ConcurrencyUnavailableError — the caller must NOT degrade to sequential.
+    require_concurrency(concurrency_provider())
+
+    identity_forwarded = bool(customer_jwt)
+    yield {
+        "a2a_call": {
+            "agent": "section_researcher",
+            "phase": "collaboration",
+            "status": "start",
+            "identity_forwarded": identity_forwarded,
+        }
+    }
+
+    # Dispatch ALL invocations before awaiting any (Req 10.3 / Property 13).
+    start_time = time.monotonic()
+    last_progress = start_time
+    tasks = _create_section_tasks(shards, invoke_section)
+    task_index = dict(tasks)
+    pending = set(tasks)
+    results: dict[int, str] = {}
+    errors: dict[int, str] = {}
+    timed_out = False
+    tick = 0
+
+    try:
+        while pending:
+            now = time.monotonic()
+            if now - start_time > PARALLEL_PHASE_WALL_CLOCK_SEC:
+                print(
+                    f"[ORCHESTRATOR] A2A parallel research hit the "
+                    f"{PARALLEL_PHASE_WALL_CLOCK_SEC}s wall-clock cap with "
+                    f"{len(results)}/{worker_count} sections done — proceeding with partial results"
+                )
+                timed_out = True
+                break
+            if now - last_progress > WORKER_IDLE_TIMEOUT_SEC:
+                print(
+                    f"[ORCHESTRATOR] A2A parallel research idle for "
+                    f"{WORKER_IDLE_TIMEOUT_SEC}s with {len(results)}/{worker_count} sections done "
+                    f"— abandoning wedged section(s)"
+                )
+                timed_out = True
+                break
+
+            done, pending = await asyncio.wait(pending, timeout=10.0, return_when=asyncio.FIRST_COMPLETED)
+
+            elapsed = time.monotonic() - start_time
+            settled = len(results) + len(errors) + len(done)
+            if elapsed <= estimated_duration:
+                time_progress = int((elapsed / estimated_duration) * 90)
+            else:
+                overtime = (elapsed - estimated_duration) / estimated_duration
+                time_progress = 90 + int(9 * (overtime / (overtime + 1)))
+            done_progress = int((settled / worker_count) * 95)
+            progress = min(99, max(time_progress, done_progress))
+
+            if not done:
+                # No section completed within the heartbeat window — keep the UI
+                # alive without resetting the idle watchdog.
+                tick += 1
+                yield {"data": "", "heartbeat": True}
+                yield {
+                    "_ui": {
+                        "component": "AgentActivity",
+                        "props": {
+                            "agent": agent_name,
+                            "phase": role,
+                            "progress": progress,
+                            "activity": (
+                                f"{messages[tick % len(messages)]} ({len(pending)} of {worker_count} sections running)"
+                            ),
+                            "elapsed": round(elapsed),
+                            "done": False,
+                        },
+                    }
+                }
+                yield {"phase_progress": {"phase": role, "progress": progress}}
+                continue
+
+            # A section settled: real progress, so reset the idle watchdog.
+            last_progress = time.monotonic()
+            for task in done:
+                index = task_index[task]
+                try:
+                    results[index] = task.result()
+                except Exception as exc:  # noqa: BLE001 — per-section-failure-continue (Req 10.5)
+                    errors[index] = str(exc)
+                yield {
+                    "thinking": {
+                        "agent": agent_name,
+                        "content": _summarize_worker_findings(
+                            results.get(index, ""), index, worker_count, shards[index]
+                        )
+                        if index not in errors
+                        else f"Section {index + 1} of {worker_count} failed: {str(errors[index])[:200]}",
+                    }
+                }
+            yield {"phase_progress": {"phase": role, "progress": progress}}
+    finally:
+        for task in pending:
+            task.cancel()
+
+    # Record any section that never reported back as a timeout, so the notice
+    # and the merge treat it the same as an explicit failure.
+    if timed_out:
+        for i in range(worker_count):
+            if i not in results and i not in errors:
+                errors[i] = f"timed out (no result after {WORKER_IDLE_TIMEOUT_SEC}s idle)"
+
+    if not results:
+        yield {
+            "a2a_call": {
+                "agent": "section_researcher",
+                "phase": "collaboration",
+                "status": "error",
+                "identity_forwarded": identity_forwarded,
+            }
+        }
+        detail = "; ".join(errors.values()) or "no section produced output"
+        raise RuntimeError(f"All {worker_count} section-researcher A2A invocations failed: {detail}")
+
+    if errors:
+        yield {
+            "thinking": {
+                "agent": agent_name,
+                "content": (
+                    f"{len(errors)} of {worker_count} sections did not finish "
+                    f"({'timed out' if timed_out else 'failed'}); merging the "
+                    f"{len(results)} that completed so the report still ships."
+                ),
+            }
+        }
+
+    yield {
+        "a2a_call": {
+            "agent": "section_researcher",
+            "phase": "collaboration",
+            "status": "end",
+            "identity_forwarded": identity_forwarded,
+        }
+    }
+
+    ordered = [results[i] for i in sorted(results)]
+    yield {"__result__": _merge_research_findings(ordered)}
+
+
 async def _run_parallel_research(
     phase: dict,
     accumulated: str,
@@ -3367,6 +4307,7 @@ async def _run_parallel_research(
     pipeline_scope,  # noqa: ANN001 - PipelineScopeHook
     access_token: str,
     payment_budget_usd: str = "",
+    customer_jwt: str = "",
 ):
     """Run the researcher phase as concurrent shard workers.
 
@@ -3398,6 +4339,28 @@ async def _run_parallel_research(
     worker_count = len(shards)
     if worker_count < 2:
         yield {"__fallback__": True}
+        return
+
+    # A2A branch (features.a2a_parallel_research): replace the in-process worker
+    # sub-agents with A2A invocations to the section-researcher runtime, reusing
+    # the identical shards, merge, watchdog, and per-section-failure-continue. A
+    # `__fallback__` from the A2A generator (e.g. missing runtime ARN) drops back
+    # to the in-process path; ConcurrencyUnavailableError propagates (Req 10.6).
+    if _section_a2a_enabled():
+        print(
+            f"[ORCHESTRATOR] Parallel research: dispatching {worker_count} sections over A2A "
+            f"(features.a2a_parallel_research)"
+        )
+        async for event in _run_parallel_research_a2a(
+            phase,
+            shards,
+            query=query,
+            accumulated=accumulated,
+            user_id=user_id,
+            customer_jwt=customer_jwt,
+            session_id=session_id,
+        ):
+            yield event
         return
 
     per_worker_budget = max(MIN_WORKER_SEARCH_BUDGET, total_budget // worker_count)
@@ -3901,6 +4864,7 @@ async def _run_pipeline(
     mode: str = "",
     payment_budget_usd: str = "",
     pinned_report_ids: list[str] | None = None,
+    customer_jwt: str = "",
 ):
     """Run a multi-phase agent pipeline (research or menu).
 
@@ -4016,6 +4980,7 @@ async def _run_pipeline(
                     _pipeline_scope,
                     access_token,
                     payment_budget_usd=payment_budget_usd,
+                    customer_jwt=customer_jwt,
                 ):
                     if "__fallback__" in event:
                         fell_back = True
@@ -4024,6 +4989,11 @@ async def _run_pipeline(
                         parallel_text = event["__result__"]
                         continue
                     yield event
+            except ConcurrencyUnavailableError:
+                # Req 10.6: when the concurrency primitive is unavailable the
+                # section fan-out MUST fail rather than degrade to sequential —
+                # do NOT fall back to the single-agent path here.
+                raise
             except Exception as exc:
                 print(f"[ORCHESTRATOR] Parallel research failed, falling back to sequential: {exc}")
                 traceback.print_exc()
@@ -4062,11 +5032,22 @@ async def _run_pipeline(
                     phase_plugins = _build_payments_plugin(user_id, payment_budget_usd, agent_name=agent_name)
                     phase_plugins = [phase_plugins] if phase_plugins else None
 
+            # A phase pinned to a DIFFERENT model than the rest of the pipeline
+            # (today: the evaluator on the Nova judge model) must NOT inherit the
+            # shared conversation session. The synthesizer runs on Claude with
+            # extended thinking, so its persisted turns carry reasoning-content
+            # blocks; replaying those into a ConverseStream call on a model that
+            # rejects reasoning content fails with "User messages cannot contain
+            # reasoning content" (a hard ValidationException that killed the
+            # evaluator). The evaluator receives the report to score via its
+            # prompt, not via memory, so an isolated session loses nothing.
+            phase_session_id = session_id if phase_model_id == model_id else f"{session_id}-{agent_name}"
+
             agent = _create_agent(
                 agent_name,
                 phase_prompt,
                 user_id,
-                session_id,
+                phase_session_id,
                 gateway_client,
                 bedrock_model,
                 pipeline_scope=_pipeline_scope,
@@ -4257,9 +5238,7 @@ async def _run_pipeline(
         # Watchdog state: a wall-clock cap plus an idle backstop so a wedged
         # tool call can no longer freeze the phase forever. last_progress is
         # reset by any real event (below) but never by a heartbeat.
-        phase_wall_clock = SEQUENTIAL_PHASE_WALL_CLOCK_SEC.get(
-            agent_name, SEQUENTIAL_PHASE_WALL_CLOCK_DEFAULT_SEC
-        )
+        phase_wall_clock = SEQUENTIAL_PHASE_WALL_CLOCK_SEC.get(agent_name, SEQUENTIAL_PHASE_WALL_CLOCK_DEFAULT_SEC)
         last_progress = time.monotonic()
         phase_timed_out = False
         pending_report_payload: dict | None = None

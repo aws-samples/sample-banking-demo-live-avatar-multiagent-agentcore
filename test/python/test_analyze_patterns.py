@@ -3,8 +3,8 @@
 
 """analyze_patterns must read AgentCore Memory, not a graph nobody writes.
 
-This tool previously queried Neptune Analytics. That graph is written only by
-save_memory's fallback path, and `neptune` is false in cdk.json, so
+This tool previously queried Neptune Analytics. That graph was written only by
+a now-removed memory fallback path, and `neptune` is false in cdk.json, so
 NEPTUNE_ENDPOINT was never set and every call returned
 "NEPTUNE_ENDPOINT environment variable not configured" — a registered tool that
 could not work, surfacing an infrastructure error mid-conversation. It had no
