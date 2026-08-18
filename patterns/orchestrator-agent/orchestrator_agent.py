@@ -3009,6 +3009,91 @@ WORKER_IDLE_TIMEOUT_SEC = 180
 PARALLEL_PHASE_WALL_CLOCK_SEC = 900
 
 
+# Watchdog for the SEQUENTIAL phase loop (synthesizer, pdf_writer, evaluator,
+# menu phases). Unlike the parallel fan-out, these phases run the agent with a
+# single blocking agent() call, so between tool results the only queue events
+# are heartbeats — even during a legitimate multi-minute extended-thinking
+# stretch. That makes a short idle timeout unsafe (it would abort a healthy but
+# slow synthesis), so the PRIMARY bound here is a per-phase WALL CLOCK cap set
+# well above the known-good maximum. The Bedrock model call is already bounded
+# by the 30-minute read timeout; the only truly unbounded failure is a wedged
+# MCP/Gateway tool call (a stuck pdf_generator or image generation). This cap
+# converts "hang forever" into "abandon the wedged phase and deliver what we
+# have". The idle timeout is a generous secondary backstop for total silence.
+SEQUENTIAL_PHASE_WALL_CLOCK_SEC: dict[str, int] = {
+    "synthesizer": 1200,  # legit synthesis can run "well over 15 min"
+    "pdf_writer": 600,
+    "website_writer": 600,
+    "menu_designer": 900,
+    "menu_pdf_writer": 600,
+    "menu_website_writer": 600,
+    "evaluator": 600,
+}
+SEQUENTIAL_PHASE_WALL_CLOCK_DEFAULT_SEC = 1200
+# No real progress (a tool result, streamed text, or a delivered artifact —
+# heartbeats do NOT count) for this long means the phase is almost certainly
+# wedged. Set high enough to clear a long thinking gap between tool calls.
+SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC = 600
+
+
+def _render_report_payload_markdown(payload: dict) -> str:
+    """Render a captured pdf_generator tool input into readable markdown.
+
+    When the synthesizer finishes the report and hands it to pdf_generator, the
+    full report lives in that tool call's *input*. If the PDF render then wedges
+    and the phase watchdog fires, this recovers the report content from the
+    captured input so the run still delivers the substance in chat — the PDF is
+    the wrapper, the report text is the point. Defensive: unknown shapes are
+    coerced rather than raising, because this runs on an already-degraded path.
+    """
+    if not isinstance(payload, dict):
+        return ""
+    report = payload.get("report") if isinstance(payload.get("report"), dict) else payload
+    topic = payload.get("topic") or report.get("title") or report.get("subtitle") or "Research Report"
+    parts = [f"# {topic}\n"]
+
+    def _render_value(value: object) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, list):
+            lines = []
+            for item in value:
+                if isinstance(item, str):
+                    lines.append(f"- {item.strip()}")
+                elif isinstance(item, dict):
+                    label = item.get("title") or item.get("finding") or item.get("heading") or ""
+                    detail = item.get("detail") or item.get("description") or item.get("content") or ""
+                    confidence = item.get("confidence")
+                    bullet = "- "
+                    if label:
+                        bullet += f"**{label}** "
+                    if detail:
+                        bullet += str(detail)
+                    if confidence:
+                        bullet += f" _(confidence: {confidence})_"
+                    lines.append(bullet.rstrip())
+            return "\n".join(lines)
+        if isinstance(value, dict):
+            return _render_value(list(value.values()))
+        return str(value)
+
+    section_order = [
+        ("executive_summary", "Executive Summary"),
+        ("methodology", "Methodology"),
+        ("key_findings", "Key Findings"),
+        ("data_analysis", "Data Analysis"),
+        ("recommendations", "Recommendations"),
+        ("conclusion", "Conclusion"),
+        ("references", "References"),
+    ]
+    for key, heading in section_order:
+        if isinstance(report, dict) and report.get(key):
+            body = _render_value(report[key])
+            if body:
+                parts.append(f"\n## {heading}\n\n{body}\n")
+    return "\n".join(parts).strip()
+
+
 def _extract_sub_questions(text: str) -> list[str]:
     """Pull the sub-question list out of the approved plan in the phase input.
 
@@ -4049,7 +4134,19 @@ async def _run_pipeline(
             try:
                 msg = message if isinstance(message, dict) else getattr(message, "__dict__", {})
                 for block in msg.get("content", []):
-                    if not isinstance(block, dict) or "toolResult" not in block:
+                    if not isinstance(block, dict):
+                        continue
+                    # Capture the report the model hands to pdf_generator. If the
+                    # PDF render later wedges and the watchdog fires, this input
+                    # is the only place the finished report still exists, so it
+                    # lets the timeout path deliver the content instead of an
+                    # empty run. Captured for any *_pdf_generator tool.
+                    use = block.get("toolUse")
+                    if isinstance(use, dict) and "pdf_generator" in (use.get("name") or ""):
+                        tool_input = use.get("input")
+                        if isinstance(tool_input, dict):
+                            tq.put(("synth_payload", tool_input))
+                    if "toolResult" not in block:
                         continue
                     # Count every completed tool call so the phase can drive its
                     # progress bar off real work (e.g. searches against the
@@ -4157,13 +4254,36 @@ async def _run_pipeline(
         loop = asyncio.get_running_loop()
         agent_future = loop.run_in_executor(None, _run_agent_sync)
 
+        # Watchdog state: a wall-clock cap plus an idle backstop so a wedged
+        # tool call can no longer freeze the phase forever. last_progress is
+        # reset by any real event (below) but never by a heartbeat.
+        phase_wall_clock = SEQUENTIAL_PHASE_WALL_CLOCK_SEC.get(
+            agent_name, SEQUENTIAL_PHASE_WALL_CLOCK_DEFAULT_SEC
+        )
+        last_progress = time.monotonic()
+        phase_timed_out = False
+        pending_report_payload: dict | None = None
+
         try:
             while True:
                 # Poll the thread-safe queue without blocking the event loop
                 while tq.empty():
+                    now = time.monotonic()
+                    if (now - start_time > phase_wall_clock) or (
+                        now - last_progress > SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC
+                    ):
+                        phase_timed_out = True
+                        break
                     await asyncio.sleep(0.1)
+                if phase_timed_out:
+                    break
 
                 tag, value = tq.get_nowait()
+
+                # Any event other than a heartbeat is real progress — reset the
+                # idle deadline. The wall-clock deadline is never reset.
+                if tag is not _HEARTBEAT:
+                    last_progress = time.monotonic()
 
                 if tag is _DONE:
                     break
@@ -4173,6 +4293,10 @@ async def _run_pipeline(
 
                 if tag is _TRUNCATED:
                     phase_truncated_at = value
+                    continue
+
+                if tag == "synth_payload":
+                    pending_report_payload = value
                     continue
 
                 # Count completed tool calls before computing progress so the
@@ -4369,6 +4493,39 @@ async def _run_pipeline(
             heartbeat_thread.join(timeout=2)
             agent_future.cancel()
 
+        if phase_timed_out:
+            # The watchdog fired: a tool call almost certainly wedged (the model
+            # call itself is bounded by the read timeout). Cancelling the future
+            # cannot kill a thread already blocked in a synchronous tool call, so
+            # that thread lingers until the tool returns — but the run no longer
+            # waits on it. Recover the report from the captured pdf_generator
+            # input where possible so the synthesizer still delivers content.
+            timed_out_after = round(time.monotonic() - start_time)
+            print(
+                f"[ORCHESTRATOR] {agent_name} watchdog fired after {timed_out_after}s "
+                f"(wall_clock={phase_wall_clock}s, idle_limit={SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC}s) — "
+                f"abandoning wedged phase"
+            )
+            if not agent_text and pending_report_payload:
+                agent_text = _render_report_payload_markdown(pending_report_payload)
+            if delivered_pdf:
+                timeout_note = (
+                    "\n\n> **Report generation ran long and was wrapped up early.** "
+                    "The PDF finished and is linked below.\n\n"
+                )
+            elif agent_text:
+                timeout_note = (
+                    "\n\n> **The PDF export did not return in time, so the full report is shown here "
+                    "instead.** Synthesis completed — only the PDF render stalled. Re-run to retry the PDF.\n\n"
+                )
+            else:
+                timeout_note = (
+                    f"\n\n> **The {role} step timed out after about {max(1, round(timed_out_after / 60))} "
+                    "minute(s) and was stopped so the run could finish instead of hanging. "
+                    "Please send the request again to retry.\n\n"
+                )
+            yield {"data": timeout_note, "_agent": agent_name}
+
         # Emit the agent's text output so the frontend can display it.
         # With the synchronous agent() call the text arrives as one block.
         if agent_text:
@@ -4400,6 +4557,12 @@ async def _run_pipeline(
                 "_agent": agent_name,
             }
 
+        if phase_timed_out:
+            phase_activity_label = "Timed out"
+        elif phase_truncated_at is not None:
+            phase_activity_label = "Truncated"
+        else:
+            phase_activity_label = "Complete"
         yield {
             "_ui": {
                 "component": "AgentActivity",
@@ -4407,7 +4570,7 @@ async def _run_pipeline(
                     "agent": agent_name,
                     "phase": role,
                     "progress": 100,
-                    "activity": "Truncated" if phase_truncated_at is not None else "Complete",
+                    "activity": phase_activity_label,
                     "elapsed": round(final_elapsed),
                     "done": True,
                 },
