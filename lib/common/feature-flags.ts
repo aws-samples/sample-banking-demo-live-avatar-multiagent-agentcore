@@ -130,6 +130,25 @@ export interface FeatureFlags {
      * SageMaker path.
      */
     sagemaker_model: boolean;
+    /**
+     * Multimodal Knowledge Base retrieval. When true, the KB data source parses
+     * documents with a multimodal parser (BEDROCK_FOUNDATION_MODEL,
+     * parsingModality=MULTIMODAL) so images embedded in ingested documents are
+     * extracted, embedded (Nova Multimodal Embeddings), and stored in the KB's
+     * supplemental S3 location — making them retrievable. `kb_search` then
+     * surfaces retrieved IMAGE chunks as presigned image URLs, and both the AI
+     * Agent chat and the avatar chat render them alongside the text answer.
+     *
+     * When false, the KB uses the default text-only parser and `kb_search`
+     * returns text + PDF citations exactly as today.
+     *
+     * NOTE: the KB must already have a supplemental data storage location (it
+     * does — see `supplementalDataStorageConfiguration` in shared.ts); that
+     * cannot be added to an existing KB in place. Enabling this flag REPLACES
+     * the KB data source (parsing strategy cannot change in place) and triggers
+     * re-ingestion. Defaults to FALSE.
+     */
+    kb_multimodal: boolean;
 }
 
 export interface ModelConfig {
@@ -137,6 +156,12 @@ export interface ModelConfig {
     avatar_sonic: string;
     avatar_tool_selector: string;
     kb_embedding: string;
+    /**
+     * Foundation model used to parse documents at KB ingestion when
+     * `features.kb_multimodal` is on. Must be a vision-capable, directly
+     * invocable foundation-model id in the deploy region.
+     */
+    kb_parser: string;
 }
 
 const DEFAULT_FEATURES: FeatureFlags = {
@@ -161,6 +186,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
     a2a_parallel_research: false,
     prompt_optimization: false,
     sagemaker_model: false,
+    kb_multimodal: false,
 };
 
 const DEFAULT_MODELS: ModelConfig = {
@@ -168,6 +194,7 @@ const DEFAULT_MODELS: ModelConfig = {
     avatar_sonic: "amazon.nova-2-sonic-v1:0",
     avatar_tool_selector: "amazon.nova-2-lite-v1:0",
     kb_embedding: "amazon.nova-2-multimodal-embeddings-v1:0",
+    kb_parser: "anthropic.claude-3-haiku-20240307-v1:0",
 };
 
 export function getFeatureFlags(node: Node): FeatureFlags {

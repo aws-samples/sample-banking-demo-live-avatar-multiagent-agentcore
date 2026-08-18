@@ -137,12 +137,20 @@ export class Shared extends Stack {
             this.kbDocsBucket.grantReadWrite(kbRole);
             kbSupplementalBucket.grantReadWrite(kbRole);
 
+            // InvokeModel on the embedding model, plus the multimodal parser
+            // model when kb_multimodal is on (the FOUNDATION_MODEL parser calls
+            // it during ingestion to extract text + imagery from documents).
             kbRole.addToPolicy(
                 new PolicyStatement({
                     effect: Effect.ALLOW,
                     actions: ["bedrock:InvokeModel"],
                     resources: [
                         `arn:aws:bedrock:${Aws.REGION}::foundation-model/${models.kb_embedding}`,
+                        ...(features.kb_multimodal
+                            ? [
+                                  `arn:aws:bedrock:${Aws.REGION}::foundation-model/${models.kb_parser}`,
+                              ]
+                            : []),
                     ],
                 })
             );
@@ -248,18 +256,42 @@ def handler(event, context):
                 kb.addDependency(waiterCfnForKb);
             }
 
-            const dataSource = new CfnDataSource(this, "KbDataSource", {
-                knowledgeBaseId: kb.attrKnowledgeBaseId,
-                name: `${stackName}-kb-docs`,
-                description: "Knowledge base document source",
-                dataSourceConfiguration: {
-                    type: "S3",
-                    s3Configuration: {
-                        bucketArn: this.kbDocsBucket.bucketArn,
-                        inclusionPrefixes: ["generated/"],
+            // Multimodal parsing extracts imagery from ingested documents so the
+            // KB can return visual tiles alongside text. The parsing strategy
+            // cannot be changed on an existing data source in place (see AWS
+            // docs), so when kb_multimodal is on we use a distinct construct id
+            // + name — CloudFormation creates the multimodal data source and
+            // removes the text-only one, and re-ingestion runs against it.
+            const multimodalKb = features.kb_multimodal;
+            const dataSource = new CfnDataSource(
+                this,
+                multimodalKb ? "KbDataSourceMultimodal" : "KbDataSource",
+                {
+                    knowledgeBaseId: kb.attrKnowledgeBaseId,
+                    name: multimodalKb ? `${stackName}-kb-docs-mm` : `${stackName}-kb-docs`,
+                    description: "Knowledge base document source",
+                    dataSourceConfiguration: {
+                        type: "S3",
+                        s3Configuration: {
+                            bucketArn: this.kbDocsBucket.bucketArn,
+                            inclusionPrefixes: ["generated/"],
+                        },
                     },
-                },
-            });
+                    ...(multimodalKb
+                        ? {
+                              vectorIngestionConfiguration: {
+                                  parsingConfiguration: {
+                                      parsingStrategy: "BEDROCK_FOUNDATION_MODEL",
+                                      bedrockFoundationModelConfiguration: {
+                                          modelArn: `arn:aws:bedrock:${Aws.REGION}::foundation-model/${models.kb_parser}`,
+                                          parsingModality: "MULTIMODAL",
+                                      },
+                                  },
+                              },
+                          }
+                        : {}),
+                }
+            );
             dataSource.addDependency(kb);
 
             this.knowledgeBaseId = kb.attrKnowledgeBaseId;

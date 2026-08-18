@@ -14,9 +14,18 @@
  *                                        pipeline path
  */
 
+import { extractKbImages, kbImageAltText } from "@/components/common/flow/kbImages";
+
 /** Segments this module can produce. Mirrors TranscriptSegment in AvatarInterface. */
 export type ToolArtifact =
-    | { kind: "media"; mediaType: "image" | "video"; url: string; toolName: string }
+    | {
+          kind: "media";
+          mediaType: "image" | "video";
+          url: string;
+          toolName: string;
+          caption?: string;
+          alt?: string;
+      }
     | { kind: "website"; url: string; title?: string; s3_key?: string }
     | { kind: "pdf"; url: string; title?: string }
     | { kind: "link"; url: string; label: string; toolName: string };
@@ -29,12 +38,7 @@ export type ToolArtifact =
  * that are not assets, and offering those as things the agent just produced
  * would be wrong.
  */
-const ASSET_TOOLS = [
-    "website_generator",
-    "pdf_generator",
-    "image_generate",
-    "extract_pdf_images",
-];
+const ASSET_TOOLS = ["website_generator", "pdf_generator", "image_generate", "extract_pdf_images"];
 
 /**
  * Fields an asset-producing tool may return a URL under.
@@ -123,12 +127,19 @@ function parseRecord(raw: string): ToolRecord | null {
 export function extractToolArtifacts(toolName: string, rawOutput: string): ToolArtifact[] {
     if (!rawOutput) return [];
 
-    // kb_search produces no artifact of its own: the tool call already renders
-    // in the transcript via ToolCallCard, which shows the query and result.
-    // The dedicated KB result card only ever read "No matching documents" for
-    // the voice agent's result shape, so it was removed as pure noise.
+    // kb_search's text result renders via ToolCallCard, so it needs no card of
+    // its own. But a multimodal kb_search also carries an `images` array of
+    // presigned URLs — surface those as image media so the voice agent's
+    // transcript shows what it retrieved, labelled as coming from the KB.
     if (toolName.includes("kb_search")) {
-        return [];
+        return extractKbImages(toolName, rawOutput).map((image) => ({
+            kind: "media" as const,
+            mediaType: "image" as const,
+            url: image.imageUrl,
+            toolName,
+            caption: "Retrieved from Knowledge Base",
+            alt: kbImageAltText(image),
+        }));
     }
 
     const record = parseRecord(rawOutput);

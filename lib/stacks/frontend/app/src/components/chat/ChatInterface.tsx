@@ -8,6 +8,7 @@ import { useChatEngine } from "@/hooks/useChatEngine";
 import { useDefaultTool, useToolRenderer } from "@/hooks/useToolRenderer";
 import { ToolCallDisplay } from "./ToolCallDisplay";
 import { KbSearchResultCard } from "./KbSearchResultCard";
+import { KbImageStrip } from "./KbImageStrip";
 import { ConciergeFlowSidebar } from "@/components/concierge-flow/ConciergeFlowSidebar";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 import { BrowserLiveViewSidebar } from "./BrowserLiveViewSidebar";
@@ -66,7 +67,12 @@ export default function ChatInterface({
     ));
 
     useToolRenderer("kb_search", ({ name, args, status, result }) => (
-        <KbSearchResultCard name={name} args={args} status={status} result={result} />
+        <>
+            <KbSearchResultCard name={name} args={args} status={status} result={result} />
+            {/* Multimodal KB images render alongside the source documents; no-ops
+                when the result carries no `images` (multimodal retrieval off). */}
+            <KbImageStrip name={name} args={args} status={status} result={result} />
+        </>
     ));
 
     useEffect(() => {

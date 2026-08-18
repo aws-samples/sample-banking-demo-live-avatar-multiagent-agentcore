@@ -1,9 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import base64
 import json
 import logging
 import os
+import uuid
 from urllib.parse import urlparse
 
 import boto3
@@ -11,6 +13,13 @@ from botocore.config import Config
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+# Bucket for persisting multimodal IMAGE chunks retrieved from the KB. Retrieved
+# imagery is uploaded here and returned as a presigned URL so the tool result
+# stays compact — base64 image bytes never enter the agent's context window.
+IMAGES_BUCKET = os.environ.get("IMAGES_BUCKET", "")
+# Cap the number of image chunks surfaced per query to bound upload work and UI.
+MAX_KB_IMAGES = 4
 
 bedrock_agent = boto3.client(
     "bedrock-agent-runtime",
@@ -46,6 +55,46 @@ def _presign_s3_uri(s3_uri: str, page: int | None = None) -> str | None:
         return url
     except Exception as e:
         logger.warning(f"Failed to presign {s3_uri}: {e}")
+        return None
+
+
+def _persist_kb_image(byte_content: str) -> str | None:
+    """Persist a retrieved multimodal IMAGE chunk and return a presigned URL.
+
+    `byte_content` is the ``RetrievalResultContent.byteContent`` produced by
+    multimodal parsing — a data URI such as ``data:image/png;base64,...`` (or a
+    bare base64 string). The bytes are written to the images bucket and a
+    presigned inline URL is returned. Uploading rather than echoing the base64
+    keeps the tool result small so retrieved imagery never bloats the model's
+    context. Returns None if the bucket is unset or the payload can't be decoded.
+    """
+    if not IMAGES_BUCKET or not byte_content:
+        return None
+    try:
+        mime = "image/png"
+        data = byte_content
+        if byte_content.startswith("data:"):
+            header, _, b64 = byte_content.partition(",")
+            data = b64
+            colon, semi = header.find(":"), header.find(";")
+            if colon != -1 and semi != -1 and semi > colon:
+                mime = header[colon + 1 : semi] or mime
+        raw = base64.b64decode(data)
+        ext = mime.split("/", 1)[1].split("+")[0] if "/" in mime else "png"
+        key = f"kb-images/{uuid.uuid4().hex}.{ext}"
+        s3_client.put_object(Bucket=IMAGES_BUCKET, Key=key, Body=raw, ContentType=mime)
+        return s3_client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": IMAGES_BUCKET,
+                "Key": key,
+                "ResponseContentDisposition": "inline",
+                "ResponseContentType": mime,
+            },
+            ExpiresIn=3600,
+        )
+    except Exception as e:
+        logger.warning("kb_search: failed to persist KB image chunk: %s", e)
         return None
 
 
@@ -216,18 +265,41 @@ def _retrieve_and_generate(
 
     formatted = []
     citations = []
+    images: list[dict] = []
     # Deduplicate documents for the document list
     seen_sources: dict[str, dict] = {}
 
     for idx, item in enumerate(results, 1):
-        content_text = item.get("content", {}).get("text", "")
+        content = item.get("content", {}) or {}
+        content_type = (content.get("type") or "TEXT").upper()
         score = item.get("score", 0.0)
         location = item.get("location", {})
         s3_uri = location.get("s3Location", {}).get("uri", "")
         metadata = item.get("metadata", {})
         page = metadata.get("x-amz-bedrock-kb-document-page-number")
         page_int = int(page) if page else None
+        filename = s3_uri.split("/")[-1] if s3_uri else "Unknown"
 
+        # Multimodal IMAGE chunk (kb_multimodal): persist the bytes and return a
+        # compact presigned URL. The chatbot/avatar frontends render these
+        # alongside the text answer. Skipped once MAX_KB_IMAGES is reached.
+        if content_type == "IMAGE":
+            if len(images) < MAX_KB_IMAGES:
+                image_url = _persist_kb_image(content.get("byteContent", ""))
+                if image_url:
+                    images.append(
+                        {
+                            "image_url": image_url,
+                            "source": filename,
+                            "page": page_int,
+                            "score": score,
+                            "citation_id": idx,
+                        }
+                    )
+            # Image chunks carry no citable text — don't add them to results.
+            continue
+
+        content_text = content.get("text", "")
         presigned_url = _presign_s3_uri(s3_uri, page_int)
 
         formatted.append(
@@ -241,7 +313,6 @@ def _retrieve_and_generate(
             }
         )
 
-        filename = s3_uri.split("/")[-1] if s3_uri else "Unknown"
         citations.append(
             {
                 "id": idx,
@@ -275,7 +346,9 @@ def _retrieve_and_generate(
             "results": formatted,
             "citations": citations,
             "documents": documents,
+            "images": images,
             "result_count": len(formatted),
+            "image_count": len(images),
             "citation_format": "Use [KB1], [KB2], etc. to reference knowledge base sources",
         }
     )
@@ -336,9 +409,7 @@ def handler(event, context):
                 )
                 return {"content": [{"type": "text", "text": _empty_result(query, "caller-scope-required")}]}
 
-            result = _retrieve_and_generate(
-                knowledge_base_id, query, max_results, user_id, pipelines, report_ids
-            )
+            result = _retrieve_and_generate(knowledge_base_id, query, max_results, user_id, pipelines, report_ids)
             return {"content": [{"type": "text", "text": result}]}
         else:
             return {"error": f"This Lambda only supports 'kb_search', received: {tool_name}"}
