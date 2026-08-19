@@ -914,6 +914,235 @@ def _qc_validate_catalog(designer_output: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# A/B model evaluation for the Services Catalog (AI Assistant)
+# ---------------------------------------------------------------------------
+# The catalog designer runs on the orchestrator's model. To demonstrate "A/B
+# testing validation with various models", each description is ALSO produced by
+# a challenger model (Claude Opus 4.7 by default), both variants are scored by
+# the SAME transparent rules the frontend uses (see
+# lib/.../services/catalogEvaluation.ts), and the higher-scoring variant becomes
+# the item's copy. The loser rides along as `evaluation.challengerDescription`
+# so the ServicesCatalog card renders a real two-model comparison — not a mock.
+#
+# Best-effort by design: a challenger/parse failure leaves the designer's copy
+# untouched and simply omits the evaluation, so the pipeline never breaks.
+
+# Challenger model for the catalog A/B. Overridable via env; defaults to Opus 4.7.
+CATALOG_CHALLENGER_MODEL_ID = os.environ.get("CATALOG_CHALLENGER_MODEL_ID", "us.anthropic.claude-opus-4-7")
+# A/B is on by default; set CATALOG_AB_ENABLED=false to skip the challenger pass.
+_CATALOG_AB_ENABLED = os.environ.get("CATALOG_AB_ENABLED", "true").lower() == "true"
+
+# Human-readable labels for the models named in the A/B record.
+_CATALOG_MODEL_LABELS: dict[str, str] = {
+    "us.anthropic.claude-opus-4-7": "Claude Opus 4.7",
+    "us.anthropic.claude-sonnet-4-6": "Claude Sonnet 4.6",
+    "us.anthropic.claude-sonnet-5": "Claude Sonnet 5",
+    "us.anthropic.claude-opus-5": "Claude Opus 5",
+    "us.anthropic.claude-haiku-4-5": "Claude Haiku 4.5",
+    "us.amazon.nova-2-lite-v1:0": "Nova 2 Lite",
+    "us.amazon.nova-pro-v1:0": "Nova Pro",
+}
+
+# Ported verbatim from services/catalogEvaluation.ts so the backend's winner
+# selection matches the score bars the card renders. Keep the two in sync.
+_CATALOG_BENEFIT_TERMS = (
+    "earn",
+    "maximize",
+    "grow",
+    "protect",
+    "protection",
+    "access",
+    "flexible",
+    "flexibility",
+    "competitive",
+    "no monthly fee",
+    "no minimum",
+    "unlimited",
+    "secure",
+    "save",
+    "savings",
+    "rewards",
+    "benefit",
+    "tax-free",
+    "tax-deferred",
+)
+_CATALOG_HYPE_TERMS = (
+    "best ever",
+    "world-class",
+    "unbeatable",
+    "revolutionary",
+    "amazing",
+    "incredible",
+    "game-changing",
+    "unmatched",
+)
+
+
+def _catalog_model_label(model_id: str) -> str:
+    """Human-readable label for a catalog model id (matches, then base id)."""
+    if model_id in _CATALOG_MODEL_LABELS:
+        return _CATALOG_MODEL_LABELS[model_id]
+    for fragment, label in _CATALOG_MODEL_LABELS.items():
+        if fragment.split(":")[0] in model_id:
+            return label
+    return model_id
+
+
+def _score_catalog_description(text: str) -> int:
+    """Overall 0-100 score for one description, mirroring catalogEvaluation.ts.
+
+    Only the overall is needed here (to pick a winner); the frontend recomputes
+    the per-dimension bars from the same rules for display.
+    """
+
+    import re
+
+    def _clamp(n: float) -> int:
+        return max(0, min(100, round(n)))
+
+    clean = (text or "").strip()
+    if not clean:
+        return 0
+    words = len([w for w in clean.split() if w])
+
+    if 15 <= words <= 30:
+        length_score = 100
+    elif words < 15:
+        length_score = _clamp(100 - (15 - words) * 8)
+    else:
+        length_score = _clamp(100 - (words - 30) * 6)
+
+    sentences = [s for s in re.split(r"[.!?]+", clean) if s.strip()]
+    avg_sentence_words = words / max(1, len(sentences))
+    if avg_sentence_words <= 25:
+        clarity_score = _clamp(100 - max(0.0, avg_sentence_words - 18) * 3)
+    else:
+        clarity_score = _clamp(100 - (avg_sentence_words - 25) * 6)
+
+    lower = clean.lower()
+    benefit_hits = sum(1 for t in _CATALOG_BENEFIT_TERMS if t in lower)
+    benefit_score = _clamp(55 + benefit_hits * 15)
+
+    hype_hits = sum(1 for t in _CATALOG_HYPE_TERMS if t in lower)
+    brand_score = _clamp(100 - hype_hits * 30 - (25 if clean == clean.upper() else 0))
+
+    return round((length_score + clarity_score + benefit_score + brand_score) / 4)
+
+
+def _generate_challenger_descriptions(entries: list[tuple[str, str]], *, model_id: str) -> list[str]:
+    """Rewrite each catalog description with the challenger model, in one call.
+
+    `entries` is a list of (product_name, current_description). Returns a list of
+    rewrites aligned by index; any index that cannot be produced comes back as
+    an empty string so the caller can skip A/B for that item. Never raises — a
+    failure returns all-empty and the caller keeps the designer's copy.
+    """
+    if not entries:
+        return []
+
+    import json as _json
+    import re
+
+    import boto3
+
+    region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+    client = boto3.client("bedrock-runtime", region_name=region, config=BotocoreConfig(read_timeout=300))
+
+    numbered = "\n".join(f"{i}. {name}: {desc}" for i, (name, desc) in enumerate(entries))
+    system = (
+        "You are a challenger copywriter for a private bank's services catalog. Rewrite each "
+        "product description to the SAME brief: one sentence, 15-30 words, benefit-led, plain "
+        "sentence case, no hype or unverifiable superlatives. Keep the product's meaning and any "
+        "rate/fee facts. Return ONLY a JSON array of strings, one per input index, in order — no "
+        "prose, no keys, no markdown fences."
+    )
+    user = f"Rewrite these {len(entries)} descriptions:\n{numbered}"
+
+    try:
+        response = client.converse(
+            modelId=model_id,
+            messages=[{"role": "user", "content": [{"text": user}]}],
+            system=[{"text": system}],
+            # No `temperature`: Claude thinking models (Opus 4.7, the default
+            # challenger) reject it as deprecated. maxTokens only.
+            inferenceConfig={"maxTokens": clamp_max_tokens(model_id, 2000)},
+        )
+        blocks = response["output"]["message"]["content"]
+        raw = "".join(b.get("text", "") for b in blocks).strip()
+        match = re.search(r"\[.*\]", raw, re.DOTALL)
+        parsed = _json.loads(match.group(0) if match else raw)
+        if not isinstance(parsed, list):
+            return [""] * len(entries)
+        out = [str(x).strip() if isinstance(x, (str, int, float)) else "" for x in parsed]
+        # Pad/truncate to align with the inputs.
+        out = (out + [""] * len(entries))[: len(entries)]
+        return out
+    except Exception as exc:  # noqa: BLE001 - A/B is best effort
+        logger.debug("Catalog challenger generation failed: %s", exc)
+        return [""] * len(entries)
+
+
+def _ab_evaluate_catalog(catalog: dict, *, base_model_id: str) -> dict:
+    """Attach a real two-model A/B record to each catalog item.
+
+    Generates a challenger variant per description with
+    `CATALOG_CHALLENGER_MODEL_ID`, scores both variants by the shared rules, and
+    makes the higher scorer the item's `description`; the loser becomes
+    `evaluation.challengerDescription` with the model labels set so the card
+    shows which model won and why. Mutates and returns `catalog`; on any failure
+    the item is left exactly as the designer produced it.
+    """
+    sections = catalog.get("sections")
+    if not isinstance(sections, list) or not sections:
+        return catalog
+
+    # Flatten to (section_idx, item_idx, name, description) for a single call.
+    coords: list[tuple[int, int]] = []
+    entries: list[tuple[str, str]] = []
+    for si, section in enumerate(sections):
+        items = section.get("items", []) if isinstance(section, dict) else []
+        for ii, item in enumerate(items if isinstance(items, list) else []):
+            if not isinstance(item, dict):
+                continue
+            desc = str(item.get("description") or "").strip()
+            if not desc:
+                continue
+            coords.append((si, ii))
+            entries.append((str(item.get("name") or "Product"), desc))
+
+    if not entries:
+        return catalog
+
+    challengers = _generate_challenger_descriptions(entries, model_id=CATALOG_CHALLENGER_MODEL_ID)
+    base_label = _catalog_model_label(base_model_id)
+    challenger_label = _catalog_model_label(CATALOG_CHALLENGER_MODEL_ID)
+
+    for (si, ii), (_, base_desc), challenger_desc in zip(coords, entries, challengers):
+        if not challenger_desc:
+            continue  # Challenger unavailable for this item — keep designer copy.
+        base_score = _score_catalog_description(base_desc)
+        challenger_score = _score_catalog_description(challenger_desc)
+        item = sections[si]["items"][ii]
+        if challenger_score > base_score:
+            # Challenger wins: promote its copy, keep the base as the loser.
+            item["description"] = challenger_desc
+            item["evaluation"] = {
+                "selectedModel": challenger_label,
+                "challengerModel": base_label,
+                "challengerDescription": base_desc,
+            }
+        else:
+            # Base wins (ties favor the designer): keep its copy.
+            item["evaluation"] = {
+                "selectedModel": base_label,
+                "challengerModel": challenger_label,
+                "challengerDescription": challenger_desc,
+            }
+
+    return catalog
+
+
+# ---------------------------------------------------------------------------
 # Trinity Reserve Bank — baked-in facts for the AI Client Advisor
 # ---------------------------------------------------------------------------
 # The advisor prefers tool data (KB search, web search, open_account, browser
@@ -5772,19 +6001,48 @@ async def _run_pipeline(
         if agent_text:
             if agent_name == "menu_designer":
                 menu_designer_output = agent_text
-                # Automatic quality control: verify format, length, and filter
-                # irrelevant/placeholder content before the catalog is exported.
+                parsed_catalog = None
+
+                # ── Automatic quality control (menu_qc flow step) ──
+                # Deterministic verification of FORMAT, LENGTH, and FILTER before
+                # the catalog goes any further. Emitted as its own flow phase so
+                # the audience sees the check happen, then a transparent report.
+                yield {"agent_phase": {"agent": "menu_qc", "phase": "quality control", "status": "start"}}
                 try:
                     qc_report = _qc_validate_catalog(agent_text)
                     yield {"_ui": {"component": "CatalogQualityReport", "props": qc_report}}
-                    # Emit the parsed catalog so the AI Assistant's Catalog Studio
-                    # (human-in-the-loop editing, read-aloud, A/B testing) has
-                    # structured data to work with.
                     parsed_catalog = _parse_catalog_json(agent_text)
-                    if parsed_catalog and parsed_catalog.get("sections"):
-                        yield {"_ui": {"component": "ServicesCatalog", "props": parsed_catalog}}
                 except Exception as qc_exc:  # QC must never break the pipeline
                     logger.debug("Catalog QC failed: %s", qc_exc)
+                yield {"agent_phase": {"agent": "menu_qc", "phase": "quality control", "status": "end"}}
+
+                # ── A/B model evaluation (menu_ab flow step) ──
+                # Produce each description with the challenger model too, score
+                # both by the same rules, and promote the winner. Best-effort:
+                # a failure leaves the designer's copy and simply omits the
+                # per-item A/B record.
+                if _CATALOG_AB_ENABLED and parsed_catalog and parsed_catalog.get("sections"):
+                    yield {"agent_phase": {"agent": "menu_ab", "phase": "a/b evaluation", "status": "start"}}
+                    try:
+                        parsed_catalog = _ab_evaluate_catalog(parsed_catalog, base_model_id=phase_model_id)
+                    except Exception as ab_exc:  # A/B must never break the pipeline
+                        logger.debug("Catalog A/B evaluation failed: %s", ab_exc)
+                    yield {"agent_phase": {"agent": "menu_ab", "phase": "a/b evaluation", "status": "end"}}
+
+                # Emit the (QC'd, possibly A/B-augmented) catalog so the
+                # ServicesCatalog card can drive human-in-the-loop editing,
+                # read-aloud, the A/B record, and per-item ratings.
+                if parsed_catalog and parsed_catalog.get("sections"):
+                    yield {"_ui": {"component": "ServicesCatalog", "props": parsed_catalog}}
+
+                # ── Human-in-the-loop review (menu_review flow step) ──
+                # The pipeline hands the catalog to a person: the interactive
+                # edit / approve / export happens in the ServicesCatalog card.
+                # Marking the stage here surfaces the handoff in the flow so the
+                # human gate is visible, not implicit.
+                yield {"agent_phase": {"agent": "menu_review", "phase": "review", "status": "start"}}
+                yield {"agent_phase": {"agent": "menu_review", "phase": "review", "status": "end"}}
+
                 accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
             elif agent_name == "evaluator":
                 # Turn the judge's streamed markdown scorecard into a structured

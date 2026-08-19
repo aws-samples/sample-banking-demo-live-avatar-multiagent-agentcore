@@ -47,8 +47,17 @@ export const AGENT_PIPELINE: PipelineAgent[] = [
     { id: "evaluator", name: "Evaluator", color: "#c8a24a" },
 ];
 
-/** Catalog agent pipeline colors for visualization */
+/** Catalog agent pipeline colors for visualization.
+ *
+ * The four capabilities the AI Assistant must demonstrate each get a node so
+ * they animate through idle → active → completed as the pipeline runs: the
+ * designer drafts, quality control verifies, A/B evaluation compares two
+ * models, and human review gates the export. (The continuous feedback loop is
+ * its own always-on animated flywheel below the flow, since it spans runs.) */
 export const MENU_PIPELINE: PipelineAgent[] = [
     { id: "menu_designer", name: "Catalog Designer", color: "#FF9900" },
+    { id: "menu_qc", name: "Quality Control", color: "#4fd1a5" },
+    { id: "menu_ab", name: "A/B Evaluation", color: "#8b8ef7" },
+    { id: "menu_review", name: "Human Review", color: "#e0b850" },
     { id: "menu_pdf_writer", name: "PDF Writer", color: "#d91e18" },
 ];

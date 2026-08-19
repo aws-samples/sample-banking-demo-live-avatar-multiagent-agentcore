@@ -20,12 +20,18 @@ const MODE = "menu";
 
 const MENU_AGENT_TO_PHASE: Record<string, PipelinePhase> = {
     menu_designer: "design",
+    menu_qc: "quality control",
+    menu_ab: "a/b evaluation",
+    menu_review: "review",
     menu_pdf_writer: "export",
 };
 
 const MENU_DESCRIPTIONS: Record<string, string> = {
     user: "Catalog request",
     menu_designer: "Design catalog",
+    menu_qc: "Verify format, length, filter",
+    menu_ab: "Compare two models, pick winner",
+    menu_review: "Human edits & approval",
     menu_pdf_writer: "Generate PDF",
 };
 
@@ -39,6 +45,9 @@ const MENU_FLOW_CONFIG: FlowConfig = {
 const MENU_PROGRESS_CONFIG: ProgressBarConfig = {
     phases: [
         { phase: "design", label: "Design", description: "Designing catalog" },
+        { phase: "quality control", label: "QC", description: "Quality control" },
+        { phase: "a/b evaluation", label: "A/B", description: "A/B model evaluation" },
+        { phase: "review", label: "Review", description: "Human review" },
         { phase: "export", label: "Export", description: "Generating PDF" },
     ],
     pipeline: MENU_PIPELINE,

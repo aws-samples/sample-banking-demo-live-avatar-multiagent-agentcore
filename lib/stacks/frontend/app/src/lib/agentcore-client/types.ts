@@ -15,6 +15,12 @@ export type AgentId =
     | "synthesizer"
     | "evaluator"
     | "menu_designer"
+    // Catalog pipeline sub-steps surfaced as their own flow nodes so the AI
+    // Assistant's quality control, A/B model evaluation, and human review are
+    // visible stages rather than implicit work inside the designer phase.
+    | "menu_qc"
+    | "menu_ab"
+    | "menu_review"
     | "menu_pdf_writer"
     | "fraud_research";
 
@@ -25,6 +31,9 @@ export type PipelinePhase =
     | "synthesis & report"
     | "evaluation"
     | "design"
+    | "quality control"
+    | "a/b evaluation"
+    | "review"
     | "export";
 
 /** Research pipeline phases (backward-compatible alias) */

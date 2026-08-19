@@ -137,7 +137,19 @@ export class ApplicationStage extends Stage {
                         tags: ["catalog", "design", "imagery", "export"],
                     },
                 ],
-                phases: ["menu_designer", "menu_pdf_writer", "website_writer", "evaluator"],
+                // Matches the runtime catalog pipeline: the design invocation
+                // runs the designer, then quality control, A/B model evaluation,
+                // and the human-review handoff; the export invocation renders the
+                // PDF and website. (Previously advertised a non-existent
+                // "evaluator" and mis-named "website_writer".)
+                phases: [
+                    "menu_designer",
+                    "menu_qc",
+                    "menu_ab",
+                    "menu_review",
+                    "menu_pdf_writer",
+                    "menu_website_writer",
+                ],
                 payloadContract: { mode: "menu", prompt: "<catalog brief>" },
                 runtimeArnParam: `/${stackNameBase}/runtime_arn_assistant`,
             });

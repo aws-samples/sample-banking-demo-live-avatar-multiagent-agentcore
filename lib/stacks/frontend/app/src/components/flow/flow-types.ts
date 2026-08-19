@@ -11,7 +11,10 @@ export const AGENT_COLORS: Partial<Record<AgentId, string>> = {
     synthesizer: "#4fd1a5",
     evaluator: "#e0b850",
     menu_designer: "#ff9900",
-    menu_pdf_writer: "#ff9900",
+    menu_qc: "#4fd1a5",
+    menu_ab: "#8b8ef7",
+    menu_review: "#e0b850",
+    menu_pdf_writer: "#d91e18",
 };
 
 /**
@@ -24,6 +27,9 @@ export const AGENT_ICONS: Partial<Record<AgentId | "user", string>> = {
     synthesizer: "/agent-icons/AI_Agent.svg",
     evaluator: "/agent-icons/Evaluations.svg",
     menu_designer: "/agent-icons/AI_Agent.svg",
+    menu_qc: "/agent-icons/Evaluations.svg",
+    menu_ab: "/agent-icons/Evaluations.svg",
+    menu_review: "/agent-icons/AI_Agent.svg",
     menu_pdf_writer: "/agent-icons/Code_Interpreter.svg",
 };
 

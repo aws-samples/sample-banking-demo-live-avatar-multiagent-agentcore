@@ -49,6 +49,9 @@ const INITIAL_RESEARCH: ResearchSlot = {
         "synthesis & report": 0,
         evaluation: 0,
         design: 0,
+        "quality control": 0,
+        "a/b evaluation": 0,
+        review: 0,
         export: 0,
     },
     thinkingTraces: [],
@@ -59,8 +62,10 @@ const INITIAL_RESEARCH: ResearchSlot = {
 // Terminal phases: once one of these ends, the pipeline is considered finished
 // and the live sidebar can stop treating the run as active. Evaluation is the
 // last research phase (it scores the finished report), so it — not
-// "synthesis & report" — closes out a research run.
-const TERMINAL_PHASES: ResearchPhase[] = ["evaluation", "export"];
+// "synthesis & report" — closes out a research run. "review" closes the catalog
+// DESIGN invocation: the pipeline pauses there for human approval before the
+// separate export invocation runs, so the sidebar should not stay "live".
+const TERMINAL_PHASES: ResearchPhase[] = ["evaluation", "review", "export"];
 
 function reduceResearch(state: ResearchSlot, action: ResearchAction): ResearchSlot {
     switch (action.type) {
