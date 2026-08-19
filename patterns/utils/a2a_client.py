@@ -20,9 +20,11 @@ they can be tested with fakes (no deploy required):
 
 ``fetch_agent_card`` / ``invoke_a2a`` / ``consult_fraud_research`` compose those
 seams. Each takes an injectable ``agent_factory`` so tests can substitute a fake
-Strands ``A2AAgent`` that records call order and timestamps. The default factory
-builds a real Strands ``A2AAgent`` (imported lazily so this module compiles and
-lints without the optional A2A extras installed).
+client that records call order and timestamps. The default factory builds a
+minimal JSON-RPC client (httpx imported lazily so this module compiles and lints
+without the optional A2A extras installed) rather than the Strands ``A2AAgent``
+wrapper — the wrapper rejects dict input and silently drops message ``metadata``,
+but the callees require the forwarded ``metadata.identity_context`` on the wire.
 
 Discovery is always attempted strictly before invocation, and any
 discovery/precondition failure raises before a single invocation is issued and
@@ -101,6 +103,19 @@ class A2ADiscoveryError(Exception):
     Discovery failures are mapped to ``A2AHopError(kind="discovery")`` by the
     consultation entry point, which issues zero invocations in that case.
     """
+
+
+class A2AInvocationError(Exception):
+    """A JSON-RPC error returned by the callee.
+
+    Exposes ``code`` so :func:`_jsonrpc_error_code` (and therefore the
+    ``-32054 RetryableConflictException`` retry loop) can classify it.
+    """
+
+    def __init__(self, code: int | None, message: str, data: Any = None) -> None:
+        self.code = code
+        self.data = data
+        super().__init__(f"JSON-RPC error {code}: {message}")
 
 
 # ─── Data models ──────────────────────────────────────────────────────────────
@@ -229,21 +244,75 @@ class A2AClient(Protocol):
 AgentFactory = Callable[..., A2AClient]
 
 
-def _default_agent_factory(endpoint: str, *, bearer: str, timeout: int = 300) -> A2AClient:
-    """Build a real Strands ``A2AAgent`` bound to a bearer-authenticated client.
+class _JsonRpcA2AClient:
+    """Minimal JSON-RPC ``message/send`` client for an A2A runtime endpoint.
 
-    Imported lazily so this module compiles/lints without the optional
-    ``strands-agents[a2a]`` / ``a2a`` / ``httpx`` dependencies present.
+    This is the default :data:`AgentFactory` product. It deliberately does NOT
+    use the Strands ``A2AAgent`` wrapper: that wrapper's input converter accepts
+    only strings/content blocks — our metadata-bearing wire message (a dict)
+    made every invocation fail with ``Unsupported input type: <class 'dict'>``
+    — and even for accepted inputs it rebuilds the message and silently drops
+    ``metadata``, while both callees hard-require the forwarded
+    ``metadata.identity_context`` to run at all (Req 5.1/5.4). Sending the
+    JSON-RPC envelope we already build keeps the identity assertion on the wire
+    exactly as the callee executors read it.
     """
-    import httpx  # noqa: PLC0415 — deferred so the module imports without A2A extras
-    from a2a.client import ClientConfig  # noqa: PLC0415
-    from strands.agent.a2a_agent import A2AAgent  # noqa: PLC0415
 
-    httpx_client = httpx.AsyncClient(
-        headers={"Authorization": f"Bearer {bearer}"},
-        timeout=timeout,
-    )
-    return A2AAgent(endpoint, client_config=ClientConfig(httpx_client=httpx_client))
+    def __init__(self, endpoint: str, *, bearer: str, timeout: int = 300) -> None:
+        self._endpoint = endpoint
+        self._bearer = bearer
+        self._timeout = timeout
+        # Transport headers beyond Authorization (e.g. the AgentCore session
+        # header). Set by `invoke_a2a` from the built request.
+        self.extra_headers: dict[str, str] = {}
+
+    def _headers(self) -> dict[str, str]:
+        return {**self.extra_headers, "Authorization": f"Bearer {self._bearer}"}
+
+    async def get_agent_card(self) -> dict[str, Any]:
+        """GET the well-known agent card through the invocation endpoint."""
+        import httpx  # noqa: PLC0415 — deferred so the module imports without A2A extras
+
+        base = self._endpoint if self._endpoint.endswith("/") else f"{self._endpoint}/"
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            response = await client.get(f"{base}{AGENT_CARD_PATH}", headers=self._headers())
+            response.raise_for_status()
+            return response.json()
+
+    async def invoke_async(self, prompt: Any) -> Any:
+        """POST a JSON-RPC ``message/send`` carrying ``prompt`` as the message.
+
+        ``prompt`` is the fully built ``params.message`` block (including the
+        ``metadata.identity_context``). A JSON-RPC ``error`` in the response is
+        raised as :class:`A2AInvocationError` with its ``code`` intact so the
+        retryable-conflict loop in :func:`invoke_a2a` can classify it.
+        """
+        import httpx  # noqa: PLC0415 — deferred so the module imports without A2A extras
+
+        payload = {
+            "jsonrpc": "2.0",
+            "id": f"req-{uuid.uuid4()}",
+            "method": "message/send",
+            "params": {"message": prompt},
+        }
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            response = await client.post(self._endpoint, json=payload, headers=self._headers())
+            response.raise_for_status()
+            body = response.json()
+
+        error = body.get("error") if isinstance(body, dict) else None
+        if error is not None:
+            raise A2AInvocationError(
+                _code_from_error_obj(error),
+                str(error.get("message", "")) if isinstance(error, dict) else str(error),
+                data=error.get("data") if isinstance(error, dict) else None,
+            )
+        return body.get("result") if isinstance(body, dict) else body
+
+
+def _default_agent_factory(endpoint: str, *, bearer: str, timeout: int = 300) -> A2AClient:
+    """Build the default JSON-RPC A2A client for a resolved endpoint + bearer."""
+    return _JsonRpcA2AClient(endpoint, bearer=bearer, timeout=timeout)
 
 
 # ─── Pure seams ─────────────────────────────────────────────────────────────────
@@ -435,6 +504,10 @@ async def invoke_a2a(
     while True:
         try:
             client = factory(request.endpoint, bearer=bearer)
+            # The default client also carries the built transport headers (the
+            # AgentCore session-isolation header). Injected fakes don't.
+            if isinstance(client, _JsonRpcA2AClient):
+                client.extra_headers = dict(request.headers)
             raw = await client.invoke_async(request.message)
             return _parse_result(raw)
         except A2AHopError:
@@ -671,6 +744,19 @@ def _extract_text(raw: Any) -> str:
         return ""
     if isinstance(raw, str):
         return raw
+
+    # A JSON-RPC `message/send` result can be a Task carrying the response in
+    # its artifacts (the Strands server executor completes tasks that way).
+    # Concatenate every text part across artifacts, in order.
+    artifacts = _get(raw, "artifacts")
+    if isinstance(artifacts, list):
+        texts = []
+        for artifact in artifacts:
+            parts = _get(artifact, "parts")
+            if isinstance(parts, list):
+                texts.extend(str(part_text) for part in parts if (part_text := _get(part, "text")) is not None)
+        if texts:
+            return "".join(texts)
 
     message = getattr(raw, "message", None)
     if message is None and isinstance(raw, dict):
