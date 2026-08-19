@@ -5111,16 +5111,29 @@ async def _run_pipeline(
                     phase_plugins = _build_payments_plugin(user_id, payment_budget_usd, agent_name=agent_name)
                     phase_plugins = [phase_plugins] if phase_plugins else None
 
-            # A phase pinned to a DIFFERENT model than the rest of the pipeline
-            # (today: the evaluator on the Nova judge model) must NOT inherit the
-            # shared conversation session. The synthesizer runs on Claude with
-            # extended thinking, so its persisted turns carry reasoning-content
-            # blocks; replaying those into a ConverseStream call on a model that
-            # rejects reasoning content fails with "User messages cannot contain
-            # reasoning content" (a hard ValidationException that killed the
-            # evaluator). The evaluator receives the report to score via its
-            # prompt, not via memory, so an isolated session loses nothing.
-            phase_session_id = session_id if phase_model_id == model_id else f"{session_id}-{agent_name}"
+            # EVERY sequential phase gets its own conversation session.
+            #
+            # Each phase receives its input explicitly through `accumulated` in
+            # the prompt, never through memory, so an isolated session loses
+            # nothing — and sharing one costs a great deal. On a shared session
+            # the AgentCore Memory session manager restores the *previous*
+            # phase's entire conversation into the next phase's message list, so
+            # the synthesizer's ConverseStream carried the researcher's full
+            # transcript (assistant turns plus every tool result, including the
+            # ~127KB findings blob) IN ADDITION to the same findings already
+            # embedded in its own prompt. Observed in the OTEL request log as
+            # system/user/assistant/tool/user/assistant/tool/user/user. That
+            # duplicated input, combined with adaptive thinking at high effort,
+            # pushed time-to-first-token past 17 minutes — no streaming deltas,
+            # so the phase looked frozen and the container was recycled before
+            # the model ever answered.
+            #
+            # This also subsumes the narrower fix it replaces: a phase pinned to
+            # a different model (the evaluator on the Nova judge) must not
+            # inherit Claude turns carrying reasoning-content blocks, which that
+            # model rejects outright with "User messages cannot contain reasoning
+            # content".
+            phase_session_id = f"{session_id}-{agent_name}"
 
             agent = _create_agent(
                 agent_name,
