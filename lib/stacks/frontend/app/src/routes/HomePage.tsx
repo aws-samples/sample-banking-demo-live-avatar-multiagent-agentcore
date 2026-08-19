@@ -93,8 +93,8 @@ export default function HomePage(): JSX.Element {
                         Four stages, one platform
                     </h2>
                     <p className="mt-1 text-sm" style={{ color: "var(--app-text-secondary)" }}>
-                        The first two stages are internal, for employees. The last two are external,
-                        for customers, with guardrails and DLP enforced.
+                        Research and authoring run internally, for employees. The customer-facing
+                        channels are external, with guardrails and DLP enforced on every turn.
                     </p>
                 </div>
 
@@ -210,7 +210,7 @@ export default function HomePage(): JSX.Element {
                             <X size={20} />
                         </button>
                         <img
-                            src="/architecture-diagram.png"
+                            src="/arch-diagram.png"
                             alt={`${BRAND.legalName} platform architecture`}
                             className="h-auto w-full rounded-[4px]"
                         />
