@@ -48,7 +48,17 @@
             "sagemaker_model": false,
             "kb_multimodal": true,
             "agent_registry": true,
-            "agentcore_identity": true
+            "agentcore_identity": true,
+            "managed_web_search": true
+        },
+        "webSearch": {
+            "excludeDomains": [
+                "reddit.com",
+                "quora.com",
+                "pinterest.com",
+                "tiktok.com",
+                "facebook.com"
+            ]
         },
         "models": {
             "orchestrator": "us.anthropic.claude-sonnet-4-6",

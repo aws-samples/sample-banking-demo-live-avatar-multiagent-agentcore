@@ -3580,6 +3580,16 @@ SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC: dict[str, int] = {
 # We retry the phase a couple of times with backoff before giving up.
 SEQ_PHASE_MAX_RETRIES = 2
 SEQ_PHASE_RETRY_BACKOFF_SEC = 4
+
+# Appended to a phase prompt when the model truncated at its output ceiling, to
+# make the retry fit. Deliberately explicit about the ceiling being the reason.
+MAX_TOKENS_BREVITY_SUFFIX = (
+    "\n\nIMPORTANT — OUTPUT LENGTH: your previous attempt was cut off at the model's "
+    "output-token limit. Answer as COMPACTLY as possible this time: emit only the "
+    "required fields, keep every string field to one or two short sentences, omit "
+    "optional commentary entirely, and do not restate the input. Correct, complete, "
+    "and short beats thorough and truncated."
+)
 _TRANSIENT_BEDROCK_MARKERS = (
     "internalserverexception",
     "serviceunavailable",
@@ -3600,6 +3610,20 @@ def _is_transient_bedrock_error(exc: BaseException) -> bool:
     """
     haystack = f"{exc.__class__.__name__} {exc}".lower()
     return any(marker in haystack for marker in _TRANSIENT_BEDROCK_MARKERS)
+
+
+def _is_max_tokens_error(exc: BaseException) -> bool:
+    """True when the model stopped because it hit its output-token ceiling.
+
+    Surfaces as Strands' `MaxTokensReachedException`. Observed on the evaluator,
+    whose judge model (Nova Pro) is clamped to a 10k output ceiling by
+    `utils.model_limits` — an order of magnitude below the Claude phases — so a
+    verbose scorecard runs out of budget mid-write. Unlike a 500 this is fully
+    deterministic: resending the identical request reproduces it, so the retry
+    must ask for LESS output rather than the same again.
+    """
+    haystack = f"{exc.__class__.__name__} {exc}".lower()
+    return "maxtokensreached" in haystack or "maximum token limit" in haystack
 
 
 def _is_tooluse_sequence_error(exc: BaseException) -> bool:
@@ -5326,10 +5350,36 @@ async def _run_pipeline(
                             # malformed-ToolUse failure cannot recur with no
                             # tool config, and the phase input rides in the
                             # prompt so nothing else is lost.
+                            #
+                            # The retry agent MUST keep the pipeline callback:
+                            # it is what emits the streaming-liveness pings the
+                            # idle watchdog relies on. A bare Agent() defaults to
+                            # Strands' printing handler, so a retried phase went
+                            # silent and the watchdog then killed a healthy run.
                             active_agent = Agent(
                                 name=f"{agent_name.title().replace('_', '')}RetryAgent",
                                 system_prompt=phase_prompt,
                                 model=bedrock_model,
+                                callback_handler=_pipeline_callback,
+                            )
+                            time.sleep(SEQ_PHASE_RETRY_BACKOFF_SEC)
+                            continue
+                        if _is_max_tokens_error(exc):
+                            attempt += 1
+                            print(
+                                f"[ORCHESTRATOR] {agent_name} hit its output-token ceiling "
+                                f"(attempt {attempt}/{SEQ_PHASE_MAX_RETRIES}); retrying with "
+                                "an explicit brevity instruction"
+                            )
+                            # Deterministic failure: asking again identically
+                            # truncates again. Re-ask for a deliberately compact
+                            # answer, with no tools so the whole budget goes to
+                            # the response itself.
+                            active_agent = Agent(
+                                name=f"{agent_name.title().replace('_', '')}BriefAgent",
+                                system_prompt=phase_prompt + MAX_TOKENS_BREVITY_SUFFIX,
+                                model=bedrock_model,
+                                callback_handler=_pipeline_callback,
                             )
                             time.sleep(SEQ_PHASE_RETRY_BACKOFF_SEC)
                             continue
@@ -5376,13 +5426,24 @@ async def _run_pipeline(
         last_progress = time.monotonic()
         phase_timed_out = False
         pending_report_payload: dict | None = None
+        # The idle backstop only becomes meaningful once the model has produced
+        # SOMETHING. Before the first token there are no callbacks at all, and
+        # time-to-first-token on this pipeline is legitimately long: the
+        # synthesizer sends the entire researcher output (100k+ tokens) to Claude
+        # with extended thinking, and the model can spend many minutes reading it
+        # before emitting a single delta. Applying the idle timer during that
+        # window killed healthy runs at exactly the idle limit (observed:
+        # "synthesizer watchdog fired after 1200s"). The wall clock still bounds
+        # this window, so a model that never responds is still caught.
+        saw_model_output = False
 
         try:
             while True:
                 # Poll the thread-safe queue without blocking the event loop
                 while tq.empty():
                     now = time.monotonic()
-                    if (now - start_time > phase_wall_clock) or (now - last_progress > phase_idle_timeout):
+                    idle_exceeded = saw_model_output and (now - last_progress > phase_idle_timeout)
+                    if (now - start_time > phase_wall_clock) or idle_exceeded:
                         phase_timed_out = True
                         break
                     await asyncio.sleep(0.1)
@@ -5395,6 +5456,7 @@ async def _run_pipeline(
                 # idle deadline. The wall-clock deadline is never reset.
                 if tag is not _HEARTBEAT:
                     last_progress = time.monotonic()
+                    saw_model_output = True
 
                 if tag is _DONE:
                     break
@@ -5612,8 +5674,10 @@ async def _run_pipeline(
             # waits on it. Recover the report from the captured pdf_generator
             # input where possible so the synthesizer still delivers content.
             timed_out_after = round(time.monotonic() - start_time)
+            which = "wall clock" if timed_out_after >= phase_wall_clock else "idle"
             print(
-                f"[ORCHESTRATOR] {agent_name} watchdog fired after {timed_out_after}s "
+                f"[ORCHESTRATOR] {agent_name} watchdog fired on the {which} bound "
+                f"after {timed_out_after}s "
                 f"(wall_clock={phase_wall_clock}s, idle_limit={phase_idle_timeout}s) — "
                 f"abandoning wedged phase"
             )

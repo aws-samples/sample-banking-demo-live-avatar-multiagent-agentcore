@@ -182,6 +182,22 @@ export interface FeatureFlags {
      * break tool calls. Defaults to FALSE.
      */
     agentcore_identity: boolean;
+    /**
+     * Managed Web Search Tool connector for the Gateway (`connectorId:
+     * "web-search"`). When true, the demo's web search is served by the
+     * AWS-managed Web Search Tool built-in connector — a fully managed,
+     * MCP-compliant web index operated by Amazon — instead of the custom
+     * Nova-grounding Lambda (`gateway/tools/web_search`). The custom Lambda and
+     * its target are then NOT created. The connector is pinned to version
+     * `1.2.0`, which adds a target-level domain include/exclude list plus
+     * per-request domain and published-date filters the agent can apply. The
+     * demo configures only a target-level EXCLUDE (deny) list — a target-level
+     * include list would restrict EVERY query to those domains and break the
+     * research agent's open-web research, so the regulator allow-list and date
+     * bound are applied per-query by the agent instead. Queries never leave AWS.
+     * Defaults to FALSE (custom Lambda path).
+     */
+    managed_web_search: boolean;
 }
 
 export interface ModelConfig {
@@ -222,6 +238,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
     kb_multimodal: false,
     agent_registry: false,
     agentcore_identity: false,
+    managed_web_search: false,
 };
 
 const DEFAULT_MODELS: ModelConfig = {

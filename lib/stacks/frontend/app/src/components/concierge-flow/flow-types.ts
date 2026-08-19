@@ -36,9 +36,14 @@ export interface ConciergeNodeData {
 export function normalizeToolName(raw: string): string {
     // MCP gateway format: "gateway_<target>___<tool_name>"
     const idx = raw.lastIndexOf("___");
-    if (idx >= 0) return raw.slice(idx + 3);
+    let name = idx >= 0 ? raw.slice(idx + 3) : raw;
     // Strip any leading "gateway_" prefix just in case
-    return raw.startsWith("gateway_") ? raw.slice("gateway_".length) : raw;
+    name = name.startsWith("gateway_") ? name.slice("gateway_".length) : name;
+    // The AgentCore managed Web Search Tool connector exposes its tool as
+    // "WebSearch"; map it to the existing "web_search" identity so the flow
+    // diagram, tool catalog, and run report treat both implementations the same.
+    if (name === "WebSearch") return "web_search";
+    return name;
 }
 
 /** Tool name (backend) → display label + optional icon override. */

@@ -56,7 +56,9 @@ function kbSources(record: Record<string, unknown>): GroundedSource[] {
         const d = doc as Record<string, unknown>;
         const title = typeof d.filename === "string" ? d.filename : "";
         if (!title) continue;
-        const pages = Array.isArray(d.pages_referenced) ? d.pages_referenced.filter(Number.isFinite) : [];
+        const pages = Array.isArray(d.pages_referenced)
+            ? d.pages_referenced.filter(Number.isFinite)
+            : [];
         out.push({
             kind: "kb",
             title,
@@ -88,24 +90,33 @@ function kbSources(record: Record<string, unknown>): GroundedSource[] {
 
 function webSources(record: Record<string, unknown>): GroundedSource[] {
     const out: GroundedSource[] = [];
-    // web_search returns citations as [{url, domain}]; some shapes use `sources`.
+    // Two shapes reach here:
+    //  - Nova web grounding (legacy custom Lambda): `citations`/`sources` as
+    //    [{url, domain}].
+    //  - AgentCore managed Web Search Tool connector: `results` as
+    //    [{text, url, title, publishedDate}] with no `domain` (derive from url).
     const list = Array.isArray(record.citations)
         ? record.citations
         : Array.isArray(record.sources)
           ? record.sources
-          : [];
+          : Array.isArray(record.results)
+            ? record.results
+            : [];
     for (const item of list) {
         if (!item || typeof item !== "object") continue;
         const c = item as Record<string, unknown>;
         const url = typeof c.url === "string" ? c.url : undefined;
         const domain =
-            typeof c.domain === "string" && c.domain
-                ? c.domain
-                : url
-                  ? hostnameOf(url)
-                  : "";
+            typeof c.domain === "string" && c.domain ? c.domain : url ? hostnameOf(url) : "";
         if (!domain && !url) continue;
-        out.push({ kind: "web", title: domain || url || "web source", detail: undefined, url });
+        // The connector carries a page title + publication date; surface the
+        // title as the label and the date as the secondary line when present.
+        const title =
+            typeof c.title === "string" && c.title ? c.title : domain || url || "web source";
+        const publishedDate = typeof c.publishedDate === "string" ? c.publishedDate : undefined;
+        const detail =
+            publishedDate && domain ? `${domain} · ${publishedDate}` : publishedDate || undefined;
+        out.push({ kind: "web", title, detail, url });
     }
     return out;
 }

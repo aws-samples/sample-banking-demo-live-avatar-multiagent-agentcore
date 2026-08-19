@@ -50,6 +50,7 @@ import {
 } from "../../common/feature-flags";
 import { createAgentCoreRole } from "./agentcore-role";
 import { createIdentityProvider } from "./identity-provider";
+import { createWebSearchConnectorTarget } from "./web-search-target";
 import { Auth } from "../auth";
 import { Shared } from "../shared";
 
@@ -351,7 +352,15 @@ export class Backend extends Stack {
             });
         }
 
-        for (const def of toolDefs) {
+        // When the managed Web Search Tool connector is enabled, the custom
+        // Nova-grounding web_search Lambda is replaced by the connector target
+        // below — skip creating the Lambda (and therefore its target) so the
+        // two implementations never both register a web-search tool.
+        const effectiveToolDefs = features.managed_web_search
+            ? toolDefs.filter((d) => d.dir !== "web_search")
+            : toolDefs;
+
+        for (const def of effectiveToolDefs) {
             const toolDir = path.join(repoRoot, "gateway", "tools", def.dir);
             if (!fs.existsSync(toolDir)) continue;
 
@@ -544,6 +553,63 @@ export class Backend extends Stack {
 
             target.addDependency(gateway);
             target.node.addDependency(gatewayRole);
+        }
+
+        // ─── Managed Web Search Tool connector (flag-gated) ────────────
+        // The AWS-managed Web Search Tool built-in connector, pinned to v1.2.0.
+        // Replaces the custom Nova-grounding Lambda (skipped above) with a fully
+        // managed MCP web-search tool backed by an Amazon-operated web index —
+        // queries never leave AWS. Governance is configured at the Gateway:
+        //   - target-level domain EXCLUDE list (deny-list) applied to every
+        //     query, hidden from the agent;
+        //   - v1.2.0 also enables per-request domain include/exclude and a
+        //     published-date bound the agent applies for compliance queries.
+        // A target-level INCLUDE (allow) list is intentionally NOT set: it would
+        // restrict EVERY query to those domains and break the research agent's
+        // open-web research, so the regulator allow-list is a per-query filter.
+        if (features.managed_web_search) {
+            const webSearchCfg =
+                (this.node.tryGetContext("webSearch") as
+                    | { excludeDomains?: string[] }
+                    | undefined) ?? {};
+            const excludeDomains = Array.isArray(webSearchCfg.excludeDomains)
+                ? webSearchCfg.excludeDomains
+                : [];
+
+            // Doc: the Gateway service role must allow InvokeGateway and, for the
+            // web-search connector, InvokeWebSearch on the service-owned tool ARN.
+            gatewayRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["bedrock-agentcore:InvokeGateway"],
+                    resources: [
+                        `arn:aws:bedrock-agentcore:${this.region}:${this.account}:gateway/*`,
+                    ],
+                })
+            );
+            gatewayRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["bedrock-agentcore:InvokeWebSearch"],
+                    // Account field is literally `aws` — this is a service-owned tool ARN.
+                    resources: [`arn:aws:bedrock-agentcore:${this.region}:aws:tool/web-search.v1`],
+                })
+            );
+
+            // The `connector` MCP target type is newer than the
+            // `AWS::BedrockAgentCore::GatewayTarget` CloudFormation resource
+            // spec (the L1 silently drops the key, rendering `Mcp: {}`), so the
+            // connector target is provisioned by a Lambda-backed custom resource
+            // calling `bedrock-agentcore-control` directly — the same pattern
+            // this stack already uses for the Agent Registry and Identity
+            // credential provider. Empirically verified: create_gateway_target
+            // with this exact shape reaches READY.
+            createWebSearchConnectorTarget(this, {
+                stackName,
+                gatewayId: gateway.attrGatewayIdentifier,
+                connectorVersion: "1.2.0",
+                excludeDomains,
+            });
         }
 
         this.gatewayUrl = gateway.attrGatewayUrl;

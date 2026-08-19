@@ -1,0 +1,3 @@
+# create_gateway_target with the `connector` MCP target type requires a boto3
+# newer than the Lambda runtime's built-in; bundle a version known to accept it.
+boto3>=1.43.74
