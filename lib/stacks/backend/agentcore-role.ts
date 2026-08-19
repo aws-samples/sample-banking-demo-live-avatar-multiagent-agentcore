@@ -190,6 +190,20 @@ export function createAgentCoreRole(
                 resources: ["*"],
             })
         );
+        // GetResourceOauth2Token reads the credential provider's client secret
+        // from the Identity token vault, which is backed by service-managed
+        // Secrets Manager secrets under the `bedrock-agentcore-identity!`
+        // prefix — the caller's role must be able to read them or the exchange
+        // fails with AccessDenied and agents fall back to direct Cognito.
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ["secretsmanager:GetSecretValue"],
+                resources: [
+                    `arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:bedrock-agentcore-identity!*`,
+                ],
+            })
+        );
     }
 
     // AgentCore Memory operations
