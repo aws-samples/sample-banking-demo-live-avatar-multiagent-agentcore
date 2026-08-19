@@ -263,12 +263,21 @@ def handler(event, context):
             // + name — CloudFormation creates the multimodal data source and
             // removes the text-only one, and re-ingestion runs against it.
             const multimodalKb = features.kb_multimodal;
+            // The parser model is baked into the data source's parsing config,
+            // and Bedrock requires a REPLACEMENT (not in-place update) to change
+            // it. CloudFormation creates the replacement before deleting the old
+            // one, so the two must not share a name. Deriving the logical id +
+            // name from the parser model guarantees a changed parser yields a
+            // new, non-colliding data source that re-ingestion then runs against.
+            const parserSlug = models.kb_parser.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
             const dataSource = new CfnDataSource(
                 this,
-                multimodalKb ? "KbDataSourceMultimodal" : "KbDataSource",
+                multimodalKb ? `KbDataSourceMm${parserSlug}` : "KbDataSource",
                 {
                     knowledgeBaseId: kb.attrKnowledgeBaseId,
-                    name: multimodalKb ? `${stackName}-kb-docs-mm` : `${stackName}-kb-docs`,
+                    name: multimodalKb
+                        ? `${stackName}-kb-docs-mm-${parserSlug}`
+                        : `${stackName}-kb-docs`,
                     description: "Knowledge base document source",
                     dataSourceConfiguration: {
                         type: "S3",

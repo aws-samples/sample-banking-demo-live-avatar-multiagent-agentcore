@@ -149,6 +149,25 @@ export interface FeatureFlags {
      * re-ingestion. Defaults to FALSE.
      */
     kb_multimodal: boolean;
+    /**
+     * AWS Agent Registry (preview) publishing. When true, deploys a Lambda-backed
+     * CloudFormation custom resource that, at deploy, creates an AWS Agent
+     * Registry (AWS_IAM discovery) and publishes APPROVED AGENT records for the
+     * demo's A2A agents (the Fraud & Research agent, and — when
+     * `a2a_parallel_research` is on — the Section Researcher). This is what makes
+     * the otherwise-empty AWS Agent Registry console list the demo's agents.
+     *
+     * Provisioning is BEST-EFFORT and self-contained: the custom resource
+     * tolerates already-exists / already-approved conditions, isolates per-record
+     * failures, and its Delete path always succeeds so a stack delete is never
+     * blocked. When false, none of the registry resources are created, so the
+     * demo still deploys and destroys cleanly.
+     *
+     * Defaults to FALSE because the AWS Agent Registry is a preview service whose
+     * control-plane APIs may change before GA (and require a boto3 newer than the
+     * Lambda runtime's built-in, which the custom resource bundles).
+     */
+    agent_registry: boolean;
 }
 
 export interface ModelConfig {
@@ -187,6 +206,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
     prompt_optimization: false,
     sagemaker_model: false,
     kb_multimodal: false,
+    agent_registry: false,
 };
 
 const DEFAULT_MODELS: ModelConfig = {
@@ -194,7 +214,10 @@ const DEFAULT_MODELS: ModelConfig = {
     avatar_sonic: "amazon.nova-2-sonic-v1:0",
     avatar_tool_selector: "amazon.nova-2-lite-v1:0",
     kb_embedding: "amazon.nova-2-multimodal-embeddings-v1:0",
-    kb_parser: "anthropic.claude-3-haiku-20240307-v1:0",
+    // Nova Lite: vision-capable, directly invocable in us-east-1, and NOT
+    // legacy-gated. Claude 3 Haiku was marked Legacy and the KB role was denied
+    // ("not actively using in the last 30 days"), which failed every ingestion.
+    kb_parser: "amazon.nova-lite-v1:0",
 };
 
 export function getFeatureFlags(node: Node): FeatureFlags {
