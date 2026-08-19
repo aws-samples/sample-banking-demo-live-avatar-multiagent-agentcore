@@ -1,0 +1,7 @@
+# AWS Agent Registry (PREVIEW) control-plane client. The
+# `agent-registry-control` client (create_registry, create_registry_record,
+# submit_registry_record_for_approval, update_registry_record_status, ...) only
+# exists in boto3 >= 1.43.74 — the Lambda runtime's built-in boto3 is older and
+# does NOT have it — so a recent boto3 is vendored into the asset. botocore is a
+# transitive dependency of boto3 and is resolved by pip to the matching version.
+boto3>=1.43.74
