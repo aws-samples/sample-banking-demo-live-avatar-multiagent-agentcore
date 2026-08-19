@@ -24,6 +24,7 @@ EXPOSE 8080
 # Copy shared utilities and agent code
 COPY patterns/utils/ utils/
 COPY patterns/orchestrator-agent/orchestrator_agent.py .
+COPY patterns/orchestrator-agent/optimize_targets.py .
 COPY patterns/orchestrator-agent/browser_tools.py .
 
 # Healthcheck using Python (no extra dependencies needed)
