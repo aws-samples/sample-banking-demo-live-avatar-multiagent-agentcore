@@ -168,6 +168,20 @@ export interface FeatureFlags {
      * Lambda runtime's built-in, which the custom resource bundles).
      */
     agent_registry: boolean;
+    /**
+     * AgentCore Identity token acquisition for Gateway auth. When true, an
+     * OAuth2 credential provider (custom resource — no CFN resource exists)
+     * stores the Gateway's Cognito M2M client credentials in the AgentCore
+     * Identity token vault, and agents obtain Gateway tokens through Identity
+     * (GetWorkloadAccessToken → GetResourceOauth2Token) instead of calling the
+     * Cognito token endpoint directly — making the Identity console (workload
+     * identities, credential providers, token vault) show the demo's auth in
+     * active use. The resulting bearer is the SAME Cognito JWT the Gateway
+     * already accepts, and the agent code automatically falls back to the
+     * direct-Cognito path on any Identity failure, so enabling this cannot
+     * break tool calls. Defaults to FALSE.
+     */
+    agentcore_identity: boolean;
 }
 
 export interface ModelConfig {
@@ -207,6 +221,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
     sagemaker_model: false,
     kb_multimodal: false,
     agent_registry: false,
+    agentcore_identity: false,
 };
 
 const DEFAULT_MODELS: ModelConfig = {

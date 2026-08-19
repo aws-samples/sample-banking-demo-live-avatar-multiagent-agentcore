@@ -49,6 +49,7 @@ import {
     getStackNameBase,
 } from "../../common/feature-flags";
 import { createAgentCoreRole } from "./agentcore-role";
+import { createIdentityProvider } from "./identity-provider";
 import { Auth } from "../auth";
 import { Shared } from "../shared";
 
@@ -96,7 +97,35 @@ export class Backend extends Stack {
             enablePromptOptimization: features.prompt_optimization,
             enableSagemakerModel: features.sagemaker_model,
             sagemakerEndpointName: sagemaker.endpointName,
+            enableAgentCoreIdentity: features.agentcore_identity,
         });
+
+        // ─── AgentCore Identity credential provider (flag-gated) ────────
+        // Stores the Gateway's Cognito M2M client credentials in the Identity
+        // token vault so agents mint Gateway tokens through Identity instead of
+        // calling Cognito directly. `identityProviderName` rides into each
+        // runtime's env; utils/auth.py uses it with automatic fallback.
+        let identityProviderName: string | undefined;
+        if (features.agentcore_identity) {
+            const identity = createIdentityProvider(this, {
+                stackName,
+                discoveryUrl: `https://cognito-idp.${this.region}.amazonaws.com/${auth.userPool.userPoolId}/.well-known/openid-configuration`,
+                clientIdParam: `/${stackName}/machine_client_id`,
+                clientSecretName: `/${stackName}/machine_client_secret`,
+                clientSecretArn: auth.machineClientSecret.secretArn,
+            });
+            identityProviderName = identity.providerName;
+        }
+        // Per-runtime env for the Identity token path. The workload name is the
+        // runtime's own name — AgentCore auto-creates a workload identity per
+        // runtime under that name.
+        const identityEnvFor = (runtimeName: string): Record<string, string> =>
+            features.agentcore_identity && identityProviderName
+                ? {
+                      AGENTCORE_IDENTITY_PROVIDER: identityProviderName,
+                      AGENTCORE_WORKLOAD_NAME: runtimeName,
+                  }
+                : {};
         NagSuppressions.addResourceSuppressions(
             agentCoreRole,
             [
@@ -1030,6 +1059,8 @@ export class Backend extends Stack {
                     // machine client (default in section_gateway_access_token).
                     COGNITO_USER_POOL_ISSUER: cognitoIssuer,
                     COGNITO_USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+                    // AgentCore Identity token path (features.agentcore_identity).
+                    ...identityEnvFor(`${stackName.replace(/-/g, "_")}_section_researcher`),
                 },
                 authorizerConfiguration: {
                     customJwtAuthorizer: {
@@ -1183,6 +1214,8 @@ export class Backend extends Stack {
                         features.a2a_parallel_research && profile === "deep_research"
                             ? "true"
                             : "false",
+                    // AgentCore Identity token path (features.agentcore_identity).
+                    ...identityEnvFor(`${stackName.replace(/-/g, "_")}_${profile}`),
                     ...(features.a2a_parallel_research &&
                     profile === "deep_research" &&
                     sectionResearcherRuntimeArn
@@ -1255,6 +1288,8 @@ export class Backend extends Stack {
                     MODEL_ID: models.avatar_sonic,
                     TOOL_SELECTOR_MODEL_ID: models.avatar_tool_selector,
                     PERSONA: "friendly",
+                    // AgentCore Identity token path (features.agentcore_identity).
+                    ...identityEnvFor(avatarRuntimeName),
                 },
                 description: `Avatar voice agent (Nova Sonic) for ${stackName}`,
             });

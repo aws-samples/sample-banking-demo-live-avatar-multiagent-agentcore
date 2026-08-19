@@ -1,0 +1,4 @@
+# AgentCore Identity control-plane operations (Oauth2CredentialProvider CRUD)
+# require a recent boto3; the Lambda runtime's built-in SDK is older, so a
+# current boto3 is vendored into the asset (same pattern as agent-registry-cr).
+boto3>=1.43.74

@@ -47,7 +47,8 @@
             "prompt_optimization": true,
             "sagemaker_model": false,
             "kb_multimodal": true,
-            "agent_registry": true
+            "agent_registry": true,
+            "agentcore_identity": true
         },
         "models": {
             "orchestrator": "us.anthropic.claude-sonnet-4-6",

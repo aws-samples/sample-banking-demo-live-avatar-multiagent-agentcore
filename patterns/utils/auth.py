@@ -40,6 +40,20 @@ _secrets_client = None
 _jwks_clients: dict[str, "jwt.PyJWKClient"] = {}
 
 
+# Sentinel the identity-provider custom resource emits when provisioning
+# failed; treated the same as "identity not configured".
+_IDENTITY_UNAVAILABLE = "agentcore-identity-unavailable"
+_agentcore_identity_client = None
+
+# Last platform-injected workload access token. The AgentCore Runtime injects
+# it per request into a ContextVar (BedrockAgentCoreContext), which does NOT
+# propagate to plain worker threads (the research pipeline runs in one). Stash
+# the most recent token at module level so background work can still exchange
+# it. Workload tokens are short-lived; a stale one fails the exchange and the
+# caller falls back to the direct Cognito path.
+_last_workload_token: str | None = None
+
+
 class IdentityVerificationError(Exception):
     """Raised when a forwarded customer identity JWT cannot be verified.
 
@@ -183,6 +197,115 @@ def get_secret(secret_name: str) -> str:
         raise RuntimeError(f"Unexpected error retrieving secret {secret_name}: {str(e)}")
 
 
+def _get_agentcore_identity_client():
+    """Get or create a reusable AgentCore Identity data-plane client."""
+    global _agentcore_identity_client
+    if _agentcore_identity_client is None:
+        region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+        _agentcore_identity_client = boto3.client("bedrock-agentcore", region_name=region)
+    return _agentcore_identity_client
+
+
+def _identity_env() -> tuple[str, str] | None:
+    """Return (provider_name, workload_name) when the Identity path is configured.
+
+    Both env vars are injected by the Backend stack only when
+    `features.agentcore_identity` is on AND the credential-provider custom
+    resource provisioned successfully; the UNAVAILABLE sentinel (best-effort
+    provisioning failure) is treated as not configured.
+    """
+    provider = os.environ.get("AGENTCORE_IDENTITY_PROVIDER")
+    workload = os.environ.get("AGENTCORE_WORKLOAD_NAME")
+    if not provider or not workload or provider == _IDENTITY_UNAVAILABLE:
+        return None
+    return provider, workload
+
+
+def _get_workload_token() -> str:
+    """Resolve this runtime's workload access token.
+
+    Preferred source is the token the AgentCore Runtime injects per request
+    (BedrockAgentCoreContext ContextVar, populated from the
+    WorkloadAccessToken header after inbound JWT auth) — no API call needed.
+    A module-level stash covers background threads the ContextVar doesn't
+    reach. As a last resort, exchange by workload name via
+    GetWorkloadAccessToken (works only if AGENTCORE_WORKLOAD_NAME matches an
+    existing workload identity name).
+    """
+    global _last_workload_token
+    try:
+        from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
+
+        token = BedrockAgentCoreContext.get_workload_access_token()
+        if token:
+            _last_workload_token = token
+            return token
+    except Exception as exc:  # noqa: BLE001 - context lookup is best effort
+        logger.debug("Workload token context lookup failed: %s", exc)
+
+    if _last_workload_token:
+        return _last_workload_token
+
+    _, workload = _identity_env() or (None, None)
+    if not workload:
+        raise RuntimeError("No workload access token available on this runtime")
+    client = _get_agentcore_identity_client()
+    return client.get_workload_access_token(workloadName=workload)["workloadAccessToken"]
+
+
+def _get_token_via_agentcore_identity(scope: str) -> str:
+    """Mint a Gateway access token through AgentCore Identity (token vault).
+
+    Exchanges this runtime's platform-issued workload access token for an
+    OAuth2 M2M token via the configured credential provider
+    (GetResourceOauth2Token). The provider holds the same Cognito
+    machine-client credentials the direct path uses, so the resulting bearer
+    is the same JWT the Gateway already accepts — the difference is that
+    minting now flows through AgentCore Identity (visible in the Identity
+    console/token vault).
+
+    Tokens are cached per provider until 60 seconds before their `exp` claim.
+
+    Raises:
+        Exception: On any Identity API failure — callers fall back to the
+            direct Cognito path.
+    """
+    provider, _workload = _identity_env() or (None, None)
+    if not provider:
+        raise RuntimeError("AgentCore Identity is not configured on this runtime")
+
+    cache_key = f"identity:{provider}"
+    cached = _token_cache.get(cache_key)
+    if cached and cached.get("access_token") and cached.get("expires_at", 0) > time.time():
+        logger.info(
+            "Using cached AgentCore Identity token (expires in %ds)",
+            int(cached["expires_at"] - time.time()),
+        )
+        return cached["access_token"]
+
+    client = _get_agentcore_identity_client()
+    workload_token = _get_workload_token()
+    response = client.get_resource_oauth2_token(
+        workloadIdentityToken=workload_token,
+        resourceCredentialProviderName=provider,
+        scopes=scope.split(),
+        oauth2Flow="M2M",
+    )
+    access_token = response["accessToken"]
+
+    # Cache until shortly before the token's own expiry (Cognito access tokens
+    # carry `exp`); fall back to a conservative 5 minutes if it can't be read.
+    try:
+        claims = jwt.decode(jwt=access_token, options={"verify_signature": False}, algorithms=["RS256"])
+        expires_at = float(claims["exp"]) - 60
+    except Exception:  # noqa: BLE001 - opaque/undecodable token
+        expires_at = time.time() + 300
+    _token_cache[cache_key] = {"access_token": access_token, "expires_at": expires_at}
+
+    logger.info("Minted Gateway token via AgentCore Identity provider '%s'", provider)
+    return access_token
+
+
 def get_agent_access_token(client_id_param: str, secret_param: str, *, scope: str | None = None) -> str:
     """
     Mint an OAuth2 access token via client credentials for an arbitrary client.
@@ -211,6 +334,18 @@ def get_agent_access_token(client_id_param: str, secret_param: str, *, scope: st
         KeyError: If the STACK_NAME environment variable is not set.
         Exception: If the token request fails or the response is invalid.
     """
+    # AgentCore Identity path (features.agentcore_identity): only the shared
+    # machine client is stored in the Identity credential provider, so route
+    # just that client through the token vault. Any Identity failure falls
+    # back to the proven direct-Cognito flow below so nothing breaks.
+    if client_id_param.endswith("machine_client_id") and _identity_env():
+        stack = os.environ.get("STACK_NAME", "")
+        identity_scope = scope or f"{stack}-gateway/read {stack}-gateway/write"
+        try:
+            return _get_token_via_agentcore_identity(identity_scope)
+        except Exception as exc:  # noqa: BLE001 - fall back to the direct path
+            logger.warning("AgentCore Identity token path failed, falling back to direct Cognito: %s", exc)
+
     # Return cached token for this client if still valid (with 60s safety margin)
     cached = _token_cache.get(client_id_param)
     if cached and cached.get("access_token") and cached.get("expires_at", 0) > time.time():

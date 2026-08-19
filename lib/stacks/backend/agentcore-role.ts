@@ -47,6 +47,14 @@ export interface AgentCoreRoleProps {
      * true. Ignored when the flag is off.
      */
     sagemakerEndpointName?: string;
+    /**
+     * AgentCore Identity token path (`features.agentcore_identity`). When true,
+     * runtimes are granted the Identity data-plane actions needed to mint
+     * Gateway tokens through the token vault (GetWorkloadAccessToken →
+     * GetResourceOauth2Token) instead of calling Cognito directly. Added only
+     * when enabled (least privilege). Defaults to undefined (off).
+     */
+    enableAgentCoreIdentity?: boolean;
 }
 
 export function createAgentCoreRole(
@@ -163,6 +171,26 @@ export function createAgentCoreRole(
             resources: [`arn:aws:ssm:${Aws.REGION}:${Aws.ACCOUNT_ID}:parameter/${stackName}/*`],
         })
     );
+
+    // AgentCore Identity data plane (features.agentcore_identity). Lets the
+    // runtimes exchange their auto-created workload identity for a Gateway
+    // bearer via the Identity token vault. Identity workload/provider ARNs are
+    // created at runtime by the service (default workload identity directory),
+    // so the actions are not resource-scopeable here.
+    if (props.enableAgentCoreIdentity) {
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    "bedrock-agentcore:GetWorkloadAccessToken",
+                    "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
+                    "bedrock-agentcore:GetWorkloadAccessTokenForUserId",
+                    "bedrock-agentcore:GetResourceOauth2Token",
+                ],
+                resources: ["*"],
+            })
+        );
+    }
 
     // AgentCore Memory operations
     role.addToPolicy(
