@@ -12,6 +12,7 @@ import {
     usePromptOptimizationStore,
     deriveAppliedConfig,
 } from "@/stores/usePromptOptimizationStore";
+import { usePromptImprovementStore } from "@/stores/usePromptImprovementStore";
 import type { EvaluationData } from "@/components/common/evaluation/types";
 import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
 import { normalizeToolName } from "@/components/concierge-flow/flow-types";
@@ -37,6 +38,8 @@ export interface UseChatEngineReturn {
     ) => Promise<void>;
     /** Continue the catalog pipeline with the user-approved catalog. */
     exportCatalog: (catalog: Record<string, unknown>) => Promise<void>;
+    /** Ask the orchestrator to propose designer-prompt refinements from feedback. */
+    optimizeFromFeedback: () => Promise<void>;
     isLoading: boolean;
     error: string | null;
     clearError: () => void;
@@ -166,6 +169,18 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                     // mark the prompt-optimization flow node completed (design §8:
                     // applying a Selected_Variant → completed).
                     flowStore.promptOptComplete();
+                }
+
+                // Continuous feedback loop: when the presenter has applied a
+                // feedback-derived designer refinement, a fresh catalog design
+                // run carries it as `designer_prompt_addendum` so the backend
+                // appends it to the designer prompt. Only for the design run
+                // itself ("menu"), not the export continuation.
+                if (requestMode === "menu") {
+                    const addendum = usePromptImprovementStore.getState().addendum;
+                    if (addendum) {
+                        appliedExtra.designer_prompt_addendum = addendum;
+                    }
                 }
 
                 const updateMessage = (): void => {
@@ -658,6 +673,27 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
         [client, _streamResponse, storeKey]
     );
 
+    /**
+     * Continuous feedback loop: ask the orchestrator to read recent catalog
+     * feedback and propose designer-prompt refinements. Streams a
+     * PromptImprovement card the presenter reviews and applies. Does not change
+     * the live prompt — applying is a separate, explicit step.
+     */
+    const optimizeFromFeedback = useCallback(async (): Promise<void> => {
+        if (!client) return;
+        useChatStore.getState().setError(storeKey, null);
+        const triggerMessage: Message = {
+            role: "user",
+            content: "Improve the catalog designer prompt from recent feedback.",
+            timestamp: new Date().toISOString(),
+        };
+        useChatStore.getState().setMessages(storeKey, (prev) => [...prev, triggerMessage]);
+        await _streamResponse(
+            "Improve the catalog designer prompt from recent feedback.",
+            "menu_optimize"
+        );
+    }, [client, _streamResponse, storeKey]);
+
     const startNewChat = useCallback((): void => {
         useChatStore.getState().clearSlot(storeKey);
         useConciergeFlowStore.getState().reset();
@@ -665,6 +701,8 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
         // Drop any applied Prompt Optimization variant so a fresh chat starts
         // on the Current_Model + Current_System_Prompt (Req 8.3, 13.3).
         usePromptOptimizationStore.getState().clear();
+        // Drop any applied feedback-derived designer refinement too.
+        usePromptImprovementStore.getState().clear();
     }, [storeKey]);
 
     const clearError = useCallback((): void => {
@@ -676,6 +714,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
         sendMessage,
         executeResearchPlan,
         exportCatalog,
+        optimizeFromFeedback,
         isLoading,
         error,
         clearError,

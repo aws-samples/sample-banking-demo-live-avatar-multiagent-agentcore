@@ -11,6 +11,7 @@ import { KbSearchResultCard } from "./KbSearchResultCard";
 import { KbImageStrip } from "./KbImageStrip";
 import { ConciergeFlowSidebar } from "@/components/concierge-flow/ConciergeFlowSidebar";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
+import { usePromptImprovementStore } from "@/stores/usePromptImprovementStore";
 import { BrowserLiveViewSidebar } from "./BrowserLiveViewSidebar";
 import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
 import ResizablePanelLayout, {
@@ -55,6 +56,7 @@ export default function ChatInterface({
         sendMessage,
         executeResearchPlan,
         exportCatalog,
+        optimizeFromFeedback,
         isLoading,
         error,
         clearError,
@@ -140,12 +142,43 @@ export default function ChatInterface({
                 // The reviewed catalog — including edits and applied A/B
                 // variants — continues into the export phases.
                 exportCatalog(payload.catalog as Record<string, unknown>);
+            } else if (action === "optimize_from_feedback") {
+                // Continuous feedback loop: propose designer-prompt refinements
+                // from the reviewer feedback captured so far.
+                optimizeFromFeedback();
+            } else if (action === "apply_prompt_improvement") {
+                // Human-in-the-loop apply: store the refinement so the next
+                // catalog run uses it, and log it as a feedback signal so the
+                // loop's "Improve" stage reflects that the prompt was updated.
+                const refinements = (payload.refinements as string[]) ?? [];
+                const signalCount = (payload.signalCount as number) ?? 0;
+                usePromptImprovementStore.getState().apply(refinements, signalCount);
+                const idToken = auth.user?.id_token;
+                if (idToken) {
+                    void submitFeedback(
+                        {
+                            sessionId,
+                            message: "Applied a feedback-derived designer prompt refinement.",
+                            feedbackType: "positive",
+                            metadata: { source: "prompt_update", experience: "menu" },
+                        },
+                        idToken
+                    ).catch(() => undefined);
+                }
             } else if (action === "start_over") {
                 startNewChat();
                 setInput("");
             }
         },
-        [executeResearchPlan, exportCatalog, startNewChat, mode]
+        [
+            executeResearchPlan,
+            exportCatalog,
+            optimizeFromFeedback,
+            startNewChat,
+            mode,
+            auth.user?.id_token,
+            sessionId,
+        ]
     );
 
     const handleNewChat = (): void => {

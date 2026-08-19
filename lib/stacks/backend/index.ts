@@ -1388,6 +1388,11 @@ export class Backend extends Stack {
             { id: "AwsSolutions-DDB3", reason: "PITR not required for demo feedback data." },
         ]);
 
+        // The orchestrator (AI Assistant `menu_optimize` mode) reads recent
+        // catalog feedback from this table to propose designer-prompt refinements
+        // — the continuous feedback loop. Read-only; writes stay with the API.
+        feedbackTable.grantReadData(agentCoreRole);
+
         feedbackTable.addGlobalSecondaryIndex({
             indexName: "feedbackType-timestamp-index",
             partitionKey: { name: "feedbackType", type: AttributeType.STRING },

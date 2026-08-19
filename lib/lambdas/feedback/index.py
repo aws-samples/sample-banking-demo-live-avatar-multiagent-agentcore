@@ -40,6 +40,7 @@ SOURCE_LABELS = {
     "chat_rating": "Chat ratings",
     "edit": "Human edits",
     "ab_test": "A/B winners",
+    "prompt_update": "Prompt updates",
 }
 
 cors_config = CORSConfig(
@@ -113,8 +114,7 @@ def _query_recent(cutoff: int) -> list[dict]:
     for feedback_type in ("positive", "negative"):
         kwargs = {
             "IndexName": "feedbackType-timestamp-index",
-            "KeyConditionExpression": Key("feedbackType").eq(feedback_type)
-            & Key("timestamp").gte(cutoff),
+            "KeyConditionExpression": Key("feedbackType").eq(feedback_type) & Key("timestamp").gte(cutoff),
             "ScanIndexForward": False,
         }
         while True:
@@ -162,9 +162,7 @@ def _aggregate(records: list[dict], days: int) -> dict:
     trend = []
     for offset in range(days - 1, -1, -1):
         day = (today - timedelta(days=offset)).isoformat()
-        trend.append(
-            {"date": day, "positive": trend_pos.get(day, 0), "negative": trend_neg.get(day, 0)}
-        )
+        trend.append({"date": day, "positive": trend_pos.get(day, 0), "negative": trend_neg.get(day, 0)})
     # Bound the trend to the active range (with one leading pad day) so a fresh
     # demo shows the days that actually have signals, not a flat month.
     active_idx = [i for i, d in enumerate(trend) if d["positive"] or d["negative"]]
@@ -196,10 +194,7 @@ def _aggregate(records: list[dict], days: int) -> dict:
             "approvalRate": approval_rate,
             "editRate": edit_rate,
         },
-        "bySource": [
-            {"source": s, "label": SOURCE_LABELS.get(s, s), "count": c}
-            for s, c in by_source.most_common()
-        ],
+        "bySource": [{"source": s, "label": SOURCE_LABELS.get(s, s), "count": c} for s, c in by_source.most_common()],
         "byModel": [{"model": m, "wins": c} for m, c in by_model.most_common()],
         "topModel": {"model": top_model[0], "wins": top_model[1]} if top_model else None,
         "trend": trend,

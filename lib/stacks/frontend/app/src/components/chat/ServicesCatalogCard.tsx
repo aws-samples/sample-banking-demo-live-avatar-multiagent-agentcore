@@ -6,6 +6,7 @@ import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import Modal from "@cloudscape-design/components/modal";
 import { Volume2, Square, Pencil, FlaskConical, ThumbsUp, ThumbsDown, Check } from "lucide-react";
 import { useAuth } from "react-oidc-context";
 import { useChatStore } from "@/stores/chatStore";
@@ -185,6 +186,15 @@ export function ServicesCatalogCard({
                                     <Button onClick={() => onAction?.("start_over", {})}>
                                         Start Over
                                     </Button>
+                                    {/* Continuous feedback loop: turn the ratings,
+                                        comments and edits gathered here into
+                                        designer-prompt refinements for the next run. */}
+                                    <Button
+                                        iconName="gen-ai"
+                                        onClick={() => onAction?.("optimize_from_feedback", {})}
+                                    >
+                                        Improve prompt from feedback
+                                    </Button>
                                     <Button variant="primary" onClick={handleApprove}>
                                         Approve &amp; Export
                                     </Button>
@@ -223,6 +233,14 @@ function ReviewRow({
     const [rated, setRated] = useState<"positive" | "negative" | null>(null);
     const [edited, setEdited] = useState(false);
 
+    // Vote popup: opened when a thumb is clicked so the reviewer can attach a
+    // comment and reason tags. That commentary is what feeds the continuous
+    // feedback loop's prompt optimization — a bare thumb carries no "why".
+    const [voteOpen, setVoteOpen] = useState(false);
+    const [voteSentiment, setVoteSentiment] = useState<"positive" | "negative">("positive");
+    const [voteComment, setVoteComment] = useState("");
+    const [voteReasons, setVoteReasons] = useState<string[]>([]);
+
     const name = item.name ?? "Service";
     const speakingThis = speech.speaking && speech.activeId === rowId;
 
@@ -243,6 +261,47 @@ function ReviewRow({
             },
             idToken
         ).catch(() => undefined);
+    };
+
+    // Reason chips offered in the vote popup, tuned per sentiment so the tags
+    // map cleanly onto prompt guidance (too long/off-brand → refinements).
+    const REASONS: Record<"positive" | "negative", string[]> = {
+        positive: ["Great tone", "Clear", "On-brand", "Benefit-led", "Right length"],
+        negative: [
+            "Too long",
+            "Too short",
+            "Off-brand",
+            "Not benefit-led",
+            "Inaccurate",
+            "Generic",
+        ],
+    };
+
+    const openVote = (sentiment: "positive" | "negative"): void => {
+        setVoteSentiment(sentiment);
+        setVoteComment("");
+        setVoteReasons([]);
+        setVoteOpen(true);
+    };
+
+    const toggleReason = (reason: string): void => {
+        setVoteReasons((prev) =>
+            prev.includes(reason) ? prev.filter((r) => r !== reason) : [...prev, reason]
+        );
+    };
+
+    const submitVote = (withDetail: boolean): void => {
+        const comment = withDetail
+            ? voteComment.trim() ||
+              (voteReasons.length ? voteReasons.join(", ") : `Catalog item rated ${voteSentiment}`)
+            : `Catalog item rated ${voteSentiment}`;
+        sendFeedback(voteSentiment, comment, {
+            source: "catalog_rating",
+            reasons: withDetail ? voteReasons : undefined,
+            text: item.description ?? "",
+            model: item.evaluation?.selectedModel,
+        });
+        setVoteOpen(false);
     };
 
     const applyText = (next: string, note: string, metadata?: FeedbackMetadata): void => {
@@ -370,11 +429,7 @@ function ReviewRow({
                                     />
                                 }
                                 ariaLabel={`Rate ${name} helpful`}
-                                onClick={() =>
-                                    sendFeedback("positive", "Catalog item rated helpful", {
-                                        source: "catalog_rating",
-                                    })
-                                }
+                                onClick={() => openVote("positive")}
                             />
                             <Button
                                 variant="inline-icon"
@@ -385,11 +440,7 @@ function ReviewRow({
                                     />
                                 }
                                 ariaLabel={`Rate ${name} not helpful`}
-                                onClick={() =>
-                                    sendFeedback("negative", "Catalog item rated not helpful", {
-                                        source: "catalog_rating",
-                                    })
-                                }
+                                onClick={() => openVote("negative")}
                             />
                         </div>
                     )}
@@ -403,6 +454,65 @@ function ReviewRow({
                     ) : null}
                 </div>
             </div>
+
+            <Modal
+                visible={voteOpen}
+                onDismiss={() => setVoteOpen(false)}
+                header={
+                    voteSentiment === "positive"
+                        ? `What worked about “${name}”?`
+                        : `What would you change about “${name}”?`
+                }
+                footer={
+                    <Box float="right">
+                        <SpaceBetween direction="horizontal" size="xs">
+                            <Button variant="link" onClick={() => submitVote(false)}>
+                                Skip
+                            </Button>
+                            <Button variant="primary" onClick={() => submitVote(true)}>
+                                Submit feedback
+                            </Button>
+                        </SpaceBetween>
+                    </Box>
+                }
+            >
+                <SpaceBetween size="m">
+                    <div className="flex flex-wrap gap-1.5">
+                        {REASONS[voteSentiment].map((reason) => {
+                            const on = voteReasons.includes(reason);
+                            return (
+                                <button
+                                    key={reason}
+                                    type="button"
+                                    onClick={() => toggleReason(reason)}
+                                    className="rounded-full px-2.5 py-1 text-xs font-medium transition"
+                                    style={{
+                                        border: on
+                                            ? "1px solid #8b8ef7"
+                                            : "1px solid var(--glass-border)",
+                                        background: on ? "#8b8ef71f" : "transparent",
+                                        color: on ? "#c7c9ff" : "var(--app-text-secondary)",
+                                    }}
+                                    aria-pressed={on}
+                                >
+                                    {reason}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <Textarea
+                        value={voteComment}
+                        onChange={({ detail }) => setVoteComment(detail.value)}
+                        rows={3}
+                        placeholder="Optional: add a comment. This feeds the prompt-optimization loop."
+                        ariaLabel={`Comment on ${name}`}
+                    />
+                    <Box variant="small" color="text-body-secondary">
+                        Your rating, tags and comment feed the continuous feedback loop that refines
+                        the designer prompt.
+                    </Box>
+                </SpaceBetween>
+            </Modal>
         </div>
     );
 }

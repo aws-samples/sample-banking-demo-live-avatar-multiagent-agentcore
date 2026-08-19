@@ -1143,6 +1143,233 @@ def _ab_evaluate_catalog(catalog: dict, *, base_model_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Feedback-driven prompt optimization for the Services Catalog (AI Assistant)
+# ---------------------------------------------------------------------------
+# Closes the continuous feedback loop: reviewer thumbs + comments + human edits
+# captured during catalog review are read back and turned into concrete copy
+# guidance the designer prompt is refined with. Human-in-the-loop — the presenter
+# reviews and applies the refinement, and only then does the next catalog run use
+# it. Mirrors the AWS gen-AI lifecycle "experimentation loop": observe production
+# feedback → propose a prompt experiment → validate → promote.
+
+# Appended to the designer prompt when an applied refinement is present. The
+# refinement is ADDITIVE — the JSON output contract in MENU_DESIGNER_PROMPT is
+# never touched, so a bad refinement can shift the copy but cannot break parsing.
+_DESIGNER_FEEDBACK_HEADER = (
+    "FEEDBACK-DRIVEN REFINEMENTS — apply these to your copy. They were derived from real reviewer "
+    "thumbs, comments, and edits. The JSON output format, schema, and image rules above still apply "
+    "UNCHANGED:"
+)
+
+MENU_PROMPT_ENGINEER_SYSTEM = """You are a prompt engineer. You improve the COPYWRITING GUIDANCE of a
+services-catalog designer agent using REAL reviewer feedback (thumbs up/down, written comments, and
+human edits to the copy).
+
+You are NOT rewriting the whole prompt, and you MUST NOT touch its output format, JSON schema, or
+image rules — those are fixed and appended automatically. Focus only on the copywriting guidance:
+tone, length discipline, benefit framing, brand voice, and whatever the feedback shows reviewers
+disliked or corrected.
+
+Return ONLY a JSON object — no prose, no code fence:
+{
+  "summary_of_feedback": "1-2 sentences on what reviewers reacted to",
+  "rationale": "1-2 sentences on what you changed and why it addresses the feedback",
+  "refinements": [
+    "a concrete, imperative guidance bullet the designer should follow",
+    "another bullet"
+  ]
+}
+Keep refinements specific, actionable, and grounded in the feedback (3-6 bullets)."""
+
+
+def _read_catalog_feedback(*, days: int = 30, limit: int = 40) -> dict:
+    """Read recent AI Assistant catalog feedback from the feedback table.
+
+    Best-effort: any failure returns an empty structure so the optimizer degrades
+    gracefully rather than erroring. Scoped to catalog rating + human-edit signals
+    (the AI Assistant's), read from the `feedbackType-timestamp-index` GSI.
+    """
+    import time as _t
+
+    import boto3
+    from boto3.dynamodb.conditions import Key
+
+    stack = os.environ.get("STACK_NAME", "")
+    region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+    negatives: list[dict] = []
+    edits: list[dict] = []
+    pos = 0
+    neg = 0
+    try:
+        table = boto3.resource("dynamodb", region_name=region).Table(f"{stack}-feedback")
+        cutoff = int(_t.time()) - days * 86400
+        for ftype in ("negative", "positive"):
+            resp = table.query(
+                IndexName="feedbackType-timestamp-index",
+                KeyConditionExpression=Key("feedbackType").eq(ftype) & Key("timestamp").gte(cutoff),
+                ScanIndexForward=False,
+                Limit=limit,
+            )
+            for item in resp.get("Items", []):
+                meta = item.get("metadata") or {}
+                source = meta.get("source")
+                if source not in ("catalog_rating", "edit"):
+                    continue
+                reasons = meta.get("reasons") or []
+                entry = {
+                    "itemName": str(meta.get("itemName", "") or ""),
+                    "reasons": [str(r) for r in reasons] if isinstance(reasons, list) else [],
+                    "comment": str(item.get("feedbackText", "") or ""),
+                    "text": str(meta.get("text", "") or ""),
+                }
+                if ftype == "negative":
+                    neg += 1
+                    negatives.append(entry)
+                else:
+                    pos += 1
+                    if source == "edit":
+                        edits.append(entry)
+    except Exception as exc:  # noqa: BLE001 - optimizer degrades gracefully
+        logger.warning("Reading catalog feedback failed: %s", exc)
+    return {"negative": neg, "positive": pos, "negatives": negatives[:limit], "edits": edits[:limit]}
+
+
+def _summarize_catalog_feedback(fb: dict) -> str:
+    """Render the feedback dict into a compact prompt-input summary."""
+    lines: list[str] = [f"Totals: {fb['positive']} positive, {fb['negative']} negative signals."]
+    if fb["negatives"]:
+        lines.append("\nNegative signals (item — reasons — comment):")
+        for e in fb["negatives"][:15]:
+            reasons = ", ".join(e["reasons"]) if e["reasons"] else "—"
+            comment = e["comment"] or "—"
+            lines.append(f"- {e['itemName'] or 'item'} — {reasons} — {comment}")
+    if fb["edits"]:
+        lines.append("\nHuman edits (reviewers rewrote these — infer the preferred style):")
+        for e in fb["edits"][:10]:
+            if e["text"]:
+                lines.append(f"- {e['itemName'] or 'item'}: {e['text']}")
+    return "\n".join(lines)
+
+
+async def _handle_menu_optimize(user_id: str, session_id: str, requested_model: str = ""):
+    """Feedback-driven prompt optimization for the catalog designer (HITL).
+
+    Reads recent catalog feedback, asks a prompt-engineer model to propose
+    concrete copy-guidance refinements grounded in that feedback, and emits a
+    PromptImprovement card the presenter reviews and applies. Applying stores the
+    refinements client-side; the next catalog run appends them to the designer
+    prompt. Never raises to the stream — failures surface as a card status.
+    """
+    import queue as thread_queue
+
+    print(f"[MENU_OPTIMIZE] Starting for user {user_id}")
+    fb = _read_catalog_feedback()
+
+    # Not enough signal to act on — say so honestly rather than inventing edits.
+    if fb["negative"] == 0 and not fb["edits"]:
+        yield {
+            "_ui": {
+                "component": "PromptImprovement",
+                "props": {
+                    "status": "insufficient",
+                    "feedbackSummary": f"{fb['positive']} positive, {fb['negative']} negative signals so far.",
+                },
+            }
+        }
+        yield {"result": {"stop_reason": "end_turn"}}
+        return
+
+    summary = _summarize_catalog_feedback(fb)
+    model_id = requested_model or os.environ.get("MODEL_ID", "us.anthropic.claude-sonnet-4-6")
+
+    tq: thread_queue.Queue = thread_queue.Queue()
+    _DONE = object()
+    _HEARTBEAT = object()
+    _ERROR = object()
+
+    def _run_sync():
+        try:
+            model = _build_model(model_id, temperature=0.3)
+            engineer = Agent(
+                name="CatalogPromptEngineer",
+                system_prompt=MENU_PROMPT_ENGINEER_SYSTEM,
+                model=model,
+            )
+            user = (
+                "CURRENT DESIGNER PROMPT (for context — do not reproduce it):\n"
+                f"{MENU_DESIGNER_PROMPT}\n\n"
+                "REVIEWER FEEDBACK:\n"
+                f"{summary}\n\n"
+                "Propose refinements as specified."
+            )
+            tq.put(("text", str(engineer(user))))
+        except Exception as exc:  # noqa: BLE001 - reported as a card status
+            tq.put((_ERROR, exc))
+        finally:
+            tq.put((_DONE, None))
+
+    _stop = threading.Event()
+
+    def _hb():
+        while not _stop.wait(10):
+            tq.put((_HEARTBEAT, None))
+
+    hb = threading.Thread(target=_hb, daemon=True)
+    hb.start()
+    loop = asyncio.get_running_loop()
+    fut = loop.run_in_executor(None, _run_sync)
+
+    raw = ""
+    failed = False
+    try:
+        while True:
+            while tq.empty():
+                await asyncio.sleep(0.1)
+            tag, value = tq.get_nowait()
+            if tag is _DONE:
+                break
+            if tag is _ERROR:
+                print(f"[MENU_OPTIMIZE] prompt-engineer run failed: {value}")
+                failed = True
+                break
+            if tag is _HEARTBEAT:
+                yield {"data": "", "heartbeat": True}
+            elif tag == "text":
+                raw = value
+    finally:
+        _stop.set()
+        hb.join(timeout=2)
+        fut.cancel()
+
+    parsed = _parse_json_object(raw) or {}
+    refinements = parsed.get("refinements")
+    if failed or not isinstance(refinements, list) or not refinements:
+        yield {
+            "_ui": {
+                "component": "PromptImprovement",
+                "props": {"status": "error", "feedbackSummary": summary},
+            }
+        }
+        yield {"result": {"stop_reason": "end_turn"}}
+        return
+
+    yield {
+        "_ui": {
+            "component": "PromptImprovement",
+            "props": {
+                "status": "ready",
+                "summaryOfFeedback": str(parsed.get("summary_of_feedback", "")),
+                "rationale": str(parsed.get("rationale", "")),
+                "refinements": [str(r) for r in refinements],
+                "feedbackSummary": summary,
+                "signalCount": fb["negative"] + len(fb["edits"]),
+            },
+        }
+    }
+    yield {"result": {"stop_reason": "end_turn"}}
+
+
+# ---------------------------------------------------------------------------
 # Trinity Reserve Bank — baked-in facts for the AI Client Advisor
 # ---------------------------------------------------------------------------
 # The advisor prefers tool data (KB search, web search, open_account, browser
@@ -3624,6 +3851,14 @@ async def orchestrate(payload: dict, context: RequestContext):
             yield event
         return
 
+    # ── Catalog prompt optimization from feedback (human-in-the-loop) ──
+    # Reads recent reviewer feedback and proposes designer-prompt refinements for
+    # the presenter to review and apply. Closes the continuous feedback loop.
+    if mode == "menu_optimize":
+        async for event in _handle_menu_optimize(user_id, session_id, requested_model):
+            yield event
+        return
+
     # ── Services Catalog export: continue after the user approved the catalog ──
     #
     # The catalog is a customer-facing deliverable, so exporting it is gated on
@@ -3672,6 +3907,23 @@ async def orchestrate(payload: dict, context: RequestContext):
             print("[ORCHESTRATOR] No strategy report found to pin — catalog will use pipeline scope only")
 
     phases = MENU_DESIGN_PHASES if mode == "menu" else AGENT_PHASES
+
+    # Feedback-driven prompt optimization (human-in-the-loop): when the presenter
+    # has applied a refinement generated from catalog feedback, append it to the
+    # designer's prompt for this run. Appended, never a replacement, so the JSON
+    # output contract in MENU_DESIGNER_PROMPT is preserved.
+    designer_addendum = str(payload.get("designer_prompt_addendum", "") or "").strip()
+    if mode == "menu" and designer_addendum:
+        phases = [
+            (
+                {**p, "prompt": f"{p['prompt']}\n\n{_DESIGNER_FEEDBACK_HEADER}\n{designer_addendum}"}
+                if p["name"] == "menu_designer"
+                else p
+            )
+            for p in phases
+        ]
+        print("[ORCHESTRATOR] Applied feedback-driven designer prompt addendum")
+
     async for event in _run_pipeline(
         phases,
         query,

@@ -9,7 +9,13 @@ function getApiUrl(): string {
 }
 
 /** Where a signal originated, so the loop dashboard can slice by signal type. */
-export type FeedbackSource = "catalog_rating" | "chat_rating" | "edit" | "ab_test";
+export type FeedbackSource =
+    | "catalog_rating"
+    | "chat_rating"
+    | "edit"
+    | "ab_test"
+    /** A designer-prompt refinement generated from feedback and applied. */
+    | "prompt_update";
 
 export interface FeedbackMetadata {
     source?: FeedbackSource;
@@ -19,6 +25,10 @@ export interface FeedbackMetadata {
     itemName?: string;
     /** Experience the signal came from, e.g. "menu". */
     experience?: string;
+    /** Structured reason tags chosen in the vote popup (e.g. "Too long"). */
+    reasons?: string[];
+    /** The text the signal is about (the description voted on), for the loop optimizer. */
+    text?: string;
 }
 
 export interface FeedbackPayload {

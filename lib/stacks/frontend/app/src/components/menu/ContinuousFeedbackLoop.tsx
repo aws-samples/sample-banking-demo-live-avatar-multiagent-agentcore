@@ -59,9 +59,12 @@ export default function ContinuousFeedbackLoop(): JSX.Element | null {
 
     const { totals, bySource } = summary;
     const active = totals.total > 0;
+    // "Improve" counts the signals that changed something downstream: human
+    // edits, applied A/B winners, and feedback-driven designer prompt updates.
     const improvements =
         (bySource.find((s) => s.source === "edit")?.count ?? 0) +
-        (bySource.find((s) => s.source === "ab_test")?.count ?? 0);
+        (bySource.find((s) => s.source === "ab_test")?.count ?? 0) +
+        (bySource.find((s) => s.source === "prompt_update")?.count ?? 0);
     const smallSample = totals.total > 0 && totals.total < SMALL_SAMPLE;
 
     const stages = [
@@ -358,6 +361,7 @@ function SourceBars({ summary }: { summary: FeedbackSummary }): JSX.Element | nu
         chat_rating: <ThumbsUp size={11} />,
         edit: <Pencil size={11} />,
         ab_test: <FlaskConical size={11} />,
+        prompt_update: <RefreshCw size={11} />,
     };
     return (
         <div className="mb-3">
@@ -469,6 +473,7 @@ function sourceLabel(source: string): string {
             chat_rating: "Chat rating",
             edit: "Human edit",
             ab_test: "A/B winner",
+            prompt_update: "Prompt update",
             other: "Untagged signal",
         }[source] ?? source
     );
