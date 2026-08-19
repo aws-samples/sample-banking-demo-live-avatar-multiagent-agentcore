@@ -89,11 +89,14 @@ export const EXPERIENCES: readonly Experience[] = [
         description:
             "Turns the research report into a customer-facing services catalog with text, generated imagery and speech. Automatic quality control, human review, A/B model comparison and a continuous feedback loop are all wired in.",
         service: "Amazon Nova · Code Interpreter",
-        // Internal authoring tool: the operator runs quality control, human
-        // review, A/B model comparison and the feedback loop, and it reads the
-        // internal research corpora. What it PUBLISHES (the catalog, its
-        // imagery and spoken playback) is what customers ultimately see.
-        audience: "internal",
+        // External: a customer-facing channel. It answers product and services
+        // questions from the published catalog, so it carries the same
+        // Guardrails + PII/DLP posture as the other customer surfaces — the
+        // internal research corpus behind it (salary bands, operating model)
+        // must never reach a customer. The authoring controls it also exposes
+        // (quality control, human review, A/B comparison, feedback) are operator
+        // affordances on top of that customer-facing channel.
+        audience: "external",
         icon: Boxes,
     },
     {
