@@ -1,4 +1,7 @@
-strands-agents[sagemaker]>=1.33.0,<2.0.0
+# a2a extra: the CALLER side of the A2A hops (fraud consult + section-researcher
+# fan-out) imports a2a.client/httpx via utils/a2a_client.py — without it the hop
+# dies at discovery with "No module named 'a2a'".
+strands-agents[a2a,sagemaker]>=1.33.0,<2.0.0
 bedrock-agentcore[strands-agents]>=1.4.1,<2.0.0
 mcp>=1.26.0,<2.0.0
 PyJWT[crypto]>=2.10.1

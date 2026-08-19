@@ -3546,7 +3546,11 @@ PARALLEL_PHASE_WALL_CLOCK_SEC = 900
 # converts "hang forever" into "abandon the wedged phase and deliver what we
 # have". The idle timeout is a generous secondary backstop for total silence.
 SEQUENTIAL_PHASE_WALL_CLOCK_SEC: dict[str, int] = {
-    "synthesizer": 1200,  # legit synthesis can run "well over 15 min"
+    # Match the 30-min Bedrock read timeout: the synthesizer runs Claude with
+    # extended thinking over the entire researcher output (100k+ tokens) and can
+    # legitimately run "well over 15 min", so the phase watchdog must not fire
+    # before the underlying model call itself would.
+    "synthesizer": 1800,
     "pdf_writer": 600,
     "website_writer": 600,
     "menu_designer": 900,
@@ -3557,8 +3561,59 @@ SEQUENTIAL_PHASE_WALL_CLOCK_SEC: dict[str, int] = {
 SEQUENTIAL_PHASE_WALL_CLOCK_DEFAULT_SEC = 1200
 # No real progress (a tool result, streamed text, or a delivered artifact —
 # heartbeats do NOT count) for this long means the phase is almost certainly
-# wedged. Set high enough to clear a long thinking gap between tool calls.
-SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC = 600
+# wedged. Per-phase because the synthesizer legitimately emits NOTHING while it
+# thinks (extended thinking streams no events until the first output token), so
+# a flat 600s backstop cut genuine long syntheses short. It gets a 20-min idle
+# allowance (still below its 30-min wall clock, so a truly wedged tool call is
+# caught); everything else keeps the tighter default.
+SEQUENTIAL_PHASE_IDLE_TIMEOUT_DEFAULT_SEC = 600
+SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC: dict[str, int] = {
+    "synthesizer": 1200,
+}
+
+# Transient Bedrock errors during a sequential phase's ConverseStream. These are
+# server-side ("Try your request again") and — critically — a failure that
+# arrives AFTER the stream has opened surfaces as an EventStreamError that
+# botocore's own retry policy does NOT re-drive, so one blip kills the whole
+# phase (observed on the synthesizer: it streams extended thinking over the
+# entire researcher output, a large/long call that occasionally trips a 500).
+# We retry the phase a couple of times with backoff before giving up.
+SEQ_PHASE_MAX_RETRIES = 2
+SEQ_PHASE_RETRY_BACKOFF_SEC = 4
+_TRANSIENT_BEDROCK_MARKERS = (
+    "internalserverexception",
+    "serviceunavailable",
+    "throttlingexception",
+    "modelstreamerrorexception",
+    "modelerrorexception",
+    "modeltimeoutexception",
+    "unexpected error during processing",
+)
+
+
+def _is_transient_bedrock_error(exc: BaseException) -> bool:
+    """True for retryable server-side Bedrock/streaming errors.
+
+    Matches on the class name and message so it catches both raw botocore
+    ClientErrors and the `EventStreamError` wrapper that carries a mid-stream
+    `internalServerException` — the case botocore does not retry on its own.
+    """
+    haystack = f"{exc.__class__.__name__} {exc}".lower()
+    return any(marker in haystack for marker in _TRANSIENT_BEDROCK_MARKERS)
+
+
+def _is_tooluse_sequence_error(exc: BaseException) -> bool:
+    """True when the model emitted a malformed ToolUse sequence mid-stream.
+
+    Surfaces as `modelStreamErrorException: Model produced invalid sequence as
+    part of ToolUse` (observed on the Nova Pro judge). Unlike a plain 500 this
+    is semi-deterministic — replaying the identical request with the same tool
+    config tends to reproduce it — so the retry must REMOVE the tools rather
+    than resend as-is. Checked before the generic transient classifier, which
+    would otherwise match the modelStreamErrorException name.
+    """
+    haystack = f"{exc.__class__.__name__} {exc}".lower()
+    return "invalid sequence as part of tooluse" in haystack
 
 
 def _render_report_payload_markdown(payload: dict) -> str:
@@ -5108,7 +5163,25 @@ async def _run_pipeline(
 
         # Callback handler to intercept tool results (e.g. presigned PDF URLs)
         # so we can emit them directly without relying on the LLM to relay them.
+        # Throttle cell for streaming-liveness pings (see below).
+        _last_liveness = [0.0]
+
         def _pipeline_callback(**kwargs):
+            # Streaming deltas (text/thinking) prove the model call is ALIVE even
+            # though no message has completed yet. Without this, a single long
+            # ConverseStream call — the synthesizer thinking then writing the
+            # whole report in one turn — pushed nothing to the queue for its
+            # entire duration, so the idle watchdog saw only heartbeats and
+            # killed a healthy phase at exactly the idle limit (observed: Opus
+            # 4.7 streaming for 20 min, watchdog fired at 1200s idle). A
+            # throttled "liveness" ping resets the idle deadline; a genuinely
+            # wedged tool call produces NO callbacks, so the watchdog still
+            # catches real hangs.
+            now_cb = time.monotonic()
+            if now_cb - _last_liveness[0] > 15:
+                _last_liveness[0] = now_cb
+                tq.put(("liveness", None))
+
             message = kwargs.get("message")
             if not message:
                 return
@@ -5204,20 +5277,78 @@ async def _run_pipeline(
         turn_limit = _phase_turn_limit(agent_name, phase.get("search_budget"))
 
         def _run_agent_sync():
-            """Run the agent synchronously in a worker thread."""
+            """Run the agent synchronously in a worker thread.
+
+            Two failure classes are retried, since botocore does not re-drive a
+            failure that arrives after the ConverseStream has opened:
+
+            - Transient server-side errors (500s, throttling, mid-stream
+              EventStreamErrors): resend the same turn after a short backoff,
+              with the conversation reset to its initial state so a retry sends
+              exactly one clean turn.
+            - `Model produced invalid sequence as part of ToolUse`
+              (modelStreamErrorException, observed on the Nova Pro judge): this
+              is semi-deterministic — the identical request tends to reproduce
+              it — so the retry instead rebuilds the agent WITHOUT tools. The
+              phase input travels in the prompt, and for the evaluator the
+              kb spot-check tools are optional ("may call"), so a tool-free
+              scoring pass beats losing the score.
+            """
+            active_agent = agent
+            initial_messages = list(getattr(agent, "messages", []) or [])
             try:
-                result = agent(accumulated, limits={"turns": turn_limit})
-                # Extract final text from the synchronous result
-                text = str(result) if result else ""
-                if getattr(result, "stop_reason", None) == "limit_turns":
-                    # Truncated, not failed: the findings gathered so far are
-                    # still worth passing on. Say so rather than presenting a
-                    # partial sweep as a complete one.
-                    print(f"[ORCHESTRATOR] {agent_name} hit the {turn_limit}-turn ceiling")
-                    tq.put((_TRUNCATED, turn_limit))
-                tq.put(("text", text))
-            except Exception as exc:
-                tq.put((_ERROR, exc))
+                attempt = 0
+                while True:
+                    try:
+                        result = active_agent(accumulated, limits={"turns": turn_limit})
+                        # Extract final text from the synchronous result
+                        text = str(result) if result else ""
+                        if getattr(result, "stop_reason", None) == "limit_turns":
+                            # Truncated, not failed: the findings gathered so far
+                            # are still worth passing on. Say so rather than
+                            # presenting a partial sweep as a complete one.
+                            print(f"[ORCHESTRATOR] {agent_name} hit the {turn_limit}-turn ceiling")
+                            tq.put((_TRUNCATED, turn_limit))
+                        tq.put(("text", text))
+                        return
+                    except Exception as exc:
+                        if attempt >= SEQ_PHASE_MAX_RETRIES:
+                            tq.put((_ERROR, exc))
+                            return
+                        if _is_tooluse_sequence_error(exc):
+                            attempt += 1
+                            print(
+                                f"[ORCHESTRATOR] {agent_name} invalid ToolUse sequence "
+                                f"(attempt {attempt}/{SEQ_PHASE_MAX_RETRIES}); retrying "
+                                "with tools removed"
+                            )
+                            # Bare agent: same model + prompt, no tools. The
+                            # malformed-ToolUse failure cannot recur with no
+                            # tool config, and the phase input rides in the
+                            # prompt so nothing else is lost.
+                            active_agent = Agent(
+                                name=f"{agent_name.title().replace('_', '')}RetryAgent",
+                                system_prompt=phase_prompt,
+                                model=bedrock_model,
+                            )
+                            time.sleep(SEQ_PHASE_RETRY_BACKOFF_SEC)
+                            continue
+                        if _is_transient_bedrock_error(exc):
+                            attempt += 1
+                            backoff = SEQ_PHASE_RETRY_BACKOFF_SEC * attempt
+                            print(
+                                f"[ORCHESTRATOR] {agent_name} transient Bedrock error "
+                                f"(attempt {attempt}/{SEQ_PHASE_MAX_RETRIES}); retrying in "
+                                f"{backoff}s: {exc.__class__.__name__}: {exc}"
+                            )
+                            try:
+                                active_agent.messages = list(initial_messages)
+                            except Exception:  # noqa: BLE001 — reset is best-effort
+                                pass
+                            time.sleep(backoff)
+                            continue
+                        tq.put((_ERROR, exc))
+                        return
             finally:
                 tq.put((_DONE, None))
 
@@ -5239,6 +5370,9 @@ async def _run_pipeline(
         # tool call can no longer freeze the phase forever. last_progress is
         # reset by any real event (below) but never by a heartbeat.
         phase_wall_clock = SEQUENTIAL_PHASE_WALL_CLOCK_SEC.get(agent_name, SEQUENTIAL_PHASE_WALL_CLOCK_DEFAULT_SEC)
+        phase_idle_timeout = SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC.get(
+            agent_name, SEQUENTIAL_PHASE_IDLE_TIMEOUT_DEFAULT_SEC
+        )
         last_progress = time.monotonic()
         phase_timed_out = False
         pending_report_payload: dict | None = None
@@ -5248,9 +5382,7 @@ async def _run_pipeline(
                 # Poll the thread-safe queue without blocking the event loop
                 while tq.empty():
                     now = time.monotonic()
-                    if (now - start_time > phase_wall_clock) or (
-                        now - last_progress > SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC
-                    ):
+                    if (now - start_time > phase_wall_clock) or (now - last_progress > phase_idle_timeout):
                         phase_timed_out = True
                         break
                     await asyncio.sleep(0.1)
@@ -5482,7 +5614,7 @@ async def _run_pipeline(
             timed_out_after = round(time.monotonic() - start_time)
             print(
                 f"[ORCHESTRATOR] {agent_name} watchdog fired after {timed_out_after}s "
-                f"(wall_clock={phase_wall_clock}s, idle_limit={SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC}s) — "
+                f"(wall_clock={phase_wall_clock}s, idle_limit={phase_idle_timeout}s) — "
                 f"abandoning wedged phase"
             )
             if not agent_text and pending_report_payload:
