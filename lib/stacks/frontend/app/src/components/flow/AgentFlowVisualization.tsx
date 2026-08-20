@@ -1,9 +1,10 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import {
     ReactFlow,
     Background,
     Controls,
     ReactFlowProvider,
+    useReactFlow,
     type Node,
     type Edge,
 } from "@xyflow/react";
@@ -153,6 +154,39 @@ function AgentFlowInner({
         setSelectedNode((prev) => (prev === node.id ? null : node.id));
     }, []);
 
+    // Keep the workflow centered when the panel layout shifts. `fitView` runs
+    // once on mount, so when a run starts — the progress banner, run report and
+    // activity feed appear and the flex-1 diagram container resizes — the graph
+    // was left pinned off-center until the user hit the recenter control. Re-fit
+    // on container resize and when the run begins/ends.
+    const { fitView } = useReactFlow();
+    const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const refitFrameRef = useRef<number | null>(null);
+
+    const refit = useCallback(() => {
+        if (refitFrameRef.current != null) cancelAnimationFrame(refitFrameRef.current);
+        // Defer to the next frame so React Flow measures the settled container.
+        refitFrameRef.current = requestAnimationFrame(() => {
+            refitFrameRef.current = null;
+            void fitView({ padding: 0.18, duration: 200 });
+        });
+    }, [fitView]);
+
+    useEffect(() => {
+        const el = wrapperRef.current;
+        if (!el || typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(() => refit());
+        observer.observe(el);
+        return () => {
+            observer.disconnect();
+            if (refitFrameRef.current != null) cancelAnimationFrame(refitFrameRef.current);
+        };
+    }, [refit]);
+
+    useEffect(() => {
+        refit();
+    }, [refit, state.isActive, nodes.length, edges.length]);
+
     const selectedTraces = selectedNode
         ? state.thinkingTraces.filter((t) => t.agent === selectedNode)
         : [];
@@ -263,6 +297,7 @@ function AgentFlowInner({
             </div>
 
             <div
+                ref={wrapperRef}
                 className={fill ? "relative w-full flex-1" : "relative w-full"}
                 style={fill ? undefined : { height: flowHeight }}
             >
