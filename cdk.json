@@ -45,7 +45,7 @@
             "a2a": true,
             "a2a_parallel_research": true,
             "prompt_optimization": true,
-            "custom_model": true,
+            "sagemaker_model": false,
             "kb_multimodal": true,
             "agent_registry": true,
             "agentcore_identity": true,
@@ -85,10 +85,10 @@
                 "matthew": "rf8f3aa4b33e"
             }
         },
-        "customModel": {
-            "modelArn": "arn:aws:bedrock:us-east-1:157000088284:imported-model/i6xsa28glxe7",
+        "sagemaker": {
+            "endpointName": "PLACEHOLDER-ai-agent-sagemaker-endpoint",
             "regionName": "",
-            "maxTokens": 2048
+            "maxTokens": 4096
         },
 
         "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
