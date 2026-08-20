@@ -1155,6 +1155,15 @@ def _write_eval_dataset(s3, bucket: str, key: str, entries: list[tuple[str, str]
         _json.dumps(
             {
                 "prompt": _catalog_item_brief(name),
+                # taskType "General" validates that EVERY entry carries a
+                # referenceResponse (verified against us-east-1 — omitting it
+                # fails the job at dataset validation). Our custom rubric only
+                # reads {{prompt}} and {{prediction}}, so this gold exemplar is
+                # never scored against; it only satisfies validation.
+                "referenceResponse": (
+                    f"A concise, benefit-led one-sentence description of {name} "
+                    f"(15-30 words, plain sentence case, no hype)."
+                ),
                 "modelResponses": [{"response": desc, "modelIdentifier": model_identifier}],
             }
         )
@@ -1233,7 +1242,12 @@ def _launch_catalog_evaluation(catalog: dict, *, base_model_id: str, session_id:
         except Exception:  # noqa: BLE001 - SSM miss is non-fatal; handled below
             bucket = ""
 
-    console_url = f"https://{region}.console.aws.amazon.com/bedrock/home?region={region}#/evaluations"
+    # Region-scoped Bedrock console home (model evaluation lives ONLY in
+    # us-east-1 / us-west-2). A bare "#/evaluations" hash renders blank on a
+    # cold SPA load, so land on the console root — the operator opens
+    # "Inference and assessment > Evaluations" from the left nav. Not the
+    # AgentCore console, which has its own separate evaluations page.
+    console_url = f"https://{region}.console.aws.amazon.com/bedrock/home?region={region}"
 
     entries = _flatten_catalog_entries(catalog)
     if not entries:

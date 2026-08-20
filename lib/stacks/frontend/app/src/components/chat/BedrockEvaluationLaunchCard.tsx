@@ -43,6 +43,7 @@ export function BedrockEvaluationLaunchCard({
     status = "error",
     judgeModel,
     metric,
+    region,
     consoleUrl,
     itemCount,
     message,
@@ -83,12 +84,21 @@ export function BedrockEvaluationLaunchCard({
             >
                 <SpaceBetween size="m">
                     {status === "ok" ? (
-                        <Box variant="small" color="text-body-secondary">
-                            A/B across two models over {itemCount ?? launched.length} description
-                            {itemCount === 1 ? "" : "s"}
-                            {judgeModel ? `, judged by ${judgeModel}` : ""}
-                            {metric ? ` on the “${metric}” rubric` : ""}.
-                        </Box>
+                        <>
+                            <Box variant="small" color="text-body-secondary">
+                                A/B across two models over {itemCount ?? launched.length}{" "}
+                                description
+                                {itemCount === 1 ? "" : "s"}
+                                {judgeModel ? `, judged by ${judgeModel}` : ""}
+                                {metric ? ` on the “${metric}” rubric` : ""}.
+                            </Box>
+                            <Box variant="small" color="text-body-secondary">
+                                Find these in the <strong>Amazon Bedrock</strong> console →{" "}
+                                <em>Inference and assessment → Evaluations → Model evaluations</em>
+                                {region ? ` (${region})` : ""}. This is separate from the AgentCore
+                                evaluations page. Jobs take a few minutes to complete.
+                            </Box>
+                        </>
                     ) : (
                         <StatusIndicator type="error">
                             {message || "Evaluation launch failed."}
@@ -124,20 +134,8 @@ export function BedrockEvaluationLaunchCard({
                                 style={{ color: "var(--app-text-secondary)" }}
                                 title={job.jobName}
                             >
-                                Job: {job.jobName}
+                                Job name: {job.jobName}
                             </p>
-                            {job.consoleUrl ? (
-                                <div className="mt-2">
-                                    <Button
-                                        variant="inline-link"
-                                        iconName="external"
-                                        href={job.consoleUrl}
-                                        target="_blank"
-                                    >
-                                        View job in console
-                                    </Button>
-                                </div>
-                            ) : null}
                         </div>
                     ))}
 
