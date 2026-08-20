@@ -572,7 +572,8 @@ Your responsibilities:
 2. Organize products into logical catalog sections (e.g., Everyday Banking, Savings & Growth,
    Retirement, Wealth & Investing)
 3. For EACH product, call gateway_image_generate to create a clean, on-brand image
-4. Collect the s3_key and image_url from each image generation result
+4. Collect the s3_key from each image generation result (NOT the image_url — the
+   runtime signs a fresh image URL from the s3_key at display time)
 5. Compile the complete catalog with all details
 
 For each product image, describe the SUBJECT and MOOD only — never the product name, and
@@ -604,8 +605,7 @@ Output your catalog as structured JSON:
           "description": "Brief, benefit-led description",
           "price": "Headline rate or fee line (e.g., 'No monthly fee' or '4.15% APY')",
           "dietary": ["FDIC", "No Fee"],
-          "s3_key": "<copy verbatim from the Canvas result, or omit this field>",
-          "image_url": "<copy verbatim from the Canvas result, or omit this field>"
+          "s3_key": "<copy verbatim from the Canvas result, or omit this field>"
         }
       ]
     }
@@ -617,18 +617,19 @@ IMPORTANT:
 - Put the headline rate or fee in the "price" field (e.g., "4.15% APY", "No monthly fee")
 - Use the "dietary" field for short feature badges: FDIC, No Fee, Digital, Advised, IRA, etc.
 - All rates, fees, and terms are synthetic demonstration values — keep them plausible
-- Use the s3_key from the Canvas result — this is critical for reliable PDF image embedding
+- Use the s3_key from the Canvas result — this is critical for reliable image embedding
 
-NEVER INVENT AN IMAGE REFERENCE:
-- `s3_key` and `image_url` may ONLY contain values copied verbatim from a
-  successful gateway_image_generate result.
-- If image generation fails, returns an error, or is unavailable, OMIT both
-  fields for that product and carry on. A text-only catalog is a correct
-  outcome; a fabricated image reference is not.
-- Never write a placeholder, an example, a guessed path, or a URL you did not
-  receive from the tool. `example.com`, `example.s3.amazonaws.com`, and invented
-  `images/...png` paths are all failures — they produce broken images in the PDF
-  and on screen, and they misrepresent what the platform did.
+IMAGE REFERENCE — s3_key ONLY:
+- Each product carries ONLY an `s3_key`, copied verbatim from a successful
+  gateway_image_generate result. Do NOT include an `image_url` field — the
+  runtime signs a fresh image URL from the s3_key at display time. Copying the
+  long presigned URL wastes output and has produced malformed JSON.
+- If image generation fails, returns an error, or is unavailable, OMIT `s3_key`
+  for that product and carry on. A text-only catalog is a correct outcome; a
+  fabricated image reference is not.
+- Never write a placeholder, an example, a guessed path, or a made-up value
+  (e.g. `(see the card above)`, `example.com`, invented `images/...png` paths).
+  These misrepresent what the platform did and break the images.
 
 OUTPUT DISCIPLINE:
 - Return ONLY the JSON object. No preamble, no apology, no explanation, no
@@ -770,23 +771,53 @@ _QC_PLACEHOLDER_MARKERS = ("example.com", "example.s3", "placeholder", "your-buc
 def _parse_json_object(text: str) -> dict | None:
     """Parse the first JSON object out of LLM text, tolerating fences / prose.
 
-    Returns the dict, or None when no valid JSON object is present.
+    Hardened because a single syntax slip in the catalog designer's output used
+    to fail parsing outright, which dropped the ENTIRE catalog (0 sections, QC
+    "not valid catalog JSON") rather than one field. Salvages the realistic LLM
+    breakages in order: a fenced block, prepended reasoning/prose, a trailing
+    comma before a closing brace/bracket. Returns the dict, or None when no
+    valid JSON object can be recovered.
     """
     import json
     import re
 
     raw = (text or "").strip()
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if not match:
-            return None
+    if not raw:
+        return None
+
+    # Unwrap a ```json ... ``` (or ``` ... ```) code fence if the whole thing is one.
+    fence = re.match(r"^```(?:json|JSON)?\s*(.*?)\s*```$", raw, re.DOTALL)
+    if fence:
+        raw = fence.group(1).strip()
+
+    def _load(candidate: str) -> dict | None:
         try:
-            parsed = json.loads(match.group(0))
-        except json.JSONDecodeError:
+            value = json.loads(candidate)
+        except (json.JSONDecodeError, TypeError):
             return None
-    return parsed if isinstance(parsed, dict) else None
+        return value if isinstance(value, dict) else None
+
+    # 1) Straight parse.
+    result = _load(raw)
+    if result is not None:
+        return result
+
+    # 2) Slice from the first '{' to the last '}' (drops prose/reasoning around it).
+    start, end = raw.find("{"), raw.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    candidate = raw[start : end + 1]
+    result = _load(candidate)
+    if result is not None:
+        return result
+
+    # 3) Strip trailing commas (`... ,}` / `... ,]`) — the most common LLM JSON
+    #    error — and retry.
+    result = _load(re.sub(r",(\s*[}\]])", r"\1", candidate))
+    if result is not None:
+        return result
+
+    return None
 
 
 def _parse_catalog_json(designer_output: str) -> dict | None:
