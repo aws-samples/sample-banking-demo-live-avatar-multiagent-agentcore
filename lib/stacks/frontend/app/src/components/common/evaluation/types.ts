@@ -36,6 +36,14 @@ export interface EvaluationData {
     dimensions: EvaluationDimension[];
     /** Top actionable gaps the judge flagged. */
     gaps: string[];
+    /**
+     * The report text the judge scored, carried back so a "Revise weak areas"
+     * action can drive a targeted re-synthesis without re-extracting the report
+     * from the chat transcript. Present only on a report evaluation.
+     */
+    reportText?: string;
+    /** The original brief, forwarded to the revision pass for context. */
+    query?: string;
 }
 
 /** Score at or above this is a pass; below it the run is flagged for revision. */

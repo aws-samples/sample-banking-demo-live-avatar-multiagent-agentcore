@@ -40,6 +40,13 @@ export interface UseChatEngineReturn {
     exportCatalog: (catalog: Record<string, unknown>) => Promise<void>;
     /** Ask the orchestrator to propose designer-prompt refinements from feedback. */
     optimizeFromFeedback: () => Promise<void>;
+    /** Re-synthesize a flagged report to fix only its sub-threshold dimensions. */
+    reviseReport: (payload: {
+        report_text?: string;
+        weak_dimensions?: unknown[];
+        gaps?: string[];
+        query?: string;
+    }) => Promise<void>;
     isLoading: boolean;
     error: string | null;
     clearError: () => void;
@@ -694,6 +701,50 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
         );
     }, [client, _streamResponse, storeKey]);
 
+    /**
+     * Targeted revision: re-run synthesis on the flagged report to fix only the
+     * sub-threshold dimensions the evaluator called out, then re-evaluate. The
+     * prior report travels in the payload (the evaluation card carries it) so
+     * the reviser has the material to improve without re-researching.
+     */
+    const reviseReport = useCallback(
+        async (payload: {
+            report_text?: string;
+            weak_dimensions?: unknown[];
+            gaps?: string[];
+            query?: string;
+        }): Promise<void> => {
+            if (!client) return;
+            useChatStore.getState().setError(storeKey, null);
+            const labels = Array.isArray(payload.weak_dimensions)
+                ? payload.weak_dimensions
+                      .map((d) =>
+                          d && typeof d === "object" ? (d as { label?: string }).label : undefined
+                      )
+                      .filter(Boolean)
+                      .join(", ")
+                : "";
+            const triggerMessage: Message = {
+                role: "user",
+                content: labels
+                    ? `Revise the report to fix the flagged areas: ${labels}.`
+                    : "Revise the report to fix the flagged areas.",
+                timestamp: new Date().toISOString(),
+            };
+            useChatStore.getState().setMessages(storeKey, (prev) => [...prev, triggerMessage]);
+            await _streamResponse(
+                payload.query || "Revise the flagged research report.",
+                "research_revise",
+                {
+                    report_text: payload.report_text ?? "",
+                    weak_dimensions: payload.weak_dimensions ?? [],
+                    gaps: payload.gaps ?? [],
+                }
+            );
+        },
+        [client, _streamResponse, storeKey]
+    );
+
     const startNewChat = useCallback((): void => {
         useChatStore.getState().clearSlot(storeKey);
         useConciergeFlowStore.getState().reset();
@@ -715,6 +766,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
         executeResearchPlan,
         exportCatalog,
         optimizeFromFeedback,
+        reviseReport,
         isLoading,
         error,
         clearError,

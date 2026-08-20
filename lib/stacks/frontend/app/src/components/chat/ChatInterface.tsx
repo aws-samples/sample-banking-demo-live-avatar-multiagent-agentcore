@@ -57,6 +57,7 @@ export default function ChatInterface({
         executeResearchPlan,
         exportCatalog,
         optimizeFromFeedback,
+        reviseReport,
         isLoading,
         error,
         clearError,
@@ -142,6 +143,15 @@ export default function ChatInterface({
                 // The reviewed catalog — including edits and applied A/B
                 // variants — continues into the export phases.
                 exportCatalog(payload.catalog as Record<string, unknown>);
+            } else if (action === "research_revise") {
+                // Targeted revision: re-synthesize the flagged report to lift
+                // its sub-threshold dimensions, then re-evaluate.
+                reviseReport({
+                    report_text: payload.report_text as string | undefined,
+                    weak_dimensions: (payload.weak_dimensions as unknown[]) ?? [],
+                    gaps: (payload.gaps as string[]) ?? [],
+                    query: payload.query as string | undefined,
+                });
             } else if (action === "optimize_from_feedback") {
                 // Continuous feedback loop: propose designer-prompt refinements
                 // from the reviewer feedback captured so far.
@@ -174,6 +184,7 @@ export default function ChatInterface({
             executeResearchPlan,
             exportCatalog,
             optimizeFromFeedback,
+            reviseReport,
             startNewChat,
             mode,
             auth.user?.id_token,

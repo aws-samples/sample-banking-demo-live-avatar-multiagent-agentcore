@@ -1929,6 +1929,69 @@ RESEARCH_EXECUTION_PHASES = [p for p in AGENT_PHASES if p["name"] != "planner"] 
 
 
 # ---------------------------------------------------------------------------
+# Targeted revision pass (research_revise mode)
+# ---------------------------------------------------------------------------
+# When the evaluator flags a report for revision, the user can ask to fix only
+# the weak (sub-threshold) dimensions rather than re-running the whole pipeline.
+# We re-run synthesizer -> evaluator: the synthesizer is fed the PRIOR report
+# plus the judge's flagged dimensions and gaps, revises only those areas, and
+# re-emits the PDF; the evaluator then re-scores. The research phase is skipped
+# because the prior report already carries the gathered evidence.
+
+# Hard cap on the prior report text accepted from the client, so a pathological
+# payload cannot blow past the model's context. ~48k chars ≈ 12k tokens, which
+# comfortably fits alongside the synthesizer's own budget.
+_REVISION_REPORT_CHAR_CAP = 48_000
+
+
+def _synthesizer_phase() -> dict:
+    """The synthesizer phase dict from AGENT_PHASES (role 'synthesis & report')."""
+    return next(p for p in AGENT_PHASES if p["name"] == "synthesizer")
+
+
+def _build_revision_addendum(weak_dimensions: list, gaps: list) -> str:
+    """Instruction block appended to the synthesizer prompt for a revision pass."""
+
+    def _dim_line(d: object) -> str:
+        if not isinstance(d, dict):
+            return f"- {d}"
+        label = d.get("label") or d.get("key") or "?"
+        score = d.get("score")
+        rationale = str(d.get("rationale") or "").strip()
+        head = f"- {label}" + (f" (scored {score}/100)" if score is not None else "")
+        return f"{head}: {rationale}" if rationale else head
+
+    dims = "\n".join(_dim_line(d) for d in weak_dimensions) or "- (none specified)"
+    fixes = "\n".join(f"- {g}" for g in gaps if isinstance(g, str) and g.strip()) or "- (none specified)"
+    return (
+        "\n\n=== REVISION PASS — TARGETED QUALITY FIX ===\n"
+        "You are REVISING an existing research report that an independent evaluator scored "
+        "below the quality bar. The FULL prior report is provided to you as input.\n\n"
+        "The evaluator scored these dimensions below threshold — fix these specifically:\n"
+        f"{dims}\n\n"
+        "Address these concrete gaps the evaluator called out:\n"
+        f"{fixes}\n\n"
+        "REVISION RULES:\n"
+        "- PRESERVE every section and data point that already scored well; do NOT rewrite the "
+        "whole report or drop strong content.\n"
+        "- Strengthen ONLY the weak areas: add specific, resolvable citations where groundedness "
+        "or citations were weak; expand thin sections where comprehensiveness or alignment were "
+        "weak; tighten structure where coherence was weak.\n"
+        "- Keep the SAME output contract: emit the full revised report, then call "
+        'gateway_pdf_generator with format="research" and ALL fields, exactly as on a first pass.\n'
+    )
+
+
+def _build_revision_input(query: str, report_text: str) -> str:
+    """Seed input for the revision synthesizer: the brief plus the prior report."""
+    return (
+        "You are performing a REVISION pass on a prior research report.\n\n"
+        f"ORIGINAL BRIEF:\n{query}\n\n"
+        f"PRIOR REPORT (revise this in place, fixing only the flagged weak areas):\n{report_text}\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Plan extraction helper
 # ---------------------------------------------------------------------------
 
@@ -3855,6 +3918,41 @@ async def orchestrate(payload: dict, context: RequestContext):
             yield event
         return
 
+    # ── Research revise mode: targeted re-synthesis of the weak dimensions ──
+    # Triggered from the evaluation scorecard's "Revise weak areas" button. Runs
+    # synthesizer -> evaluator only: the prior report (passed from the client)
+    # is the evidence base, so the research phase is skipped.
+    if mode == "research_revise":
+        report_text = str(payload.get("report_text", "") or "")[:_REVISION_REPORT_CHAR_CAP]
+        weak_dimensions = payload.get("weak_dimensions") or []
+        gaps = payload.get("gaps") or []
+        if not report_text:
+            # Without the prior report there is nothing to revise; regenerating
+            # from scratch would silently discard the delivered work, so say so.
+            yield {"data": "Revision needs the prior report, which was not provided."}
+            return
+
+        # Depth-adjust a fresh [synthesizer, evaluator] copy, THEN append the
+        # revision addendum so the depth pass cannot rewrite it away.
+        revision_phases = _apply_depth_to_phases([_synthesizer_phase(), EVALUATION_PHASE], research_depth)
+        for p in revision_phases:
+            if p.get("name") == "synthesizer":
+                p["prompt"] = p["prompt"] + _build_revision_addendum(weak_dimensions, gaps)
+
+        async for event in _run_pipeline(
+            revision_phases,
+            query,
+            user_id,
+            session_id,
+            requested_model,
+            initial_accumulated=_build_revision_input(query, report_text),
+            mode="research_revise",
+            payment_budget_usd=payment_budget_usd,
+            customer_jwt=customer_jwt,
+        ):
+            yield event
+        return
+
     # ── Catalog prompt optimization from feedback (human-in-the-loop) ──
     # Reads recent reviewer feedback and proposes designer-prompt refinements for
     # the presenter to review and apply. Closes the continuous feedback loop.
@@ -5464,6 +5562,10 @@ async def _run_pipeline(
 
     accumulated = initial_accumulated or query
     menu_designer_output = ""
+    # The synthesizer's report text for this run, captured so the evaluation
+    # scorecard can carry it back to a "Revise weak areas" pass without a
+    # fragile re-extraction from the chat transcript.
+    last_synthesis_text = ""
     # Last report produced by this run, re-emitted as a link once it finishes.
     delivered_pdf: dict | None = None
     # Last generated website (e.g. a FAQ site) — delivered as a card so the user
@@ -6309,9 +6411,21 @@ async def _run_pipeline(
                     criteria = _extract_plan_criteria(initial_accumulated or accumulated)
                     scorecard = _parse_evaluation_scorecard(agent_text, phase_model_id, criteria)
                     if scorecard:
+                        # Carry the report text + brief so the card's "Revise
+                        # weak areas" action can drive a targeted re-synthesis
+                        # (research_revise) without re-extracting the report
+                        # from the chat transcript. Capped to bound the payload.
+                        if last_synthesis_text:
+                            scorecard["reportText"] = last_synthesis_text[:_REVISION_REPORT_CHAR_CAP]
+                        scorecard["query"] = query
                         yield {"_ui": {"component": "EvaluationScorecard", "props": scorecard}}
                 except Exception as eval_exc:
                     logger.debug("Evaluation scorecard parse failed: %s", eval_exc)
+                accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
+            elif role == "synthesis & report":
+                # Capture the report so the evaluation card can offer a targeted
+                # revision. Falls through to the default accumulation below.
+                last_synthesis_text = agent_text
                 accumulated = f"Previous agent ({agent_name}) output:\n{agent_text}\n\nOriginal query: {query}"
             elif menu_designer_output:
                 accumulated = (

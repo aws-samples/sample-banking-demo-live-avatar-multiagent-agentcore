@@ -60,6 +60,14 @@ MODE_PIPELINE_CONFIG: dict[str, dict[str, Any]] = {
         "read_filter": ["strategy_research"],
         "archive": False,
     },
+    # Targeted revision pass over an already-delivered strategy report. Same
+    # scope as research_execute: it re-grounds the weak sections against the
+    # strategy corpus and re-tags the regenerated PDF as strategy_research.
+    "research_revise": {
+        "write": "strategy_research",
+        "read_filter": ["strategy_research"],
+        "archive": False,
+    },
     "generic_research": {"write": "market_research", "read_filter": ["market_research"], "archive": False},
     "generic_research_execute": {
         "write": "market_research",

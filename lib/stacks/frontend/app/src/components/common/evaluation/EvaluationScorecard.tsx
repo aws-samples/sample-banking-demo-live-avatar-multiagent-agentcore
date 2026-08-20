@@ -1,4 +1,5 @@
-import { Scale, ShieldCheck, AlertTriangle, ListChecks } from "lucide-react";
+import { useState } from "react";
+import { Scale, ShieldCheck, AlertTriangle, ListChecks, RefreshCw } from "lucide-react";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
 import {
     type EvaluationData,
@@ -55,17 +56,47 @@ function coerce(props: Partial<EvaluationData>): EvaluationData | null {
         criteria: Array.isArray(props.criteria) ? props.criteria : [],
         dimensions,
         gaps: Array.isArray(props.gaps) ? props.gaps : [],
+        reportText: typeof props.reportText === "string" ? props.reportText : undefined,
+        query: typeof props.query === "string" ? props.query : undefined,
     };
 }
 
 // ── Full card (chat) ────────────────────────────────────────────────────────
 
-export function EvaluationScorecardCard(props: Partial<EvaluationData>): JSX.Element | null {
+export function EvaluationScorecardCard(
+    props: Partial<EvaluationData> & {
+        /** Injected by the message renderer; fires the revise action. */
+        onAction?: (action: string, data: unknown) => void;
+    }
+): JSX.Element | null {
+    const { onAction } = props;
+    const [revising, setRevising] = useState(false);
     const data = coerce(props);
     if (!data) return null;
 
     const pass = data.verdict === "pass";
     const overallColor = evaluationScoreColor(data.overall);
+
+    // Sub-threshold dimensions are the "yellow/red" bars the revise pass targets.
+    const weakDimensions = data.dimensions.filter((d) => d.score < EVALUATION_PASS_THRESHOLD);
+    // Revising needs the prior report to fix in place; without it (or with
+    // nothing weak) the button would have nothing to act on.
+    const canRevise = !pass && weakDimensions.length > 0 && !!data.reportText;
+
+    const handleRevise = (): void => {
+        setRevising(true);
+        onAction?.("research_revise", {
+            report_text: data.reportText,
+            weak_dimensions: weakDimensions.map((d) => ({
+                label: d.label,
+                score: d.score,
+                metricRef: d.metricRef,
+                rationale: d.rationale,
+            })),
+            gaps: data.gaps,
+            query: data.query,
+        });
+    };
 
     return (
         <section
@@ -133,6 +164,26 @@ export function EvaluationScorecardCard(props: Partial<EvaluationData>): JSX.Ele
                         >
                             {data.summary}
                         </p>
+                    ) : null}
+                    {canRevise ? (
+                        <button
+                            onClick={handleRevise}
+                            disabled={revising}
+                            className="mt-2 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                            style={{
+                                color: "#e0b850",
+                                background: "#e0b8501a",
+                                border: "1px solid #e0b85055",
+                            }}
+                            title="Re-run synthesis to fix the sub-threshold dimensions, then re-evaluate"
+                        >
+                            <RefreshCw size={12} className={revising ? "animate-spin" : ""} />
+                            {revising
+                                ? "Revising…"
+                                : `Revise ${weakDimensions.length} weak area${
+                                      weakDimensions.length === 1 ? "" : "s"
+                                  }: ${weakDimensions.map((d) => d.label).join(", ")}`}
+                        </button>
                     ) : null}
                 </div>
             </div>
