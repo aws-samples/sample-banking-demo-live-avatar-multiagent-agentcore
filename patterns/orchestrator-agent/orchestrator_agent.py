@@ -5851,6 +5851,12 @@ async def _run_pipeline(
         # so we can emit them directly without relying on the LLM to relay them.
         # Throttle cell for streaming-liveness pings (see below).
         _last_liveness = [0.0]
+        # Tool-use ids already reported to the UI this phase, so a re-emitted
+        # message does not double-count. The sequential phases (synthesizer's
+        # pdf_generator, evaluator's kb_search) previously counted tool calls
+        # only for the progress bar and never surfaced them as tool telemetry,
+        # so their flow nodes and the Run Report showed 0 despite real calls.
+        _seen_tool_use_ids: set[str] = set()
 
         def _pipeline_callback(**kwargs):
             # Streaming deltas (text/thinking) prove the model call is ALIVE even
@@ -5882,10 +5888,19 @@ async def _run_pipeline(
                     # lets the timeout path deliver the content instead of an
                     # empty run. Captured for any *_pdf_generator tool.
                     use = block.get("toolUse")
-                    if isinstance(use, dict) and "pdf_generator" in (use.get("name") or ""):
-                        tool_input = use.get("input")
-                        if isinstance(tool_input, dict):
-                            tq.put(("synth_payload", tool_input))
+                    if isinstance(use, dict) and use.get("name"):
+                        # Surface the call as tool telemetry so this phase's flow
+                        # node + the Run Report reflect it (the assistant toolUse
+                        # block carries the tool name; the toolResult block below
+                        # does not).
+                        _uid = use.get("toolUseId") or ""
+                        if _uid not in _seen_tool_use_ids:
+                            _seen_tool_use_ids.add(_uid)
+                            tq.put(("tool_use", (_uid, use.get("name"))))
+                        if "pdf_generator" in use["name"]:
+                            tool_input = use.get("input")
+                            if isinstance(tool_input, dict):
+                                tq.put(("synth_payload", tool_input))
                     if "toolResult" not in block:
                         continue
                     # Count every completed tool call so the phase can drive its
@@ -6132,6 +6147,19 @@ async def _run_pipeline(
 
                 if tag == "synth_payload":
                     pending_report_payload = value
+                    continue
+
+                if tag == "tool_use":
+                    # Surface the phase's tool call to the frontend (same shape
+                    # the parallel/A2A paths use) so its flow node and the Run
+                    # Report count it. telemetry_only: no streamed args/result,
+                    # so it must not render as an empty chat card.
+                    _uid, _tname = value
+                    yield {
+                        "current_tool_use": {"toolUseId": _uid, "name": _tname, "input": ""},
+                        "delta": {"toolUse": {"input": ""}},
+                        "telemetry_only": True,
+                    }
                     continue
 
                 # Count completed tool calls before computing progress so the
