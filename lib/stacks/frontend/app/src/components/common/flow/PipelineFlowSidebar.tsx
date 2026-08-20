@@ -92,14 +92,14 @@ export function PipelineFlowSidebar({
 
 function FeedEmptyState(): JSX.Element {
     return (
-        <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-8 text-center">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-amber-500/30 to-orange-500/10" />
-            <p className="text-xs font-medium text-slate-300">
-                Run the pipeline to see the flow come to life
-            </p>
-            <p className="text-[11px] text-slate-500">
-                Nodes light up as each agent orchestrates tool calls across the Gateway.
-            </p>
+        <div className="flex items-center gap-2 border-t border-slate-800 px-4 py-2 text-[11px] text-slate-500">
+            <span
+                className="inline-block h-2 w-2 flex-none rounded-full bg-gradient-to-br from-amber-500/40 to-orange-500/20"
+                aria-hidden
+            />
+            <span className="truncate">
+                Run the pipeline — nodes light up as agents call tools across the Gateway.
+            </span>
         </div>
     );
 }

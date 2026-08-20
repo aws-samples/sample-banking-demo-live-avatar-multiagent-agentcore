@@ -134,15 +134,24 @@ export function FlowPanelShell({
 
             {report && <div className="flex-none">{report}</div>}
 
-            <div
-                className={
-                    scroll
-                        ? "min-h-[110px] flex-none overflow-y-auto"
-                        : "h-[30%] min-h-[110px] flex-none overflow-y-auto"
-                }
-            >
-                {hasFeed ? feed : feedEmpty}
-            </div>
+            {hasFeed ? (
+                <div
+                    className={
+                        scroll
+                            ? "min-h-[110px] flex-none overflow-y-auto"
+                            : "h-[30%] min-h-[110px] flex-none overflow-y-auto"
+                    }
+                >
+                    {feed}
+                </div>
+            ) : (
+                // Before any activity, keep the feed band content-sized (a slim
+                // hint) instead of reserving 30% of the panel — the diagram is
+                // flex-1 and reclaims that space so the workflow graph is
+                // readable at rest. Once events arrive, `hasFeed` flips and the
+                // full-height scrollable feed above takes over.
+                <div className="flex-none">{feedEmpty}</div>
+            )}
 
             {extra && (
                 <div className="flex flex-none flex-col gap-4 border-t border-slate-800 p-3">
