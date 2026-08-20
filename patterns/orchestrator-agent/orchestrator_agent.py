@@ -794,6 +794,50 @@ def _parse_catalog_json(designer_output: str) -> dict | None:
     return _parse_json_object(designer_output)
 
 
+def _resign_catalog_images(catalog: dict) -> dict:
+    """Re-sign each catalog item's image URL fresh from its durable s3_key.
+
+    The `image_url` the designer copied from gateway_image_generate is a
+    presigned URL minted minutes earlier — during the design phase, before QC,
+    A/B and human review — and is often already expired by the time the catalog
+    card renders in the browser, which is why the product thumbnails showed as
+    broken images. This mints a fresh presigned GET at emit time from the
+    durable s3_key (the same "never reuse a stale presigned URL; re-sign from
+    the key" rule the PDF and website paths already follow). Mutates and returns
+    `catalog`; best-effort — any failure leaves the item's existing image_url
+    untouched so a signing hiccup never breaks the catalog.
+    """
+    bucket = os.environ.get("IMAGES_BUCKET", "")
+    sections = catalog.get("sections")
+    if not bucket or not isinstance(sections, list):
+        return catalog
+    try:
+        import boto3  # noqa: PLC0415 — local import mirrors the rest of this module
+
+        region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+        s3 = boto3.client("s3", region_name=region)
+    except Exception as exc:  # noqa: BLE001 — never break the pipeline on telemetry-adjacent work
+        logger.debug("Catalog image re-sign: S3 client unavailable: %s", exc)
+        return catalog
+    for section in sections:
+        items = section.get("items", []) if isinstance(section, dict) else []
+        for item in items if isinstance(items, list) else []:
+            if not isinstance(item, dict):
+                continue
+            s3_key = str(item.get("s3_key") or "").strip()
+            if not s3_key:
+                continue
+            try:
+                item["image_url"] = s3.generate_presigned_url(
+                    "get_object",
+                    Params={"Bucket": bucket, "Key": s3_key},
+                    ExpiresIn=3600,
+                )
+            except Exception as exc:  # noqa: BLE001 — keep the stale URL rather than fail
+                logger.debug("Catalog image re-sign failed for %s: %s", s3_key, exc)
+    return catalog
+
+
 def _qc_validate_catalog(designer_output: str) -> dict:
     """Run deterministic quality control on the catalog designer's JSON output.
 
@@ -6481,6 +6525,10 @@ async def _run_pipeline(
                 # ServicesCatalog card can drive human-in-the-loop editing,
                 # read-aloud, the A/B record, and per-item ratings.
                 if parsed_catalog and parsed_catalog.get("sections"):
+                    # Re-sign product images fresh from their s3_key so the card
+                    # shows them — the designer's copied image_url is minted
+                    # earlier in the run and often already expired at render.
+                    parsed_catalog = _resign_catalog_images(parsed_catalog)
                     yield {"_ui": {"component": "ServicesCatalog", "props": parsed_catalog}}
 
                 # ── Human-in-the-loop review (menu_review flow step) ──

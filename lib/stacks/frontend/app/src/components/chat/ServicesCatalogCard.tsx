@@ -323,6 +323,12 @@ function ReviewRow({
                         alt={name}
                         className="h-14 w-14 flex-none rounded object-cover"
                         loading="lazy"
+                        // If a URL still fails (e.g. a re-signed link that has
+                        // since expired on a much later revisit), hide the
+                        // element rather than showing a broken-image icon.
+                        onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                        }}
                     />
                 ) : null}
 
