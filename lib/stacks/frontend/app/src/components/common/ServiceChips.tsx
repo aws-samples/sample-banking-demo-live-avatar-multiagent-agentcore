@@ -110,7 +110,8 @@ export function ToolServiceList({ toolCounts }: ToolServiceListProps): JSX.Eleme
     if (entries.length === 0) {
         return (
             <p className="text-xs text-slate-400">
-                This step made no tool calls — it reasoned over context it already had.
+                No tools were called directly in this step — it either reasoned over context it
+                already had or delegated the work to other agents.
             </p>
         );
     }

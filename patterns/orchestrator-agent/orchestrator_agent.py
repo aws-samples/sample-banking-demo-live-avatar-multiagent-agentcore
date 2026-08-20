@@ -4738,6 +4738,62 @@ def _build_section_a2a_invoker(
     return _invoke
 
 
+# Per-section ceiling on reconstructed tool telemetry, matching the section
+# researcher's own web-search budget so the count stays plausible.
+_A2A_SECTION_TOOL_CEILING = 12
+
+
+def _section_tool_telemetry(index: int, result_json: object) -> list[dict]:
+    """Rebuild a section's tool activity from its returned payload.
+
+    The section-researcher runs its ``gateway_web_search`` / ``image_generate``
+    calls in its OWN runtime over A2A, so those tool events never reach the
+    orchestrator's stream — which is why the researcher node and Run Report
+    showed 0 tool calls even though the sections searched the web. We can't see
+    the callee's raw BeforeToolCall events across the request/response A2A hop,
+    so we reconstruct them from the work it actually returned: one
+    ``web_search`` per distinct gathered source (its ``citations``, falling back
+    to ``web_findings``), capped at the per-section budget, plus one
+    ``image_generate`` per returned image. Emitted in the same shape the
+    in-process fan-out uses (`current_tool_use` + `telemetry_only`) so the
+    frontend attributes each to the active researcher node. Best-effort:
+    an unparseable payload yields nothing.
+    """
+    import json as _json  # noqa: PLC0415
+
+    try:
+        data = _json.loads(result_json) if isinstance(result_json, str) else result_json
+    except Exception:  # noqa: BLE001 — telemetry must never break the run
+        return []
+    if not isinstance(data, dict):
+        return []
+
+    citations = data.get("citations") or []
+    web = len(citations) if isinstance(citations, list) and citations else 0
+    if not web:
+        for q in data.get("questions_researched") or []:
+            if isinstance(q, dict):
+                findings = q.get("web_findings") or []
+                if isinstance(findings, list):
+                    web += len(findings)
+    web = min(web, _A2A_SECTION_TOOL_CEILING)
+    images = data.get("images") or []
+    image_count = len(images) if isinstance(images, list) else 0
+
+    def _emit(name: str, k: int) -> dict:
+        # telemetry_only: drives the node chips + Run Report count without
+        # injecting a fake assistant tool-call turn into the transcript.
+        return {
+            "current_tool_use": {"toolUseId": f"a2a-s{index}-{name}-{k}", "name": name, "input": ""},
+            "delta": {"toolUse": {"input": ""}},
+            "telemetry_only": True,
+        }
+
+    events: list[dict] = [_emit("web_search", k) for k in range(web)]
+    events.extend(_emit("image_generate", k) for k in range(image_count))
+    return events
+
+
 async def _run_parallel_research_a2a(
     phase: dict,
     shards: list[list[str]],
@@ -4898,6 +4954,12 @@ async def _run_parallel_research_a2a(
                 index = task_index[task]
                 try:
                     results[index] = task.result()
+                    # Surface this section's real search/image work as tool
+                    # telemetry so the researcher node + Run Report reflect the
+                    # A2A workers' activity (which runs in their own runtime and
+                    # is otherwise invisible to this stream).
+                    for _ev in _section_tool_telemetry(index, results[index]):
+                        yield _ev
                 except Exception as exc:  # noqa: BLE001 — per-section-failure-continue (Req 10.5)
                     errors[index] = str(exc)
                 yield {
