@@ -45,7 +45,7 @@ import { Stack } from "../../common/constructs/stack";
 import {
     getFeatureFlags,
     getModelConfig,
-    getSageMakerConfig,
+    getCustomModelConfig,
     getStackNameBase,
 } from "../../common/feature-flags";
 import { createAgentCoreRole } from "./agentcore-role";
@@ -79,7 +79,7 @@ export class Backend extends Stack {
         const { auth, shared } = props;
         const features = getFeatureFlags(this.node);
         const models = getModelConfig(this.node);
-        const sagemaker = getSageMakerConfig(this.node);
+        const customModel = getCustomModelConfig(this.node);
         const stackName = getStackNameBase(this.node);
 
         const userPool = auth.userPool;
@@ -96,8 +96,8 @@ export class Backend extends Stack {
             machineClientSecretArn: auth.machineClientSecret.secretArn,
             fraudClientSecretArn: auth.fraudMachineClientSecret?.secretArn,
             enablePromptOptimization: features.prompt_optimization,
-            enableSagemakerModel: features.sagemaker_model,
-            sagemakerEndpointName: sagemaker.endpointName,
+            enableCustomModel: features.custom_model,
+            customModelArn: customModel.modelArn,
             enableAgentCoreIdentity: features.agentcore_identity,
         });
 
@@ -1253,22 +1253,23 @@ export class Backend extends Stack {
                         (profile === "ai_agent" || profile === "ai_assistant")
                             ? "true"
                             : "false",
-                    // Custom SageMaker model for the customer-facing AI Agent
-                    // (features.sagemaker_model). Enabled only on the `ai_agent`
-                    // profile: when on, `_handle_chatbot` builds a Strands
-                    // SageMakerAIModel against SAGEMAKER_ENDPOINT_NAME instead of
-                    // Bedrock. Off (or any other profile) keeps the proven
-                    // Bedrock path. The endpoint name + region ride along only
+                    // Fine-tuned custom model for the customer-facing AI Agent
+                    // (features.custom_model). Enabled only on the `ai_agent`
+                    // profile: when on, `_handle_chatbot` drives the turn with
+                    // the BedrockImportedModel provider against CUSTOM_MODEL_ARN
+                    // (Bedrock Custom Model Import, InvokeModel) instead of a
+                    // standard Bedrock model. Off (or any other profile) keeps
+                    // the proven Bedrock path. The ARN + region ride along only
                     // when enabled so nothing changes when the flag is off.
-                    SAGEMAKER_MODEL_ENABLED:
-                        features.sagemaker_model && profile === "ai_agent" ? "true" : "false",
-                    ...(features.sagemaker_model && profile === "ai_agent"
+                    CUSTOM_MODEL_ENABLED:
+                        features.custom_model && profile === "ai_agent" ? "true" : "false",
+                    ...(features.custom_model && profile === "ai_agent"
                         ? {
-                              SAGEMAKER_ENDPOINT_NAME: sagemaker.endpointName,
-                              ...(sagemaker.regionName
-                                  ? { SAGEMAKER_REGION: sagemaker.regionName }
+                              CUSTOM_MODEL_ARN: customModel.modelArn,
+                              ...(customModel.regionName
+                                  ? { CUSTOM_MODEL_REGION: customModel.regionName }
                                   : {}),
-                              SAGEMAKER_MAX_TOKENS: String(sagemaker.maxTokens),
+                              CUSTOM_MODEL_MAX_TOKENS: String(customModel.maxTokens),
                           }
                         : {}),
                     // The parallel section-researcher fan-out (Req 10) is

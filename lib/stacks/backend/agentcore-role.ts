@@ -34,19 +34,19 @@ export interface AgentCoreRoleProps {
      */
     enablePromptOptimization?: boolean;
     /**
-     * Custom SageMaker model for the AI Agent (`features.sagemaker_model`). When
-     * true, the shared role is granted `sagemaker:InvokeEndpoint`
-     * (+ streaming) scoped to `sagemakerEndpointName` so the AI Agent runtime
-     * can invoke a model hosted on that SageMaker inference endpoint. The grant
-     * is added only when enabled (least privilege). Defaults to undefined (off).
+     * Fine-tuned custom model for the AI Agent (`features.custom_model`). When
+     * true, the shared role is granted `bedrock:InvokeModel` (+ streaming)
+     * scoped to `customModelArn` so the AI Agent runtime can invoke the bank's
+     * model served via Bedrock Custom Model Import. The grant is added only
+     * when enabled (least privilege). Defaults to undefined (off).
      */
-    enableSagemakerModel?: boolean;
+    enableCustomModel?: boolean;
     /**
-     * Name of the SageMaker inference endpoint the AI Agent invokes. Used to
-     * scope the `sagemaker:InvokeEndpoint` grant when `enableSagemakerModel` is
-     * true. Ignored when the flag is off.
+     * Bedrock Custom Import model ARN the AI Agent invokes. Used to scope the
+     * `bedrock:InvokeModel*` grant when `enableCustomModel` is true. Ignored
+     * when the flag is off.
      */
-    sagemakerEndpointName?: string;
+    customModelArn?: string;
     /**
      * AgentCore Identity token path (`features.agentcore_identity`). When true,
      * runtimes are granted the Identity data-plane actions needed to mint
@@ -134,18 +134,17 @@ export function createAgentCoreRole(
         })
     );
 
-    // Custom SageMaker model invocation (features.sagemaker_model). Added only
-    // when the flag is on, scoped to the single configured endpoint so the
-    // stack never holds a broad SageMaker permission by default. Includes the
-    // streaming variant because the Strands SageMakerAIModel streams responses.
-    if (props.enableSagemakerModel && props.sagemakerEndpointName) {
+    // Fine-tuned custom model invocation (features.custom_model). Added only
+    // when the flag is on, scoped to the single configured Bedrock Custom
+    // Import model ARN so the stack never holds a broad Bedrock-invoke
+    // permission by default. Includes the streaming variant because the
+    // BedrockImportedModel provider streams responses.
+    if (props.enableCustomModel && props.customModelArn) {
         role.addToPolicy(
             new PolicyStatement({
                 effect: Effect.ALLOW,
-                actions: ["sagemaker:InvokeEndpoint", "sagemaker:InvokeEndpointWithResponseStream"],
-                resources: [
-                    `arn:aws:sagemaker:${Aws.REGION}:${Aws.ACCOUNT_ID}:endpoint/${props.sagemakerEndpointName}`,
-                ],
+                actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+                resources: [props.customModelArn],
             })
         );
     }

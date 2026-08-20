@@ -115,21 +115,25 @@ export interface FeatureFlags {
      */
     prompt_optimization: boolean;
     /**
-     * Custom model on Amazon SageMaker for the customer-facing AI Agent (the
-     * "AI Client Advisor"). When true, the AI Agent runtime (`ai_agent`
-     * profile) drives its chatbot turns against a model deployed on a SageMaker
-     * inference endpoint (via the Strands `SageMakerAIModel` provider) instead
-     * of Bedrock, the shared AgentCore role is granted `sagemaker:InvokeEndpoint`
-     * scoped to that endpoint, and the endpoint name is injected into the
-     * runtime env from the `sagemaker` context block. When false, the AI Agent
-     * runs exactly as it does today on Bedrock — no SageMaker permission, no
-     * env — so the demo still deploys and destroys cleanly.
+     * Fine-tuned custom model for the customer-facing AI Agent (the "AI Client
+     * Advisor"). When true, the AI Agent runtime (`ai_agent` profile) drives
+     * its chatbot turns against the bank's fine-tuned model served via Bedrock
+     * Custom Model Import (invoked with InvokeModel through the dedicated
+     * `BedrockImportedModel` provider — imported models do not support
+     * Converse) instead of a standard Bedrock model, the shared AgentCore role
+     * is granted `bedrock:InvokeModel*` scoped to that model ARN, and the ARN
+     * is injected into the runtime env from the `customModel` context block.
+     * When false, the AI Agent runs exactly as it does today on a standard
+     * Bedrock model — no extra permission, no env — so the demo still deploys
+     * and destroys cleanly.
      *
      * Defaults to FALSE. Note: Bedrock Guardrails and the OptimizePrompt
-     * showcase operate on Bedrock invocations only, so they do not apply to the
-     * SageMaker path.
+     * showcase operate on the standard Converse path only, so they do not apply
+     * to the custom-model (InvokeModel) path. Tool calling is not wired on the
+     * custom-model path, so the AI Agent answers in the fine-tuned voice but
+     * does not invoke gateway tools when this flag is on.
      */
-    sagemaker_model: boolean;
+    custom_model: boolean;
     /**
      * Multimodal Knowledge Base retrieval. When true, the KB data source parses
      * documents with a multimodal parser (BEDROCK_FOUNDATION_MODEL,
@@ -234,7 +238,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
     a2a: true,
     a2a_parallel_research: false,
     prompt_optimization: false,
-    sagemaker_model: false,
+    custom_model: false,
     kb_multimodal: false,
     agent_registry: false,
     agentcore_identity: false,
@@ -302,32 +306,33 @@ export function getTavusConfig(node: Node): TavusConfig {
     return { ...DEFAULT_TAVUS_CONFIG, ...tavus };
 }
 
-export interface SageMakerConfig {
+export interface CustomModelConfig {
     /**
-     * Name of the SageMaker inference endpoint the AI Agent invokes when
-     * `features.sagemaker_model` is on. This is a PLACEHOLDER by default — point
-     * it at a real deployed endpoint before enabling the flag. The IAM grant is
-     * scoped to this exact name.
+     * Bedrock Custom Import model ARN the AI Agent invokes when
+     * `features.custom_model` is on (e.g.
+     * `arn:aws:bedrock:us-east-1:123:imported-model/xxxx`). This is a
+     * PLACEHOLDER by default — point it at a real imported model before
+     * enabling the flag. The IAM grant is scoped to this exact ARN.
      */
-    endpointName: string;
+    modelArn: string;
     /**
-     * Region the endpoint is deployed in. Defaults to the stack/deploy region
+     * Region the model is imported in. Defaults to the stack/deploy region
      * when left empty (the runtime falls back to its own AWS_REGION).
      */
     regionName: string;
-    /** Max output tokens for the SageMaker chat completion. */
+    /** Max output tokens (`max_gen_len`) for the custom-model completion. */
     maxTokens: number;
 }
 
-const DEFAULT_SAGEMAKER_CONFIG: SageMakerConfig = {
-    endpointName: "PLACEHOLDER-ai-agent-sagemaker-endpoint",
+const DEFAULT_CUSTOM_MODEL_CONFIG: CustomModelConfig = {
+    modelArn: "PLACEHOLDER-ai-agent-custom-model-arn",
     regionName: "",
-    maxTokens: 4096,
+    maxTokens: 2048,
 };
 
-export function getSageMakerConfig(node: Node): SageMakerConfig {
-    const sagemaker = node.tryGetContext("sagemaker") ?? {};
-    return { ...DEFAULT_SAGEMAKER_CONFIG, ...sagemaker };
+export function getCustomModelConfig(node: Node): CustomModelConfig {
+    const customModel = node.tryGetContext("customModel") ?? {};
+    return { ...DEFAULT_CUSTOM_MODEL_CONFIG, ...customModel };
 }
 
 export function getStackNameBase(node: Node): string {

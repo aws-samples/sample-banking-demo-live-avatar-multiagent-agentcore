@@ -2512,43 +2512,39 @@ def _build_model(
     return BedrockModel(**kwargs)
 
 
-def _build_sagemaker_model(endpoint_name: str, temperature: float, max_tokens: int):
-    """Build a Strands SageMakerAIModel for a custom model on a SageMaker endpoint.
+def _build_custom_model(model_arn: str, temperature: float, max_tokens: int):
+    """Build a provider for a Bedrock Custom Import model ARN.
 
-    Lazily imports `strands.models.sagemaker` so the default Bedrock path never
-    requires the optional `strands-agents[sagemaker]` extra. The endpoint must
-    serve an OpenAI-compatible chat-completion API (per the Strands SageMaker
-    provider); this is what the customer-facing AI Agent runs on when
-    `features.sagemaker_model` is enabled.
+    The fine-tuned model is served via Bedrock Custom Model Import, which is
+    invoked with InvokeModel (not Converse), so it needs the dedicated
+    `BedrockImportedModel` provider rather than the stock BedrockModel. Text
+    only — see that module for the tool-calling caveat.
     """
-    from strands.models.sagemaker import SageMakerAIModel
+    from utils.bedrock_imported_model import BedrockImportedModel
 
-    region = os.environ.get("SAGEMAKER_REGION") or os.environ.get("AWS_REGION", "us-east-1")
-    print(f"[CHATBOT] Using SageMaker endpoint: {endpoint_name} ({region})")
-    return SageMakerAIModel(
-        endpoint_config={"endpoint_name": endpoint_name, "region_name": region},
-        payload_config={"max_tokens": max_tokens, "temperature": temperature, "stream": True},
-    )
+    region = os.environ.get("CUSTOM_MODEL_REGION") or os.environ.get("AWS_REGION", "us-east-1")
+    print(f"[CHATBOT] Using Bedrock custom model: {model_arn} ({region})")
+    return BedrockImportedModel(model_arn, region=region, max_tokens=max_tokens, temperature=temperature)
 
 
 def _build_chatbot_model(requested_model: str, temperature: float, guardrail_kwargs: dict):
     """Return the model backing the customer-facing AI Agent's chatbot turn.
 
-    When `SAGEMAKER_MODEL_ENABLED` is "true", an endpoint name is configured, and
-    the presenter has NOT applied an explicit Bedrock candidate (`requested_model`
-    — e.g. from the prompt-optimization showcase), the agent runs against a custom
-    model hosted on a SageMaker inference endpoint. Otherwise it uses the proven
-    Bedrock path exactly as before.
+    When `CUSTOM_MODEL_ENABLED` is "true", a model ARN is configured, and the
+    presenter has NOT applied an explicit Bedrock candidate (`requested_model` —
+    e.g. from the prompt-optimization showcase), the agent runs against the
+    bank's fine-tuned model served via Bedrock Custom Model Import. Otherwise it
+    uses the proven standard Bedrock path exactly as before.
 
-    Note: Bedrock Guardrails and the OptimizePrompt showcase operate on Bedrock
-    invocations only, so `guardrail_kwargs` is applied to the Bedrock path and
-    does not apply to the SageMaker path.
+    Note: Bedrock Guardrails and the OptimizePrompt showcase operate on the
+    standard Converse path only, so `guardrail_kwargs` is applied there and does
+    not apply to the custom-model (InvokeModel) path.
     """
-    sagemaker_enabled = os.environ.get("SAGEMAKER_MODEL_ENABLED", "false").lower() == "true"
-    endpoint_name = os.environ.get("SAGEMAKER_ENDPOINT_NAME", "").strip()
-    if sagemaker_enabled and endpoint_name and not requested_model:
-        max_tokens = int(os.environ.get("SAGEMAKER_MAX_TOKENS", "4096"))
-        return _build_sagemaker_model(endpoint_name, temperature=temperature, max_tokens=max_tokens)
+    custom_enabled = os.environ.get("CUSTOM_MODEL_ENABLED", "false").lower() == "true"
+    model_arn = os.environ.get("CUSTOM_MODEL_ARN", "").strip()
+    if custom_enabled and model_arn and not requested_model:
+        max_tokens = int(os.environ.get("CUSTOM_MODEL_MAX_TOKENS", "2048"))
+        return _build_custom_model(model_arn, temperature=temperature, max_tokens=max_tokens)
 
     model_id = requested_model or os.environ.get("MODEL_ID", "us.anthropic.claude-sonnet-4-6")
     print(f"[CHATBOT] Using Bedrock model: {model_id}")
@@ -3106,9 +3102,10 @@ async def _handle_chatbot(
         gateway_client = _create_gateway_mcp_client(access_token)
 
         guardrail_kwargs = _load_guardrail_params()
-        # Bedrock by default; a custom SageMaker-hosted model when
-        # features.sagemaker_model is enabled for this runtime (Bedrock
-        # guardrails do not apply to the SageMaker path — see _build_chatbot_model).
+        # Standard Bedrock model by default; the bank's fine-tuned model via
+        # Bedrock Custom Model Import when features.custom_model is enabled for
+        # this runtime (Bedrock guardrails do not apply to the InvokeModel path
+        # — see _build_chatbot_model).
         bedrock_model = _build_chatbot_model(requested_model, temperature=0.3, guardrail_kwargs=guardrail_kwargs)
     except Exception as e:
         print(f"[CHATBOT] Setup failed: {e}")
