@@ -16,13 +16,13 @@ import os
 import traceback
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from mcp.client.streamable_http import streamablehttp_client
 from persona_prompts import get_persona_prompt
 from strands.experimental.bidi import BidiAgent
 from strands.experimental.bidi.models import BidiNovaSonicModel
 from strands.tools.mcp import MCPClient
 from system_prompt_augmenter import augment_system_prompt
 from utils.auth import extract_user_id_from_token, get_gateway_access_token
+from utils.mcp_client import create_gateway_mcp_client as build_timebound_gateway_client
 from utils.pipeline_scope import VALID_PIPELINES, PipelineScopeHook
 from utils.ssm import get_ssm_parameter
 from utils.tool_guard import UserScopeHook
@@ -116,10 +116,10 @@ def create_gateway_mcp_client(access_token: str) -> MCPClient:
     gateway_url = get_ssm_parameter(f"/{stack_name}/gateway_url")
     logger.info("[AVATAR] Gateway URL from SSM: %s", gateway_url)
 
-    gateway_client = MCPClient(
-        lambda: streamablehttp_client(url=gateway_url, headers={"Authorization": f"Bearer {access_token}"}),
-        prefix="gateway",
-    )
+    # TimeboundMCPClient bounds every gateway tool call with a hard read timeout
+    # so a wedged call (POST answered 202, result never streamed) can never hang
+    # this agent thread indefinitely.
+    gateway_client = build_timebound_gateway_client(gateway_url, access_token, prefix="gateway")
 
     logger.info("[AVATAR] Gateway MCP client created successfully")
     return gateway_client

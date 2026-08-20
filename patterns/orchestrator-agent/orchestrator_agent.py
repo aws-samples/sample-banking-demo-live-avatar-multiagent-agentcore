@@ -22,7 +22,6 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
 )
 from bedrock_agentcore.runtime import BedrockAgentCoreApp, RequestContext
 from botocore.config import Config as BotocoreConfig
-from mcp.client.streamable_http import streamablehttp_client
 from optimize_targets import (
     SUPPORTED_TARGET_MODELS,
     build_optimize_request,
@@ -44,6 +43,7 @@ from strands.tools.mcp import MCPClient
 from utils import a2a_client
 from utils.a2a_client import A2AHopError, map_error_to_hop
 from utils.auth import extract_user_id_from_context, get_gateway_access_token
+from utils.mcp_client import create_gateway_mcp_client
 from utils.model_limits import clamp_max_tokens
 from utils.pipeline_scope import PipelineScopeHook, mode_config
 from utils.ssm import get_ssm_parameter
@@ -2512,8 +2512,12 @@ def _create_gateway_mcp_client(access_token: str, tool_filters: dict | None = No
     gateway_url = get_ssm_parameter(f"/{stack_name}/gateway_url")
     print(f"[ORCHESTRATOR] Gateway URL from SSM: {gateway_url}")
 
-    gateway_client = MCPClient(
-        lambda: streamablehttp_client(url=gateway_url, headers={"Authorization": f"Bearer {access_token}"}),
+    # TimeboundMCPClient stamps a hard per-call read timeout on every gateway
+    # tool: a wedged Gateway call (POST answered 202, result never streamed)
+    # otherwise hangs the agent thread forever and freezes the whole pipeline.
+    gateway_client = create_gateway_mcp_client(
+        gateway_url,
+        access_token,
         prefix="gateway",
         tool_filters=tool_filters,
     )

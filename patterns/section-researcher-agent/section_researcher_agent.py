@@ -52,7 +52,6 @@ from agent_card import (
     build_agent_skills,
 )
 from bedrock_agentcore.runtime import serve_a2a
-from mcp.client.streamable_http import streamablehttp_client
 from strands import Agent
 from strands.models import BedrockModel
 from strands.multiagent.a2a.executor import StrandsA2AExecutor
@@ -63,6 +62,7 @@ from utils.auth import (
     verify_user_pool_jwt,
 )
 from utils.identity_context import read_identity_context
+from utils.mcp_client import create_gateway_mcp_client as build_timebound_gateway_client
 from utils.ssm import get_ssm_parameter
 from utils.tool_guard import UserScopeHook
 
@@ -137,10 +137,10 @@ def create_gateway_mcp_client(access_token: str) -> MCPClient:
     gateway_url = get_ssm_parameter(f"/{stack_name}/gateway_url")
     logger.info("[SECTION] Gateway URL from SSM: %s", gateway_url)
 
-    return MCPClient(
-        lambda: streamablehttp_client(url=gateway_url, headers={"Authorization": f"Bearer {access_token}"}),
-        prefix="gateway",
-    )
+    # TimeboundMCPClient bounds every gateway tool call with a hard read
+    # timeout so a wedged call (POST answered 202, result never streamed) can
+    # never hang this researcher thread indefinitely.
+    return build_timebound_gateway_client(gateway_url, access_token, prefix="gateway")
 
 
 def _load_guardrail_config() -> dict[str, str] | None:
