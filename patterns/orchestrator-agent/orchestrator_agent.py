@@ -971,8 +971,14 @@ def _qc_validate_catalog(designer_output: str) -> dict:
 # Best-effort by design: a challenger/parse failure leaves the designer's copy
 # untouched and simply omits the evaluation, so the pipeline never breaks.
 
-# Challenger model for the catalog A/B. Overridable via env; defaults to Opus 4.7.
-CATALOG_CHALLENGER_MODEL_ID = os.environ.get("CATALOG_CHALLENGER_MODEL_ID", "us.anthropic.claude-opus-4-7")
+# Challenger model for the catalog A/B. Overridable via env; defaults to Claude
+# Haiku 4.5 so the A/B is a genuine cross-model comparison — the designer/base
+# model is usually Opus/Sonnet, and using Opus 4.7 here made both sides the same
+# model whenever the presenter selected Opus 4.7. Must be the full inference
+# profile id ("...-4-5" alone is not an invocable Converse model id).
+CATALOG_CHALLENGER_MODEL_ID = os.environ.get(
+    "CATALOG_CHALLENGER_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+)
 # A/B is on by default; set CATALOG_AB_ENABLED=false to skip the challenger pass.
 _CATALOG_AB_ENABLED = os.environ.get("CATALOG_AB_ENABLED", "true").lower() == "true"
 
