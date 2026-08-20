@@ -771,7 +771,9 @@ export class Backend extends Stack {
         // BEST-EFFORT: if the preview API is unavailable/denied in the account,
         // the deploy still succeeds and the entry simply does not appear.
         if (features.harness) {
-            const harnessName = `${stackName.replace(/-/g, "_")}_quick_assistant`.slice(0, 40);
+            // Fixed harness name (was `${stackName}_quick_assistant`). Must satisfy
+            // the CreateHarness constraint ^[a-zA-Z][a-zA-Z0-9_]{0,39}$.
+            const harnessName = "trinityresearch_trinity_research".slice(0, 40);
             const harnessSystemPrompt =
                 "You are the Trinity Reserve Bank Quick Assistant, a friendly customer-facing " +
                 "helper. Answer questions about the bank's accounts, cards, investing and " +

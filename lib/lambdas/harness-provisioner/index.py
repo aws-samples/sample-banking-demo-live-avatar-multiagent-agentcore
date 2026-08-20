@@ -110,11 +110,11 @@ def _on_create(name: str) -> dict:
 _UNHEALTHY = {"CREATE_FAILED", "DELETE_FAILED", "UPDATE_FAILED"}
 
 
-def _get_status(client, harness_id: str) -> str | None:
-    """Return the harness status, or None if it no longer exists."""
+def _get_harness(client, harness_id: str) -> dict | None:
+    """Return the harness resource dict, or None if it no longer exists."""
     try:
         r = client.get_harness(harnessId=harness_id)
-        return (r.get("harness", r) or {}).get("status")
+        return r.get("harness", r) or {}
     except ClientError as exc:
         if exc.response.get("Error", {}).get("Code") == "ResourceNotFoundException":
             return None
@@ -145,19 +145,33 @@ def on_event(event, _context):
     if request_type == "Create":
         return _on_create(name)
     if request_type == "Update":
-        # Self-heal: keep the same harness when it is healthy, but re-create if
-        # the previous attempt was skipped, the harness was deleted, or it is in
-        # a failed state (e.g. CREATE_FAILED from a since-fixed permission gap).
+        # Self-heal: keep the same harness when it is healthy and already carries
+        # the desired name, but re-create if the previous attempt was skipped, the
+        # harness was deleted, it is in a failed state (e.g. CREATE_FAILED from a
+        # since-fixed permission gap), OR the requested name changed (a rename).
         physical_id = event.get("PhysicalResourceId", "")
         if physical_id and physical_id != UNAVAILABLE:
+            client = _client()
             harness_id = physical_id.split("/")[-1] if "/" in physical_id else physical_id
-            status = _get_status(_client(), harness_id)
-            if status is not None and status not in _UNHEALTHY:
-                return {
-                    "PhysicalResourceId": physical_id,
-                    "Data": {"HarnessArn": physical_id, "Status": status},
-                }
-            print(f"[HARNESS] existing harness status={status}; re-creating")
+            existing = _get_harness(client, harness_id)
+            if existing is not None:
+                existing_name = existing.get("harnessName")
+                status = existing.get("status")
+                if existing_name == name and status not in _UNHEALTHY:
+                    return {
+                        "PhysicalResourceId": physical_id,
+                        "Data": {"HarnessArn": physical_id, "Status": status},
+                    }
+                # A rename: retire the old harness so the console shows only the
+                # new one. Best-effort — a failed delete must not block the deploy.
+                if existing_name and existing_name != name:
+                    print(f"[HARNESS] renaming '{existing_name}' -> '{name}'; deleting old")
+                    try:
+                        client.delete_harness(harnessId=harness_id)
+                    except Exception as exc:  # noqa: BLE001 - best effort
+                        print(f"[HARNESS] old harness delete failed (ignored): {exc}")
+                else:
+                    print(f"[HARNESS] existing harness status={status}; re-creating")
         return _on_create(name)
     if request_type == "Delete":
         return _on_delete(event.get("PhysicalResourceId", ""), name)
