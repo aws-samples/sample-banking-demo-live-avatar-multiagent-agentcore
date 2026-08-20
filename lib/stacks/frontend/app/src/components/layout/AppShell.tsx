@@ -5,7 +5,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { useModelSelector, AVAILABLE_MODELS } from "@/hooks/useModelSelector";
 import { resetKnowledgeBase } from "@/services/kbResetService";
-import { BRAND, AUDIENCE_META, AUDIENCE_ORDER, experiencesByAudience } from "@/config/brand";
+import {
+    BRAND,
+    AUDIENCE_META,
+    AUDIENCE_ORDER,
+    EXPERIENCES,
+    experiencesByAudience,
+    type Experience,
+} from "@/config/brand";
 import TopNavigation from "@cloudscape-design/components/top-navigation";
 import Modal from "@cloudscape-design/components/modal";
 import Popover from "@cloudscape-design/components/popover";
@@ -29,6 +36,98 @@ import Spinner from "@cloudscape-design/components/spinner";
 function NavRail(): JSX.Element {
     const location = useLocation();
 
+    /**
+     * Shared markup for a single rail row (link + info popover). Used both by
+     * the audience-grouped rows and by the "Latest Reports" utility row pinned
+     * to the bottom of the rail.
+     */
+    const renderItem = ({
+        to,
+        label: itemLabel,
+        subtitle,
+        description,
+        icon: Icon,
+    }: Experience): JSX.Element => {
+        const active = location.pathname === to;
+        return (
+            <div key={to} className="group relative flex items-stretch">
+                <NavLink
+                    to={to}
+                    aria-current={active ? "page" : undefined}
+                    className="relative flex min-w-0 flex-1 items-start gap-2.5 rounded-[4px] px-3 py-2 no-underline transition-colors"
+                    style={{
+                        background: active ? "var(--app-nav-item-active-bg)" : "transparent",
+                        color: active
+                            ? "var(--app-nav-item-active-text)"
+                            : "var(--app-nav-item-text)",
+                    }}
+                >
+                    {/* Brass indicator on the active item. */}
+                    <span
+                        aria-hidden
+                        className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full transition-opacity"
+                        style={{
+                            background: "var(--brand-accent)",
+                            opacity: active ? 1 : 0,
+                        }}
+                    />
+                    <Icon
+                        size={15}
+                        className="mt-0.5 shrink-0"
+                        style={{
+                            color: active ? "var(--brand-accent)" : undefined,
+                        }}
+                    />
+                    <span className="flex min-w-0 flex-col leading-tight">
+                        <span className="text-[13px] font-medium">{itemLabel}</span>
+                        <span
+                            className="truncate text-[10.5px]"
+                            style={{ color: "var(--app-text-muted)" }}
+                        >
+                            {subtitle}
+                        </span>
+                    </span>
+                </NavLink>
+
+                {/* Info icon — click to open a popover with the full description.
+                    Sits outside the NavLink so clicking it doesn't route away. */}
+                <span
+                    className="flex shrink-0 items-start pt-2.5 pr-1"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <Popover
+                        dismissButton={false}
+                        position="right"
+                        size="medium"
+                        triggerType="custom"
+                        header={itemLabel}
+                        content={
+                            <Box variant="p" fontSize="body-s">
+                                {description}
+                            </Box>
+                        }
+                    >
+                        <button
+                            type="button"
+                            aria-label={`About ${itemLabel}`}
+                            className="flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 opacity-60 transition-opacity hover:opacity-100"
+                            style={{
+                                color: "var(--app-text-muted)",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <Info size={13} />
+                        </button>
+                    </Popover>
+                </span>
+            </div>
+        );
+    };
+
+    // Utility/supporting views (e.g. Latest Reports) are pinned to the bottom
+    // of the rail rather than shown inside an audience group.
+    const secondaryItems = EXPERIENCES.filter((e) => e.secondary);
+
     return (
         <nav
             aria-label="Primary"
@@ -39,7 +138,7 @@ function NavRail(): JSX.Element {
             }}
         >
             {AUDIENCE_ORDER.flatMap((audience) => {
-                const items = experiencesByAudience(audience);
+                const items = experiencesByAudience(audience).filter((e) => !e.secondary);
                 if (items.length === 0) return [];
                 const meta = AUDIENCE_META[audience];
                 return [
@@ -51,92 +150,18 @@ function NavRail(): JSX.Element {
                     >
                         {meta.label}
                     </p>,
-                    ...items.map(({ to, label: itemLabel, subtitle, description, icon: Icon }) => {
-                        const active = location.pathname === to;
-                        return (
-                            <div key={to} className="group relative flex items-stretch">
-                                <NavLink
-                                    to={to}
-                                    aria-current={active ? "page" : undefined}
-                                    className="relative flex min-w-0 flex-1 items-start gap-2.5 rounded-[4px] px-3 py-2 no-underline transition-colors"
-                                    style={{
-                                        background: active
-                                            ? "var(--app-nav-item-active-bg)"
-                                            : "transparent",
-                                        color: active
-                                            ? "var(--app-nav-item-active-text)"
-                                            : "var(--app-nav-item-text)",
-                                    }}
-                                >
-                                    {/* Brass indicator on the active item. */}
-                                    <span
-                                        aria-hidden
-                                        className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full transition-opacity"
-                                        style={{
-                                            background: "var(--brand-accent)",
-                                            opacity: active ? 1 : 0,
-                                        }}
-                                    />
-                                    <Icon
-                                        size={15}
-                                        className="mt-0.5 shrink-0"
-                                        style={{
-                                            color: active ? "var(--brand-accent)" : undefined,
-                                        }}
-                                    />
-                                    <span className="flex min-w-0 flex-col leading-tight">
-                                        <span className="text-[13px] font-medium">{itemLabel}</span>
-                                        <span
-                                            className="truncate text-[10.5px]"
-                                            style={{ color: "var(--app-text-muted)" }}
-                                        >
-                                            {subtitle}
-                                        </span>
-                                    </span>
-                                </NavLink>
-
-                                {/* Info icon — click to open a popover with the full description.
-                            Sits outside the NavLink so clicking it doesn't route away. */}
-                                <span
-                                    className="flex shrink-0 items-start pt-2.5 pr-1"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <Popover
-                                        dismissButton={false}
-                                        position="right"
-                                        size="medium"
-                                        triggerType="custom"
-                                        header={itemLabel}
-                                        content={
-                                            <Box variant="p" fontSize="body-s">
-                                                {description}
-                                            </Box>
-                                        }
-                                    >
-                                        <button
-                                            type="button"
-                                            aria-label={`About ${itemLabel}`}
-                                            className="flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent p-0 opacity-60 transition-opacity hover:opacity-100"
-                                            style={{
-                                                color: "var(--app-text-muted)",
-                                                cursor: "pointer",
-                                            }}
-                                        >
-                                            <Info size={13} />
-                                        </button>
-                                    </Popover>
-                                </span>
-                            </div>
-                        );
-                    }),
+                    ...items.map(renderItem),
                 ];
             })}
 
-            <div className="mt-auto px-3">
-                <div className="rule mb-3" />
-                <p className="text-[10px]" style={{ color: "var(--app-text-muted)" }}>
-                    {BRAND.disclosure}
-                </p>
+            <div className="mt-auto">
+                {secondaryItems.map(renderItem)}
+                <div className="px-3">
+                    <div className="rule mt-2 mb-3" />
+                    <p className="text-[10px]" style={{ color: "var(--app-text-muted)" }}>
+                        {BRAND.disclosure}
+                    </p>
+                </div>
             </div>
         </nav>
     );
