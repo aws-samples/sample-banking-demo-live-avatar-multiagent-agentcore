@@ -1010,10 +1010,7 @@ def _qc_validate_catalog(designer_output: str) -> dict:
 CATALOG_CHALLENGER_MODEL_ID = os.environ.get(
     "CATALOG_CHALLENGER_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 )
-# A/B is on by default; set CATALOG_AB_ENABLED=false to skip the challenger pass.
-_CATALOG_AB_ENABLED = os.environ.get("CATALOG_AB_ENABLED", "true").lower() == "true"
-
-# Human-readable labels for the models named in the A/B record.
+# Human-readable labels for the models named in the evaluation record.
 _CATALOG_MODEL_LABELS: dict[str, str] = {
     "us.anthropic.claude-opus-4-7": "Claude Opus 4.7",
     "us.anthropic.claude-sonnet-4-6": "Claude Sonnet 4.6",
@@ -1022,41 +1019,10 @@ _CATALOG_MODEL_LABELS: dict[str, str] = {
     "us.anthropic.claude-haiku-4-5": "Claude Haiku 4.5",
     "us.amazon.nova-2-lite-v1:0": "Nova 2 Lite",
     "us.amazon.nova-pro-v1:0": "Nova Pro",
+    # Judge model is referenced by its base id (no cross-region prefix) in the
+    # evaluation job, so map that form too.
+    "amazon.nova-pro-v1:0": "Nova Pro",
 }
-
-# Ported verbatim from services/catalogEvaluation.ts so the backend's winner
-# selection matches the score bars the card renders. Keep the two in sync.
-_CATALOG_BENEFIT_TERMS = (
-    "earn",
-    "maximize",
-    "grow",
-    "protect",
-    "protection",
-    "access",
-    "flexible",
-    "flexibility",
-    "competitive",
-    "no monthly fee",
-    "no minimum",
-    "unlimited",
-    "secure",
-    "save",
-    "savings",
-    "rewards",
-    "benefit",
-    "tax-free",
-    "tax-deferred",
-)
-_CATALOG_HYPE_TERMS = (
-    "best ever",
-    "world-class",
-    "unbeatable",
-    "revolutionary",
-    "amazing",
-    "incredible",
-    "game-changing",
-    "unmatched",
-)
 
 
 def _catalog_model_label(model_id: str) -> str:
@@ -1067,47 +1033,6 @@ def _catalog_model_label(model_id: str) -> str:
         if fragment.split(":")[0] in model_id:
             return label
     return model_id
-
-
-def _score_catalog_description(text: str) -> int:
-    """Overall 0-100 score for one description, mirroring catalogEvaluation.ts.
-
-    Only the overall is needed here (to pick a winner); the frontend recomputes
-    the per-dimension bars from the same rules for display.
-    """
-
-    import re
-
-    def _clamp(n: float) -> int:
-        return max(0, min(100, round(n)))
-
-    clean = (text or "").strip()
-    if not clean:
-        return 0
-    words = len([w for w in clean.split() if w])
-
-    if 15 <= words <= 30:
-        length_score = 100
-    elif words < 15:
-        length_score = _clamp(100 - (15 - words) * 8)
-    else:
-        length_score = _clamp(100 - (words - 30) * 6)
-
-    sentences = [s for s in re.split(r"[.!?]+", clean) if s.strip()]
-    avg_sentence_words = words / max(1, len(sentences))
-    if avg_sentence_words <= 25:
-        clarity_score = _clamp(100 - max(0.0, avg_sentence_words - 18) * 3)
-    else:
-        clarity_score = _clamp(100 - (avg_sentence_words - 25) * 6)
-
-    lower = clean.lower()
-    benefit_hits = sum(1 for t in _CATALOG_BENEFIT_TERMS if t in lower)
-    benefit_score = _clamp(55 + benefit_hits * 15)
-
-    hype_hits = sum(1 for t in _CATALOG_HYPE_TERMS if t in lower)
-    brand_score = _clamp(100 - hype_hits * 30 - (25 if clean == clean.upper() else 0))
-
-    return round((length_score + clarity_score + benefit_score + brand_score) / 4)
 
 
 def _generate_challenger_descriptions(entries: list[tuple[str, str]], *, model_id: str) -> list[str]:
@@ -1163,64 +1088,220 @@ def _generate_challenger_descriptions(entries: list[tuple[str, str]], *, model_i
         return [""] * len(entries)
 
 
-def _ab_evaluate_catalog(catalog: dict, *, base_model_id: str) -> dict:
-    """Attach a real two-model A/B record to each catalog item.
+# ---------------------------------------------------------------------------
+# Managed Bedrock evaluation for the Services Catalog (AI Assistant)
+# ---------------------------------------------------------------------------
+# On demand (the catalog card's "Launch Bedrock evaluation" button) we run a
+# REAL, console-visible A/B: the base model's descriptions and a challenger
+# model's rewrites are each shipped to Amazon Bedrock's model-evaluation service
+# as a model-as-a-judge job scored against our custom rubric. TWO jobs (one per
+# model) because a model-as-a-judge bring-your-own-inference-responses (BYOIR)
+# job carries exactly one model's responses per prompt. The audience compares
+# the two jobs' scorecards in the Bedrock console. Everything here is
+# best-effort: a failure returns an error record for the card, never raising.
 
-    Generates a challenger variant per description with
-    `CATALOG_CHALLENGER_MODEL_ID`, scores both variants by the shared rules, and
-    makes the higher scorer the item's `description`; the loser becomes
-    `evaluation.challengerDescription` with the model labels set so the card
-    shows which model won and why. Mutates and returns `catalog`; on any failure
-    the item is left exactly as the designer produced it.
-    """
-    sections = catalog.get("sections")
-    if not isinstance(sections, list) or not sections:
-        return catalog
+# Judge (evaluator) model for the custom metric. Nova Pro is a supported
+# model-as-a-judge custom-metric evaluator in us-east-1 (referenced by its base
+# id, not a cross-region inference profile).
+_EVAL_JUDGE_MODEL_ID = os.environ.get("EVAL_JUDGE_MODEL_ID", "amazon.nova-pro-v1:0")
+# Managed evaluation is off unless the runtime opts in (features.bedrock_managed_eval).
+_MANAGED_EVAL_ENABLED = os.environ.get("BEDROCK_MANAGED_EVAL_ENABLED", "false").lower() == "true"
 
-    # Flatten to (section_idx, item_idx, name, description) for a single call.
-    coords: list[tuple[int, int]] = []
+# Custom-metric prompt for the judge. Input variables ({{prompt}}, {{prediction}})
+# MUST come last; the four dimensions mirror the catalog brief the copy was
+# written against, so the managed score measures the same thing the old inline
+# rules did — only now via a real judge model in a console-visible job.
+_EVAL_METRIC_INSTRUCTIONS = (
+    "You are a senior brand copy editor for a private bank.\n"
+    "You are given the brief for a product catalog description and the description an AI model "
+    "wrote for it.\n"
+    "Assess the description on four things: length discipline (ideally one sentence, 15-30 words), "
+    "clarity, benefit-led language, and on-brand voice with no hype or unverifiable superlatives.\n"
+    "Rate the overall quality on a 0-100 scale where 100 is excellent and 0 is unusable.\n"
+    "Here is the task:\n"
+    "Prompt: {{prompt}}\n"
+    "Response: {{prediction}}"
+)
+
+
+def _catalog_item_brief(name: str) -> str:
+    """The per-item brief shown to the judge as the prompt the copy answered."""
+    return (
+        f"Write a one-sentence, benefit-led catalog description (15-30 words, plain sentence case, "
+        f"no hype) for the private-bank product: {name}."
+    )
+
+
+def _flatten_catalog_entries(catalog: dict) -> list[tuple[str, str]]:
+    """Flatten a catalog to [(name, description)] for items that have copy."""
     entries: list[tuple[str, str]] = []
-    for si, section in enumerate(sections):
+    for section in catalog.get("sections", []) or []:
         items = section.get("items", []) if isinstance(section, dict) else []
-        for ii, item in enumerate(items if isinstance(items, list) else []):
+        for item in items if isinstance(items, list) else []:
             if not isinstance(item, dict):
                 continue
             desc = str(item.get("description") or "").strip()
-            if not desc:
-                continue
-            coords.append((si, ii))
-            entries.append((str(item.get("name") or "Product"), desc))
+            if desc:
+                entries.append((str(item.get("name") or "Product"), desc))
+    return entries
 
+
+def _write_eval_dataset(s3, bucket: str, key: str, entries: list[tuple[str, str]], model_identifier: str) -> None:
+    """Write a BYOIR .jsonl dataset: one line per item, each carrying the brief
+    and the model's response under a single ``modelIdentifier``."""
+    import json as _json
+
+    lines = [
+        _json.dumps(
+            {
+                "prompt": _catalog_item_brief(name),
+                "modelResponses": [{"response": desc, "modelIdentifier": model_identifier}],
+            }
+        )
+        for name, desc in entries
+    ]
+    s3.put_object(Bucket=bucket, Key=key, Body=("\n".join(lines)).encode("utf-8"))
+
+
+def _create_catalog_eval_job(
+    bedrock, *, job_name: str, role_arn: str, dataset_s3uri: str, output_s3uri: str, source_id: str
+) -> str:
+    """Create one model-as-a-judge BYOIR eval job with the custom rubric.
+
+    Returns the job ARN. The exact request shape was verified end-to-end against
+    us-east-1 (taskType MUST be "General"; BYOIR responses go under
+    precomputedInferenceSource).
+    """
+    resp = bedrock.create_evaluation_job(
+        jobName=job_name,
+        applicationType="ModelEvaluation",
+        roleArn=role_arn,
+        evaluationConfig={
+            "automated": {
+                "datasetMetricConfigs": [
+                    {
+                        "taskType": "General",
+                        "dataset": {
+                            "name": "catalog",
+                            "datasetLocation": {"s3Uri": dataset_s3uri},
+                        },
+                        "metricNames": ["copy_quality"],
+                    }
+                ],
+                "customMetricConfig": {
+                    "customMetrics": [
+                        {
+                            "customMetricDefinition": {
+                                "name": "copy_quality",
+                                "instructions": _EVAL_METRIC_INSTRUCTIONS,
+                                "ratingScale": [
+                                    {"definition": "excellent", "value": {"floatValue": 100.0}},
+                                    {"definition": "poor", "value": {"floatValue": 0.0}},
+                                ],
+                            }
+                        }
+                    ],
+                    "evaluatorModelConfig": {"bedrockEvaluatorModels": [{"modelIdentifier": _EVAL_JUDGE_MODEL_ID}]},
+                },
+            }
+        },
+        inferenceConfig={"models": [{"precomputedInferenceSource": {"inferenceSourceIdentifier": source_id}}]},
+        outputDataConfig={"s3Uri": output_s3uri},
+    )
+    return resp["jobArn"]
+
+
+def _launch_catalog_evaluation(catalog: dict, *, base_model_id: str, session_id: str) -> dict:
+    """Launch two real Bedrock model-as-a-judge eval jobs (base + challenger).
+
+    Persists a BYOIR dataset per model to the images bucket, fires one
+    CreateEvaluationJob per model against the shared custom rubric, and returns a
+    record for the BedrockEvaluationLaunch card (job names/ARNs + console link).
+    Never raises — configuration or per-job failures come back in the record.
+    """
+    import time as _t
+
+    import boto3
+
+    region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+    stack = os.environ.get("STACK_NAME", "")
+    role_arn = os.environ.get("AGENTCORE_ROLE_ARN", "")
+    bucket = os.environ.get("IMAGES_BUCKET", "")
+    if not bucket and stack:
+        try:
+            bucket = get_ssm_parameter(f"/{stack}/images_bucket") or ""
+        except Exception:  # noqa: BLE001 - SSM miss is non-fatal; handled below
+            bucket = ""
+
+    console_url = f"https://{region}.console.aws.amazon.com/bedrock/home?region={region}#/evaluations"
+
+    entries = _flatten_catalog_entries(catalog)
     if not entries:
-        return catalog
+        return {
+            "status": "error",
+            "message": "No catalog descriptions to evaluate.",
+            "jobs": [],
+            "consoleUrl": console_url,
+        }
+    if not role_arn or not bucket:
+        return {
+            "status": "error",
+            "message": "Managed evaluation is not configured (missing role or bucket).",
+            "jobs": [],
+            "consoleUrl": console_url,
+        }
 
+    # Challenger rewrites give the second model's responses for the A/B.
     challengers = _generate_challenger_descriptions(entries, model_id=CATALOG_CHALLENGER_MODEL_ID)
-    base_label = _catalog_model_label(base_model_id)
-    challenger_label = _catalog_model_label(CATALOG_CHALLENGER_MODEL_ID)
+    challenger_entries = [(name, (rewrite or desc)) for (name, desc), rewrite in zip(entries, challengers)]
 
-    for (si, ii), (_, base_desc), challenger_desc in zip(coords, entries, challengers):
-        if not challenger_desc:
-            continue  # Challenger unavailable for this item — keep designer copy.
-        base_score = _score_catalog_description(base_desc)
-        challenger_score = _score_catalog_description(challenger_desc)
-        item = sections[si]["items"][ii]
-        if challenger_score > base_score:
-            # Challenger wins: promote its copy, keep the base as the loser.
-            item["description"] = challenger_desc
-            item["evaluation"] = {
-                "selectedModel": challenger_label,
-                "challengerModel": base_label,
-                "challengerDescription": base_desc,
-            }
-        else:
-            # Base wins (ties favor the designer): keep its copy.
-            item["evaluation"] = {
-                "selectedModel": base_label,
-                "challengerModel": challenger_label,
-                "challengerDescription": challenger_desc,
-            }
+    s3 = boto3.client("s3", region_name=region)
+    bedrock = boto3.client("bedrock", region_name=region, config=BotocoreConfig(read_timeout=60))
+    ts = int(_t.time())
+    prefix = f"catalog-eval/{session_id or 'session'}/{ts}"
 
-    return catalog
+    plan = (
+        ("base", entries, _catalog_model_label(base_model_id), "primary-model"),
+        ("challenger", challenger_entries, _catalog_model_label(CATALOG_CHALLENGER_MODEL_ID), "challenger-model"),
+    )
+    jobs: list[dict] = []
+    for role, role_entries, label, source_id in plan:
+        try:
+            key = f"{prefix}/{role}.jsonl"
+            _write_eval_dataset(s3, bucket, key, role_entries, source_id)
+            job_name = f"{(stack or 'catalog')}-{role}-{ts}"[:63]
+            arn = _create_catalog_eval_job(
+                bedrock,
+                job_name=job_name,
+                role_arn=role_arn,
+                dataset_s3uri=f"s3://{bucket}/{key}",
+                output_s3uri=f"s3://{bucket}/{prefix}/output-{role}/",
+                source_id=source_id,
+            )
+            jobs.append(
+                {
+                    "role": role,
+                    "model": label,
+                    "jobName": job_name,
+                    "jobArn": arn,
+                    "items": len(role_entries),
+                    "consoleUrl": console_url,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - one failed job must not sink the other
+            logger.warning("Catalog eval job (%s) failed: %s", role, exc)
+            jobs.append({"role": role, "model": label, "status": "error", "message": str(exc)[:200]})
+
+    launched = [j for j in jobs if j.get("jobArn")]
+    return {
+        "status": "ok" if launched else "error",
+        "judgeModel": _catalog_model_label(_EVAL_JUDGE_MODEL_ID),
+        "metric": "copy_quality",
+        "region": region,
+        "consoleUrl": console_url,
+        "itemCount": len(entries),
+        "jobs": jobs,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -4034,6 +4115,30 @@ async def orchestrate(payload: dict, context: RequestContext):
             yield event
         return
 
+    # ── Managed Bedrock evaluation of the catalog (on-demand A/B) ──
+    # Triggered by the ServicesCatalog card's "Launch Bedrock evaluation" button.
+    # Ships the base and challenger descriptions to Amazon Bedrock's
+    # model-evaluation service as two model-as-a-judge jobs scored against a
+    # custom rubric, then emits a card with the job names + a console link. The
+    # jobs run asynchronously (minutes) — the card is the launch receipt, and the
+    # scorecards are viewed in the Bedrock console.
+    if _MANAGED_EVAL_ENABLED and mode == "catalog_evaluate":
+        catalog = payload.get("catalog", {}) if isinstance(payload.get("catalog", {}), dict) else {}
+        yield {"agent_phase": {"agent": "menu_eval", "phase": "bedrock evaluation", "status": "start"}}
+        result: dict = {"status": "error", "message": "Evaluation could not be launched.", "jobs": []}
+        try:
+            result = _launch_catalog_evaluation(
+                catalog,
+                base_model_id=requested_model or os.environ.get("MODEL_ID", ""),
+                session_id=session_id,
+            )
+        except Exception as eval_exc:  # noqa: BLE001 - launch must never crash the runtime
+            logger.warning("catalog_evaluate failed: %s", eval_exc)
+            result = {"status": "error", "message": str(eval_exc)[:300], "jobs": []}
+        yield {"_ui": {"component": "BedrockEvaluationLaunch", "props": result}}
+        yield {"agent_phase": {"agent": "menu_eval", "phase": "bedrock evaluation", "status": "end"}}
+        return
+
     # ── Catalog prompt optimization from feedback (human-in-the-loop) ──
     # Reads recent reviewer feedback and proposes designer-prompt refinements for
     # the presenter to review and apply. Closes the continuous feedback loop.
@@ -6545,22 +6650,9 @@ async def _run_pipeline(
                     logger.debug("Catalog QC failed: %s", qc_exc)
                 yield {"agent_phase": {"agent": "menu_qc", "phase": "quality control", "status": "end"}}
 
-                # ── A/B model evaluation (menu_ab flow step) ──
-                # Produce each description with the challenger model too, score
-                # both by the same rules, and promote the winner. Best-effort:
-                # a failure leaves the designer's copy and simply omits the
-                # per-item A/B record.
-                if _CATALOG_AB_ENABLED and parsed_catalog and parsed_catalog.get("sections"):
-                    yield {"agent_phase": {"agent": "menu_ab", "phase": "a/b evaluation", "status": "start"}}
-                    try:
-                        parsed_catalog = _ab_evaluate_catalog(parsed_catalog, base_model_id=phase_model_id)
-                    except Exception as ab_exc:  # A/B must never break the pipeline
-                        logger.debug("Catalog A/B evaluation failed: %s", ab_exc)
-                    yield {"agent_phase": {"agent": "menu_ab", "phase": "a/b evaluation", "status": "end"}}
-
-                # Emit the (QC'd, possibly A/B-augmented) catalog so the
-                # ServicesCatalog card can drive human-in-the-loop editing,
-                # read-aloud, the A/B record, and per-item ratings.
+                # Emit the QC'd catalog so the ServicesCatalog card can drive
+                # human-in-the-loop editing, read-aloud, the on-demand managed
+                # Bedrock evaluation, and per-item ratings.
                 if parsed_catalog and parsed_catalog.get("sections"):
                     # Re-sign product images fresh from their s3_key so the card
                     # shows them — the designer's copied image_url is minted

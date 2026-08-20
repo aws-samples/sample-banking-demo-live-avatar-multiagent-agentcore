@@ -99,6 +99,7 @@ export class Backend extends Stack {
             enableSagemakerModel: features.sagemaker_model,
             sagemakerEndpointName: sagemaker.endpointName,
             enableAgentCoreIdentity: features.agentcore_identity,
+            enableManagedEval: features.bedrock_managed_eval,
         });
 
         // ─── AgentCore Identity credential provider (flag-gated) ────────
@@ -967,6 +968,9 @@ export class Backend extends Stack {
             AWS_DEFAULT_REGION: this.region,
             MEMORY_ID: memoryId,
             STACK_NAME: stackName,
+            // The AI Assistant runtime re-signs catalog product images and (when
+            // managed evaluation is on) writes evaluation datasets here.
+            IMAGES_BUCKET: shared.imagesBucket.bucketName,
         };
 
         const runtimeArns: Record<string, string> = {};
@@ -1270,6 +1274,21 @@ export class Backend extends Stack {
                                   : {}),
                               SAGEMAKER_MAX_TOKENS: String(sagemaker.maxTokens),
                           }
+                        : {}),
+                    // Managed Bedrock evaluation of the catalog
+                    // (features.bedrock_managed_eval). Only the AI Assistant
+                    // (`ai_assistant`) profile runs the catalog flow, so the
+                    // `catalog_evaluate` mode is enabled there. When on, the
+                    // orchestrator passes THIS execution role as the evaluation
+                    // job's role (it already trusts bedrock.amazonaws.com, reads
+                    // /writes the images bucket, and invokes the judge model), so
+                    // its ARN rides along. Off elsewhere / when the flag is off.
+                    BEDROCK_MANAGED_EVAL_ENABLED:
+                        features.bedrock_managed_eval && profile === "ai_assistant"
+                            ? "true"
+                            : "false",
+                    ...(features.bedrock_managed_eval && profile === "ai_assistant"
+                        ? { AGENTCORE_ROLE_ARN: agentCoreRole.roleArn }
                         : {}),
                     // The parallel section-researcher fan-out (Req 10) is
                     // exercised only by the research pipelines (Deep Research +

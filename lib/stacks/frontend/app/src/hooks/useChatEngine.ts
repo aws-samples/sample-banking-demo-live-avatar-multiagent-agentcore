@@ -38,6 +38,8 @@ export interface UseChatEngineReturn {
     ) => Promise<void>;
     /** Continue the catalog pipeline with the user-approved catalog. */
     exportCatalog: (catalog: Record<string, unknown>) => Promise<void>;
+    /** Launch the managed Bedrock A/B evaluation over the current catalog copy. */
+    launchCatalogEvaluation: (catalog: Record<string, unknown>) => Promise<void>;
     /** Ask the orchestrator to propose designer-prompt refinements from feedback. */
     optimizeFromFeedback: () => Promise<void>;
     /** Re-synthesize a flagged report to fix only its sub-threshold dimensions. */
@@ -63,7 +65,7 @@ export interface UseChatEngineReturn {
  */
 function runtimeArnForMode(mode: string): string | undefined {
     const env = import.meta.env;
-    if (mode === "menu" || mode === "menu_export") {
+    if (mode === "menu" || mode === "menu_export" || mode === "catalog_evaluate") {
         return env.VITE_RUNTIME_ARN_ASSISTANT || env.VITE_RUNTIME_ARN_ORCHESTRATOR;
     }
     if (mode === "chatbot" || mode === "archive_chat") {
@@ -681,6 +683,31 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
     );
 
     /**
+     * Launch the managed Bedrock A/B: ship the current catalog copy to Amazon
+     * Bedrock's model-evaluation service as two model-as-a-judge jobs (base vs
+     * challenger). Streams back a launch-receipt card; the scorecards are viewed
+     * in the Bedrock console (the jobs run asynchronously).
+     */
+    const launchCatalogEvaluation = useCallback(
+        async (catalog: Record<string, unknown>): Promise<void> => {
+            if (!client) return;
+            useChatStore.getState().setError(storeKey, null);
+            const triggerMessage: Message = {
+                role: "user",
+                content: "Launch a Bedrock model evaluation over the catalog descriptions.",
+                timestamp: new Date().toISOString(),
+            };
+            useChatStore.getState().setMessages(storeKey, (prev) => [...prev, triggerMessage]);
+            await _streamResponse(
+                "Launch a Bedrock model evaluation over the catalog descriptions.",
+                "catalog_evaluate",
+                { catalog }
+            );
+        },
+        [client, _streamResponse, storeKey]
+    );
+
+    /**
      * Continuous feedback loop: ask the orchestrator to read recent catalog
      * feedback and propose designer-prompt refinements. Streams a
      * PromptImprovement card the presenter reviews and applies. Does not change
@@ -765,6 +792,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
         sendMessage,
         executeResearchPlan,
         exportCatalog,
+        launchCatalogEvaluation,
         optimizeFromFeedback,
         reviseReport,
         isLoading,

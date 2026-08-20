@@ -29,6 +29,9 @@ interface ImportMetaEnv {
     // "true" when the Prompt Optimization showcase is enabled; gates the
     // Showcase_Card entry point and the flow-panel "Prompt Optimization" node.
     readonly VITE_PROMPT_OPTIMIZATION_ENABLED?: string;
+    // "true" when managed Bedrock evaluation is enabled; gates the catalog
+    // card's "Launch Bedrock evaluation" button.
+    readonly VITE_BEDROCK_MANAGED_EVAL_ENABLED?: string;
 }
 
 interface ImportMeta {

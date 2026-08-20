@@ -55,6 +55,16 @@ export interface AgentCoreRoleProps {
      * when enabled (least privilege). Defaults to undefined (off).
      */
     enableAgentCoreIdentity?: boolean;
+    /**
+     * Managed Bedrock evaluation for the AI Assistant catalog
+     * (`features.bedrock_managed_eval`). When true, the shared role is granted
+     * the model-evaluation actions plus `iam:PassRole` on ITSELF (the role
+     * Bedrock assumes to run the job — this role already trusts
+     * `bedrock.amazonaws.com` and can read/write the images bucket + invoke the
+     * judge model). Added only when enabled (least privilege). Defaults to
+     * undefined (off).
+     */
+    enableManagedEval?: boolean;
 }
 
 export function createAgentCoreRole(
@@ -257,6 +267,40 @@ export function createAgentCoreRole(
             ],
         })
     );
+
+    // Managed Bedrock evaluation (features.bedrock_managed_eval). The
+    // orchestrator (ai_assistant) launches two model-as-a-judge evaluation jobs
+    // over the catalog descriptions on demand. CreateEvaluationJob is not
+    // resource-scopeable, so it shares a `*` resource; the far more sensitive
+    // grant — iam:PassRole — is scoped to THIS role's own ARN and conditioned
+    // to the Bedrock service, so the runtime can pass only itself as the job's
+    // execution role and only to Bedrock. Added only when the flag is on.
+    if (props.enableManagedEval) {
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    "bedrock:CreateEvaluationJob",
+                    "bedrock:GetEvaluationJob",
+                    "bedrock:ListEvaluationJobs",
+                    "bedrock:StopEvaluationJob",
+                ],
+                resources: ["*"],
+            })
+        );
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ["iam:PassRole"],
+                // Constructed self-ARN (not the Role token) to avoid a policy →
+                // role → policy cycle; the role name is deterministic.
+                resources: [`arn:aws:iam::${Aws.ACCOUNT_ID}:role/${stackName}-agentcore-role`],
+                conditions: {
+                    StringEquals: { "iam:PassedToService": "bedrock.amazonaws.com" },
+                },
+            })
+        );
+    }
 
     // Runtime-to-runtime invocation
     role.addToPolicy(

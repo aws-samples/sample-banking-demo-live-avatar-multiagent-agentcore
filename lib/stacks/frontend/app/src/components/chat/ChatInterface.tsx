@@ -56,6 +56,7 @@ export default function ChatInterface({
         sendMessage,
         executeResearchPlan,
         exportCatalog,
+        launchCatalogEvaluation,
         optimizeFromFeedback,
         reviseReport,
         isLoading,
@@ -140,9 +141,13 @@ export default function ChatInterface({
                     payload.paymentBudgetUsd as string | undefined
                 );
             } else if (action === "menu_export") {
-                // The reviewed catalog — including edits and applied A/B
-                // variants — continues into the export phases.
+                // The reviewed catalog — including any edits — continues into
+                // the export phases.
                 exportCatalog(payload.catalog as Record<string, unknown>);
+            } else if (action === "catalog_evaluate") {
+                // Managed A/B: launch two real Bedrock model-as-a-judge jobs
+                // over the current catalog copy; scorecards live in the console.
+                launchCatalogEvaluation(payload.catalog as Record<string, unknown>);
             } else if (action === "research_revise") {
                 // Targeted revision: re-synthesize the flagged report to lift
                 // its sub-threshold dimensions, then re-evaluate.
@@ -183,6 +188,7 @@ export default function ChatInterface({
         [
             executeResearchPlan,
             exportCatalog,
+            launchCatalogEvaluation,
             optimizeFromFeedback,
             reviseReport,
             startNewChat,

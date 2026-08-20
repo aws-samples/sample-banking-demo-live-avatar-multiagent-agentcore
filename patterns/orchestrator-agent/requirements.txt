@@ -6,7 +6,10 @@ bedrock-agentcore[strands-agents]>=1.4.1,<2.0.0
 mcp>=1.26.0,<2.0.0
 PyJWT[crypto]>=2.10.1
 requests>=2.28.0
-boto3>=1.34.0
+# bedrock:CreateEvaluationJob with customMetricConfig (the managed catalog A/B,
+# features.bedrock_managed_eval) needs a recent botocore model — pin boto3 to
+# the version whose shape was verified end-to-end against us-east-1.
+boto3>=1.43.74
 opentelemetry-distro
 opentelemetry-exporter-otlp
 playwright>=1.49.0,<2.0.0

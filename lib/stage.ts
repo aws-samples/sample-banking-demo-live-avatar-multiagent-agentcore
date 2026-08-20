@@ -301,6 +301,9 @@ export class ApplicationStage extends Stage {
             // is enabled) surfaces the affordances, so a stack built without it
             // never shows a step the backend will not accept.
             VITE_PROMPT_OPTIMIZATION_ENABLED: features.prompt_optimization ? "true" : "false",
+            // Gates the catalog card's "Launch Bedrock evaluation" button; the
+            // backend rejects the mode unless the same flag is on there too.
+            VITE_BEDROCK_MANAGED_EVAL_ENABLED: features.bedrock_managed_eval ? "true" : "false",
         };
 
         // this stack must be named FrontendDeployment

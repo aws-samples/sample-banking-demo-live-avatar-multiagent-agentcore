@@ -49,7 +49,8 @@
             "kb_multimodal": true,
             "agent_registry": true,
             "agentcore_identity": true,
-            "managed_web_search": true
+            "managed_web_search": true,
+            "bedrock_managed_eval": true
         },
         "webSearch": {
             "excludeDomains": [
@@ -86,7 +87,7 @@
             }
         },
         "sagemaker": {
-            "endpointName": "PLACEHOLDER-ai-agent-sagemaker-endpoint",
+            "endpointName": "arn:aws:sagemaker:us-east-1:157000088284:endpoint/example-name-wtf7d-1-1787264167",
             "regionName": "",
             "maxTokens": 4096
         },

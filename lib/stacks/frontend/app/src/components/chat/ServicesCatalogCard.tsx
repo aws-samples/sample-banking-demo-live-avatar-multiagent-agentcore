@@ -12,7 +12,6 @@ import { useAuth } from "react-oidc-context";
 import { useChatStore } from "@/stores/chatStore";
 import { useSpeech } from "@/hooks/useSpeech";
 import { submitFeedback, type FeedbackMetadata } from "@/services/feedbackService";
-import { evaluateDescription, type EvaluationResult } from "@/services/catalogEvaluation";
 
 /**
  * Human-in-the-loop review of the generated services catalog, rendered INLINE
@@ -21,20 +20,16 @@ import { evaluateDescription, type EvaluationResult } from "@/services/catalogEv
  * The pipeline stops after the design phase and waits here. Review controls
  * belong in the conversation — beside the message that produced the catalog —
  * rather than in a passive side panel, because they are a step in the flow:
- * read an item aloud, edit its wording, A/B a description against another
- * model, rate it, then approve. Nothing is exported until the user says so.
+ * read an item aloud, edit its wording, rate it, then approve. Nothing is
+ * exported until the user says so.
+ *
+ * Model validation is a real, managed step: "Launch Bedrock evaluation" ships
+ * the copy to Amazon Bedrock's model-evaluation service as two model-as-a-judge
+ * jobs (base vs challenger), whose scorecards live in the Bedrock console.
  */
 
-/**
- * A/B evaluation record for one catalog item, supplied by the designer phase
- * when it retained a challenger variant. Absent for runs that generated a
- * single candidate, in which case only the selected model is scored.
- */
-export interface CatalogItemEvaluation {
-    selectedModel?: string;
-    challengerModel?: string;
-    challengerDescription?: string;
-}
+/** Whether the managed Bedrock evaluation button is enabled for this build. */
+const MANAGED_EVAL_ENABLED = import.meta.env.VITE_BEDROCK_MANAGED_EVAL_ENABLED === "true";
 
 interface CatalogItem {
     name?: string;
@@ -43,7 +38,6 @@ interface CatalogItem {
     dietary?: string[];
     s3_key?: string;
     image_url?: string;
-    evaluation?: CatalogItemEvaluation;
     [key: string]: unknown;
 }
 
@@ -58,14 +52,6 @@ interface ServicesCatalogCardProps {
     onAction?: (action: string, data: unknown) => void;
 }
 
-/**
- * Models named in the evaluation record when the run did not report its own.
- * The designer phase runs on the orchestrator's configured model; the
- * challenger is the low-cost first-party alternative it is measured against.
- */
-const DEFAULT_CATALOG_MODEL = "Claude Sonnet 5";
-const DEFAULT_CHALLENGER_MODEL = "Nova 2 Lite";
-
 export function ServicesCatalogCard({
     title,
     sections = [],
@@ -74,6 +60,7 @@ export function ServicesCatalogCard({
     const auth = useAuth();
     const speech = useSpeech();
     const sessionId = useChatStore((s) => s.slots["menu"]?.sessionId ?? "");
+    const [evalLaunched, setEvalLaunched] = useState(false);
 
     // Local working copy: edits and applied A/B winners live here until the
     // user approves, so nothing half-reviewed can leak into the export.
@@ -127,6 +114,16 @@ export function ServicesCatalogCard({
     const handleApprove = (): void => {
         setApproved(true);
         onAction?.("menu_export", { catalog: { title, sections: draft } });
+    };
+
+    /**
+     * Kick off the real, managed A/B: ship the current copy to Amazon Bedrock's
+     * model-evaluation service as two model-as-a-judge jobs. Async — the card
+     * that streams back is the launch receipt; scorecards live in the console.
+     */
+    const handleLaunchEval = (): void => {
+        setEvalLaunched(true);
+        onAction?.("catalog_evaluate", { catalog: { title, sections: draft } });
     };
 
     return (
@@ -195,6 +192,17 @@ export function ServicesCatalogCard({
                                     >
                                         Improve prompt from feedback
                                     </Button>
+                                    {MANAGED_EVAL_ENABLED && (
+                                        <Button
+                                            iconSvg={<FlaskConical size={15} />}
+                                            disabled={evalLaunched}
+                                            onClick={handleLaunchEval}
+                                        >
+                                            {evalLaunched
+                                                ? "Evaluation launched"
+                                                : "Launch Bedrock evaluation"}
+                                        </Button>
+                                    )}
                                     <Button variant="primary" onClick={handleApprove}>
                                         Approve &amp; Export
                                     </Button>
@@ -229,7 +237,6 @@ function ReviewRow({
 }: ReviewRowProps): JSX.Element {
     const [editing, setEditing] = useState(false);
     const [text, setText] = useState(item.description ?? "");
-    const [showAb, setShowAb] = useState(false);
     const [rated, setRated] = useState<"positive" | "negative" | null>(null);
     const [edited, setEdited] = useState(false);
 
@@ -299,7 +306,6 @@ function ReviewRow({
             source: "catalog_rating",
             reasons: withDetail ? voteReasons : undefined,
             text: item.description ?? "",
-            model: item.evaluation?.selectedModel,
         });
         setVoteOpen(false);
     };
@@ -422,12 +428,6 @@ function ReviewRow({
                             />
                             <Button
                                 variant="inline-icon"
-                                iconSvg={<FlaskConical size={15} />}
-                                ariaLabel={`View the A/B model evaluation for ${name}`}
-                                onClick={() => setShowAb((v) => !v)}
-                            />
-                            <Button
-                                variant="inline-icon"
                                 iconSvg={
                                     <ThumbsUp
                                         size={15}
@@ -450,14 +450,6 @@ function ReviewRow({
                             />
                         </div>
                     )}
-
-                    {showAb ? (
-                        <AbEvaluationRecord
-                            name={name}
-                            description={item.description ?? ""}
-                            evaluation={item.evaluation}
-                        />
-                    ) : null}
                 </div>
             </div>
 
@@ -519,185 +511,6 @@ function ReviewRow({
                     </Box>
                 </SpaceBetween>
             </Modal>
-        </div>
-    );
-}
-
-/**
- * Read-only record of the A/B model evaluation behind this item's copy.
- *
- * Deliberately NOT a live comparison. Running two models on demand made the
- * panel a control rather than evidence: it added latency mid-demo, and because
- * it borrowed the external chatbot's mode it inherited that guardrail and
- * returned "blocked by a safety guardrail" for benign marketing copy. What an
- * audience needs is the record — which models were considered, what was
- * produced, how it scored, and which variant was selected.
- *
- * Scores come from `evaluateDescription`, computed from the real text by
- * published rules, so every number on screen can be explained. A challenger's
- * output is shown only when the run actually retained one.
- */
-function AbEvaluationRecord({
-    name,
-    description,
-    evaluation,
-}: {
-    name: string;
-    description: string;
-    evaluation?: CatalogItemEvaluation;
-}): JSX.Element {
-    const selectedModel = evaluation?.selectedModel ?? DEFAULT_CATALOG_MODEL;
-    const challengerModel = evaluation?.challengerModel ?? DEFAULT_CHALLENGER_MODEL;
-    const selected = evaluateDescription(description);
-    const challengerText = evaluation?.challengerDescription ?? "";
-    const challenger = challengerText ? evaluateDescription(challengerText) : null;
-
-    return (
-        <div
-            className="mt-3 rounded-md p-3"
-            style={{ border: "1px solid var(--glass-border)", background: "var(--glass-bg)" }}
-        >
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <span className="flex items-center gap-1.5 text-xs font-semibold">
-                    <FlaskConical size={13} /> A/B Model Evaluation
-                </span>
-                <span
-                    className="rounded-full px-2 py-0.5 text-[9.5px] font-medium"
-                    style={{
-                        color: "#4fd1a5",
-                        background: "#4fd1a51a",
-                        border: "1px solid #4fd1a555",
-                    }}
-                >
-                    AgentCore Evaluations · record
-                </span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <VariantColumn
-                    heading="Selected"
-                    modelLabel={selectedModel}
-                    text={description}
-                    result={selected}
-                    winner
-                />
-                <VariantColumn
-                    heading="Challenger"
-                    modelLabel={challengerModel}
-                    text={challengerText}
-                    result={challenger}
-                />
-            </div>
-
-            <p
-                className="mt-2 text-[10px] leading-snug"
-                style={{ color: "var(--app-text-secondary)" }}
-            >
-                {challenger
-                    ? `“${selectedModel}” was selected for ${name}: higher overall score against the catalog brief.`
-                    : `“${selectedModel}” produced the copy for ${name}. Scores are computed from the text against the catalog brief (one sentence, 15-30 words, benefit-led, on-brand).`}
-            </p>
-        </div>
-    );
-}
-
-function VariantColumn({
-    heading,
-    modelLabel,
-    text,
-    result,
-    winner = false,
-}: {
-    heading: string;
-    modelLabel: string;
-    text: string;
-    result: EvaluationResult | null;
-    winner?: boolean;
-}): JSX.Element {
-    const band = (score: number): string =>
-        score >= 85 ? "#37b24d" : score >= 70 ? "#e0b850" : "#f03e3e";
-
-    return (
-        <div
-            className="rounded p-2"
-            style={{
-                border: winner ? "1px solid #37b24d66" : "1px solid var(--glass-border)",
-                background: winner ? "#37b24d0d" : "transparent",
-            }}
-        >
-            <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="truncate text-[11px] font-semibold">{modelLabel}</span>
-                {winner ? (
-                    <span className="flex shrink-0 items-center gap-1 text-[9.5px] text-emerald-500">
-                        <Check size={10} /> {heading}
-                    </span>
-                ) : (
-                    <span
-                        className="shrink-0 text-[9.5px]"
-                        style={{ color: "var(--app-text-secondary)" }}
-                    >
-                        {heading}
-                    </span>
-                )}
-            </div>
-
-            {result ? (
-                <>
-                    <div className="mb-1.5 flex items-baseline gap-1">
-                        <span
-                            className="text-lg font-semibold"
-                            style={{ color: band(result.overall) }}
-                        >
-                            {result.overall}
-                        </span>
-                        <span
-                            className="text-[9.5px]"
-                            style={{ color: "var(--app-text-secondary)" }}
-                        >
-                            / 100 · {result.wordCount} words
-                        </span>
-                    </div>
-                    <p
-                        className="mb-2 text-[11px] leading-snug"
-                        style={{ color: "var(--app-text-secondary)" }}
-                    >
-                        {text}
-                    </p>
-                    <div className="flex flex-col gap-1">
-                        {result.dimensions.map((d) => (
-                            <div
-                                key={d.label}
-                                className="flex items-center gap-1.5"
-                                title={d.detail}
-                            >
-                                <span
-                                    className="w-[86px] shrink-0 text-[9.5px]"
-                                    style={{ color: "var(--app-text-secondary)" }}
-                                >
-                                    {d.label}
-                                </span>
-                                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/10">
-                                    <div
-                                        className="h-full rounded-full"
-                                        style={{
-                                            width: `${d.score}%`,
-                                            background: band(d.score),
-                                        }}
-                                    />
-                                </div>
-                                <span className="w-5 shrink-0 text-right text-[9.5px] font-medium">
-                                    {d.score}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                </>
-            ) : (
-                <p className="text-[11px]" style={{ color: "var(--app-text-secondary)" }}>
-                    Considered for this catalog. This run did not retain a second variant, so there
-                    is no output to score.
-                </p>
-            )}
         </div>
     );
 }

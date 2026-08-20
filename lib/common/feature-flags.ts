@@ -198,6 +198,20 @@ export interface FeatureFlags {
      * Defaults to FALSE (custom Lambda path).
      */
     managed_web_search: boolean;
+    /**
+     * Managed Bedrock evaluation for the AI Assistant Services Catalog. When
+     * true, the catalog card exposes a "Launch Bedrock evaluation" button that
+     * ships the base model's descriptions and a challenger model's rewrites to
+     * Amazon Bedrock's model-evaluation service as two real, console-visible
+     * model-as-a-judge jobs scored against a custom rubric (the A/B lives in the
+     * Bedrock console, not inline). The orchestrator accepts the
+     * `catalog_evaluate` mode, the shared role is granted the evaluation actions
+     * + a self-scoped `iam:PassRole`, and the frontend surfaces the button
+     * (`VITE_BEDROCK_MANAGED_EVAL_ENABLED`). When false, the mode is rejected,
+     * the IAM actions are not added, and the button is hidden — so the demo
+     * still deploys and destroys cleanly. Defaults to FALSE.
+     */
+    bedrock_managed_eval: boolean;
 }
 
 export interface ModelConfig {
@@ -239,6 +253,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
     agent_registry: false,
     agentcore_identity: false,
     managed_web_search: false,
+    bedrock_managed_eval: false,
 };
 
 const DEFAULT_MODELS: ModelConfig = {
