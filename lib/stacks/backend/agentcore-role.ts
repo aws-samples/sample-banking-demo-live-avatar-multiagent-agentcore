@@ -328,6 +328,42 @@ export function createAgentCoreRole(
                 resources: ["*"],
             })
         );
+        // StartBatchEvaluation validates the caller can access the source log
+        // group ('aws/spans') via logs:DescribeLogGroups, and the running
+        // evaluation reads the session spans back out of it (via Logs Insights).
+        // Without these it fails with:
+        //   "Cannot verify log group 'aws/spans'. Please ensure the execution
+        //    role has logs:DescribeLogGroups permission."
+        // DescribeLogGroups isn't resource-scopeable, so it's on log-group:*;
+        // the read is scoped to the aws/spans source group.
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ["logs:DescribeLogGroups"],
+                resources: [`arn:aws:logs:${Aws.REGION}:${Aws.ACCOUNT_ID}:log-group:*`],
+            })
+        );
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    "logs:DescribeLogStreams",
+                    "logs:GetLogEvents",
+                    "logs:FilterLogEvents",
+                    "logs:StartQuery",
+                ],
+                resources: [`arn:aws:logs:${Aws.REGION}:${Aws.ACCOUNT_ID}:log-group:aws/spans:*`],
+            })
+        );
+        // StopQuery/GetQueryResults act on a query id, not a log group, so they
+        // are not resource-scopeable.
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ["logs:StopQuery", "logs:GetQueryResults"],
+                resources: ["*"],
+            })
+        );
     }
 
     // Runtime-to-runtime invocation
