@@ -27,6 +27,7 @@ import re
 import boto3
 from botocore.config import Config as BotocoreConfig
 from strands import tool
+from utils.ssm import get_ssm_parameter
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,71 @@ def _clean(text: str) -> str:
     return " ".join(text.split()).strip()
 
 
+# --- Bedrock Guardrails on the specialist path -----------------------------
+# Nova Sonic has no guardrail attached, and this tool calls SageMaker directly,
+# so the fine-tuned model's output would otherwise reach the customer unfiltered.
+# Enforce the SAME managed guardrail as the rest of the app via the standalone
+# ApplyGuardrail API — screen the question (INPUT) and the answer (OUTPUT).
+_bedrock_runtime = None
+_guardrail: tuple[str, str] | None = None
+_guardrail_loaded = False
+
+
+def _get_guardrail() -> tuple[str, str] | None:
+    """Resolve the guardrail id/version once, from env or SSM. None if unset."""
+    global _guardrail, _guardrail_loaded
+    if _guardrail_loaded:
+        return _guardrail
+    _guardrail_loaded = True
+    gid = os.environ.get("GUARDRAIL_ID", "").strip()
+    gver = os.environ.get("GUARDRAIL_VERSION", "").strip()
+    if not (gid and gver):
+        stack = os.environ.get("STACK_NAME", "").strip()
+        if stack:
+            try:
+                gid = gid or (get_ssm_parameter(f"/{stack}/guardrail_id") or "")
+                gver = gver or (get_ssm_parameter(f"/{stack}/guardrail_version") or "")
+            except Exception as exc:  # noqa: BLE001 - missing guardrail is non-fatal
+                logger.warning("[AVATAR] guardrail SSM lookup failed: %s", exc)
+    _guardrail = (gid, gver) if gid and gver else None
+    if _guardrail:
+        logger.info("[AVATAR] specialist guardrail active: %s v%s", gid, gver)
+    return _guardrail
+
+
+def _apply_guardrail(text: str, source: str) -> tuple[str, bool]:
+    """Screen text with ApplyGuardrail. Returns (text_to_use, intervened).
+
+    On GUARDRAIL_INTERVENED returns the guardrail's replacement text. Best-effort:
+    any failure returns the original text so the voice loop never breaks.
+    """
+    guard = _get_guardrail()
+    if not guard or not text or not text.strip():
+        return text, False
+    global _bedrock_runtime
+    if _bedrock_runtime is None:
+        _bedrock_runtime = boto3.client(
+            "bedrock-runtime",
+            region_name=_REGION,
+            config=BotocoreConfig(read_timeout=15, retries={"max_attempts": 2}),
+        )
+    try:
+        resp = _bedrock_runtime.apply_guardrail(
+            guardrailIdentifier=guard[0],
+            guardrailVersion=guard[1],
+            source=source,
+            content=[{"text": {"text": text}}],
+        )
+        if resp.get("action") == "GUARDRAIL_INTERVENED":
+            outputs = resp.get("outputs") or []
+            replaced = (outputs[0].get("text") if outputs else "") or ""
+            return (replaced or "I'm sorry, but I can't help with that request."), True
+        return text, False
+    except Exception as exc:  # noqa: BLE001 - guardrail hiccup must not break voice
+        logger.warning("[AVATAR] ApplyGuardrail (%s) failed: %s", source, exc)
+        return text, False
+
+
 def build_specialist_tool():
     """Return the `trinity_specialist` @tool, or None when no endpoint is set."""
     if not _ENDPOINT:
@@ -83,6 +149,11 @@ def build_specialist_tool():
         Args:
             question: The customer's question, in plain language.
         """
+        # Screen the incoming question; a blocked prompt never reaches the model.
+        screened_q, blocked = _apply_guardrail(question, "INPUT")
+        if blocked:
+            return screened_q
+
         payload = {
             "messages": [
                 {"role": "system", "content": _SPECIALIST_SYSTEM},
@@ -112,7 +183,9 @@ def build_specialist_tool():
             if not answer:
                 logger.warning("[AVATAR] specialist returned empty content")
                 return "I couldn't find a specific answer to that right now."
-            return answer
+            # Screen the model's answer before it is spoken to the customer.
+            screened_answer, _ = _apply_guardrail(answer, "OUTPUT")
+            return screened_answer
         except Exception as exc:  # noqa: BLE001 - tool must never crash the voice loop
             logger.warning("[AVATAR] trinity_specialist invoke failed: %s", exc)
             return "I'm having trouble reaching that information at the moment."

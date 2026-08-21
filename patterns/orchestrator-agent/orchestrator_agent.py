@@ -3173,6 +3173,45 @@ def _load_guardrail_params() -> dict:
     return {}
 
 
+def _apply_guardrail(text: str, source: str, guardrail_id: str, guardrail_version: str) -> tuple[str, bool]:
+    """Run text through Bedrock's standalone ApplyGuardrail API.
+
+    Restores managed-guardrail enforcement on paths where the guardrail is not
+    attached to the model itself — notably the AI Agent's SageMaker path, whose
+    `SageMakerAIModel` has no guardrail config. Returns
+    ``(text_to_use, intervened)``: on GUARDRAIL_INTERVENED the guardrail's
+    replacement text (masked or the configured blocked message) is returned.
+
+    Args:
+        source: "INPUT" (screen the user's prompt) or "OUTPUT" (screen the
+            model's response).
+
+    Best-effort: on any error it returns the original text and False so a
+    guardrail hiccup never breaks the turn.
+    """
+    if not text or not text.strip() or not guardrail_id or not guardrail_version:
+        return text, False
+    try:
+        import boto3
+
+        region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+        rt = boto3.client("bedrock-runtime", region_name=region)
+        resp = rt.apply_guardrail(
+            guardrailIdentifier=guardrail_id,
+            guardrailVersion=guardrail_version,
+            source=source,
+            content=[{"text": {"text": text}}],
+        )
+        if resp.get("action") == "GUARDRAIL_INTERVENED":
+            outputs = resp.get("outputs") or []
+            replaced = (outputs[0].get("text") if outputs else "") or ""
+            return (replaced or "I'm sorry, but I can't help with that request."), True
+        return text, False
+    except Exception as exc:  # noqa: BLE001 - guardrail failure must not break the turn
+        logger.warning("ApplyGuardrail (%s) failed: %s", source, exc)
+        return text, False
+
+
 def _create_agent(
     name: str,
     system_prompt: str,
@@ -3441,6 +3480,26 @@ async def _handle_chatbot(
         yield {"status": "error", "error": f"Setup failed: {e}"}
         return
 
+    # Bedrock Guardrails are attached to the BedrockModel automatically, but the
+    # SageMaker path's model has no guardrail config, so we enforce the SAME
+    # guardrail on that path with the standalone ApplyGuardrail API: screen the
+    # user prompt up front (short-circuit on a block) and screen the model's
+    # answer before it reaches the user. Only active on the SageMaker path with
+    # a configured guardrail; the Bedrock path is unchanged.
+    _sagemaker_active = os.environ.get("SAGEMAKER_MODEL_ENABLED", "false").lower() == "true" and not requested_model
+    _sm_guard: tuple[str, str] | None = (
+        (guardrail_kwargs["guardrail_id"], guardrail_kwargs["guardrail_version"])
+        if _sagemaker_active and guardrail_kwargs.get("guardrail_id")
+        else None
+    )
+    if _sm_guard:
+        filtered_query, blocked = _apply_guardrail(query, "INPUT", *_sm_guard)
+        if blocked:
+            print("[CHATBOT] Input guardrail intervened; short-circuiting SageMaker turn")
+            yield {"data": filtered_query}
+            yield {"result": {"stop_reason": "guardrail_intervened"}}
+            return
+
     # ── Queue sentinels ──
     _DONE = object()
     _HEARTBEAT = object()
@@ -3645,6 +3704,14 @@ async def _handle_chatbot(
     loop = asyncio.get_running_loop()
     agent_future = loop.run_in_executor(None, _run_agent_sync)
 
+    # On the guardrailed SageMaker path we buffer the answer's text tokens and
+    # run one OUTPUT guardrail pass at end-of-turn (guardrails work on complete
+    # text, not fragments), then emit the filtered result. Tool/UI/thinking
+    # events still flow live so the flow diagram and tool cards update in real
+    # time — only the answer text is held back. Trade-off: the SageMaker answer
+    # appears at once rather than token-streamed, which is the cost of filtering.
+    _answer_buf: list[str] = []
+
     try:
         while True:
             while tq.empty():
@@ -3662,6 +3729,11 @@ async def _handle_chatbot(
                 # Browser tool pushed a generative UI event
                 yield {"_ui": value}
             elif tag == "stream":
+                # Hold back pure answer-text tokens on the guardrailed SageMaker
+                # path so they can be screened together at end-of-turn.
+                if _sm_guard and isinstance(value, dict) and list(value.keys()) == ["data"]:
+                    _answer_buf.append(value["data"])
+                    continue
                 # Serialize any non-dict values to ensure JSON compatibility
                 try:
                     _json.dumps(value, default=str)
@@ -3682,6 +3754,12 @@ async def _handle_chatbot(
             browser_cleanup()
         finally:
             set_browser_ui_queue(None)
+
+    # Screen the buffered SageMaker answer, then emit the filtered text.
+    if _sm_guard and _answer_buf:
+        full_answer = "".join(_answer_buf)
+        filtered_answer, _ = _apply_guardrail(full_answer, "OUTPUT", *_sm_guard)
+        yield {"data": filtered_answer}
 
     yield {"result": {"stop_reason": "end_turn"}}
 
