@@ -1491,6 +1491,12 @@ export class Backend extends Stack {
                     ...(features.bedrock_managed_eval && profile === "ai_assistant"
                         ? { AGENTCORE_ROLE_ARN: agentCoreRole.roleArn }
                         : {}),
+                    // AgentCore A/B config-bundle routing (features.agentcore_evaluation).
+                    // The system-prompt A/B targets the AI Agent (chatbot), so the
+                    // config-bundle hook is enabled there; it is a no-op unless a
+                    // running A/B test injects a bundle for the session.
+                    ENABLE_CONFIG_BUNDLE:
+                        features.agentcore_evaluation && profile === "ai_agent" ? "true" : "false",
                     // The parallel section-researcher fan-out (Req 10) is
                     // exercised only by the research pipelines (Deep Research +
                     // Research Studio), which run under the "research" profile.

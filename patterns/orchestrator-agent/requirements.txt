@@ -2,7 +2,9 @@
 # fan-out) imports a2a.client/httpx via utils/a2a_client.py — without it the hop
 # dies at discovery with "No module named 'a2a'".
 strands-agents[a2a,sagemaker]>=1.33.0,<2.0.0
-bedrock-agentcore[strands-agents]>=1.4.1,<2.0.0
+# >=1.8.0 for BedrockAgentCoreContext.get_config_bundle() — the config-bundle
+# system-prompt routing used by AgentCore A/B tests (verified: 1.22.0 has it).
+bedrock-agentcore[strands-agents]>=1.8.0,<2.0.0
 mcp>=1.26.0,<2.0.0
 PyJWT[crypto]>=2.10.1
 requests>=2.28.0

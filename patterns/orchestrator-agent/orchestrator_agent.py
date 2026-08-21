@@ -43,6 +43,7 @@ from strands.tools.mcp import MCPClient
 from utils import a2a_client
 from utils.a2a_client import A2AHopError, map_error_to_hop
 from utils.auth import extract_user_id_from_context, get_gateway_access_token
+from utils.config_bundle import ConfigBundleHook
 from utils.mcp_client import create_gateway_mcp_client
 from utils.model_limits import clamp_max_tokens
 from utils.pipeline_scope import PipelineScopeHook, mode_config
@@ -81,6 +82,13 @@ else:
 # before — the consult_fraud_research tool is neither exposed nor wired. Log the
 # boot-time decision so it is visible in CloudWatch.
 _ENABLE_A2A = os.environ.get("ENABLE_A2A", "true").lower() == "true"
+
+# Config-bundle system-prompt routing for AgentCore A/B tests. When on, the
+# chatbot (AI Agent) attaches a ConfigBundleHook so a running A/B test can swap
+# the system prompt per session via the bundle the Gateway injects — no-op when
+# no bundle is present (the normal path). CDK sets this on the ai_agent profile
+# when features.agentcore_evaluation is on.
+_ENABLE_CONFIG_BUNDLE = os.environ.get("ENABLE_CONFIG_BUNDLE", "false").lower() == "true"
 print(f"[ORCHESTRATOR] A2A fraud hop: {'enabled' if _ENABLE_A2A else 'disabled (ENABLE_A2A=false)'}")
 
 # The A2A section-researcher fan-out is a separate, higher-risk feature gated by
@@ -3447,6 +3455,13 @@ async def _handle_chatbot(
         extra_hooks.append(FraudIdentityHook())
         chatbot_prompt = chatbot_prompt + FRAUD_HOP_PROMPT
         print("[CHATBOT] A2A fraud hop tool wired (features.a2a on)")
+
+    # Config-bundle system-prompt routing (AgentCore A/B). Added last so the
+    # base prompt it records is the final chatbot_prompt. No-op unless a running
+    # A/B test injects a bundle for the session, so it is safe on every turn.
+    if _ENABLE_CONFIG_BUNDLE:
+        extra_hooks.append(ConfigBundleHook(chatbot_prompt))
+        print("[CHATBOT] config-bundle system-prompt hook wired (agentcore A/B)")
 
     try:
         agent = _create_agent(
