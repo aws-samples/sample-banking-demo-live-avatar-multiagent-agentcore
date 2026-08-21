@@ -19,6 +19,10 @@ export interface UseSpeechResult {
     supported: boolean;
     /** True while audio is being synthesized or played. */
     speaking: boolean;
+    /** True from the moment speak() is called until audio actually starts
+     *  playing — i.e. the Polly synth is still in flight and there is no sound
+     *  yet. Lets callers show a "Preparing…" spinner instead of looking broken. */
+    preparing: boolean;
     /** The id currently being spoken (caller-supplied), or null. */
     activeId: string | null;
     /** Speak the given text. Cancels any in-progress utterance first. */
@@ -33,6 +37,7 @@ export function useSpeech(): UseSpeechResult {
     const supported = pollyConfigured() && !!idToken;
 
     const [speaking, setSpeaking] = useState(false);
+    const [preparing, setPreparing] = useState(false);
     const [activeId, setActiveId] = useState<string | null>(null);
 
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -57,6 +62,7 @@ export function useSpeech(): UseSpeechResult {
         seqRef.current += 1; // invalidate any in-flight synth
         teardownAudio();
         setSpeaking(false);
+        setPreparing(false);
         setActiveId(null);
     }, [teardownAudio]);
 
@@ -69,10 +75,12 @@ export function useSpeech(): UseSpeechResult {
             const mySeq = seqRef.current;
             teardownAudio();
 
-            // Optimistically reflect activity so the button flips to "Stop"
-            // during synthesis; state is set from this event handler, never
-            // synchronously inside an effect.
+            // Optimistically reflect activity so the button flips to a
+            // "Preparing…" spinner during synthesis (no sound yet), then to
+            // "Stop" once playback actually starts. State is set from this event
+            // handler, never synchronously inside an effect.
             setSpeaking(true);
+            setPreparing(true);
             setActiveId(id ?? null);
 
             void synthesizeSpeech(text, {
@@ -92,7 +100,12 @@ export function useSpeech(): UseSpeechResult {
                         if (mySeq !== seqRef.current) return;
                         teardownAudio();
                         setSpeaking(false);
+                        setPreparing(false);
                         setActiveId(null);
+                    };
+                    // Audio is actually audible now — drop the "Preparing…" state.
+                    audio.onplaying = () => {
+                        if (mySeq === seqRef.current) setPreparing(false);
                     };
                     audio.onended = clear;
                     audio.onerror = clear;
@@ -102,6 +115,7 @@ export function useSpeech(): UseSpeechResult {
                     if (mySeq !== seqRef.current) return;
                     console.error("Polly synthesis failed:", err);
                     setSpeaking(false);
+                    setPreparing(false);
                     setActiveId(null);
                 });
         },
@@ -116,5 +130,5 @@ export function useSpeech(): UseSpeechResult {
         };
     }, [teardownAudio]);
 
-    return { supported, speaking, activeId, speak, stop };
+    return { supported, speaking, preparing, activeId, speak, stop };
 }

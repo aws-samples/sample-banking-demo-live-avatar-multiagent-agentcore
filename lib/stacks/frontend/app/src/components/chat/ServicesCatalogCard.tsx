@@ -139,7 +139,11 @@ export function ServicesCatalogCard({
                         }
                         actions={
                             speech.supported && !approved ? (
-                                <Button onClick={readAll}>
+                                <Button
+                                    onClick={readAll}
+                                    loading={speech.preparing && speech.activeId === "all"}
+                                    loadingText="Preparing…"
+                                >
                                     {speech.speaking && speech.activeId === "all"
                                         ? "Stop"
                                         : "Read all aloud"}
@@ -247,6 +251,7 @@ function ReviewRow({
 
     const name = item.name ?? "Service";
     const speakingThis = speech.speaking && speech.activeId === rowId;
+    const preparingThis = speech.preparing && speech.activeId === rowId;
 
     const sendFeedback = (
         feedbackType: "positive" | "negative",
@@ -400,10 +405,17 @@ function ReviewRow({
                             {speech.supported && (
                                 <Button
                                     variant="inline-icon"
+                                    loading={preparingThis}
                                     iconSvg={
                                         speakingThis ? <Square size={15} /> : <Volume2 size={15} />
                                     }
-                                    ariaLabel={speakingThis ? "Stop reading" : `Read ${name} aloud`}
+                                    ariaLabel={
+                                        preparingThis
+                                            ? `Preparing ${name}`
+                                            : speakingThis
+                                              ? "Stop reading"
+                                              : `Read ${name} aloud`
+                                    }
                                     onClick={() =>
                                         speakingThis
                                             ? speech.stop()
