@@ -13,8 +13,10 @@
  * (patterns/avatar-agent/persona_prompts.py) so the panel is never empty.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "react-oidc-context";
 import { useChatStore } from "@/stores/chatStore";
+import { signCatalogImages } from "@/services/websiteShowcaseService";
 import type { MenuSection } from "@/components/menu/MenuContext";
 
 /** Static fallback, aligned to BANK_FACTS. `match` holds the aliases the avatar
@@ -81,6 +83,9 @@ interface CatalogEntry {
     description?: string;
     badges: string[];
     imageUrl?: string;
+    /** Durable image key, re-signed at render time (the generation-time
+     *  imageUrl expires within the hour). */
+    s3Key?: string;
     /** Lowercased terms used to detect a mention in the avatar's speech. */
     matchTerms: string[];
 }
@@ -119,6 +124,7 @@ export function useAvatarCatalog(): CatalogSection[] {
                         description: it.description,
                         badges: it.dietary ?? [],
                         imageUrl: it.imageUrl,
+                        s3Key: it.s3_key,
                         matchTerms: nameTerms(it.name),
                     })),
                 }));
@@ -177,11 +183,43 @@ export default function AvatarServicesCatalog({
     const sections = useAvatarCatalog();
     const generated = useChatStore((s) => s.menuState.sections.some((sec) => sec.items.length > 0));
     const activeRef = useRef<HTMLButtonElement | null>(null);
+    const auth = useAuth();
+    const idToken = auth.user?.id_token;
 
     // Keep the item under discussion visible as the conversation moves.
     useEffect(() => {
         activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, [activeItemName]);
+
+    // Re-sign product images from their durable s3_keys. The imageUrl captured
+    // when the catalog was generated is a presigned URL that expires within the
+    // hour (and always after a reload), so it renders broken on the avatar
+    // panel. Mint fresh URLs keyed by s3_key and prefer those.
+    const [signedImages, setSignedImages] = useState<Record<string, string>>({});
+    const s3KeyList = useMemo(() => {
+        const keys: string[] = [];
+        for (const section of sections) {
+            for (const item of section.items) {
+                if (item.s3Key) keys.push(item.s3Key);
+            }
+        }
+        return keys;
+    }, [sections]);
+    const s3KeysKey = s3KeyList.join(",");
+
+    useEffect(() => {
+        if (!idToken || s3KeyList.length === 0) return;
+        let cancelled = false;
+        void signCatalogImages(s3KeyList, idToken).then((map) => {
+            if (!cancelled) setSignedImages(map);
+        });
+        return () => {
+            cancelled = true;
+        };
+        // s3KeysKey stands in for the (stable) key list to avoid re-fetching on
+        // every render while still refreshing when the catalog changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [idToken, s3KeysKey]);
 
     return (
         <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
@@ -215,9 +253,7 @@ export default function AvatarServicesCatalog({
                                         ref={active ? activeRef : undefined}
                                         type="button"
                                         disabled={disabled || !onSelect}
-                                        onClick={() =>
-                                            onSelect?.(`Tell me about the ${item.name}`)
-                                        }
+                                        onClick={() => onSelect?.(`Tell me about the ${item.name}`)}
                                         aria-current={active ? "true" : undefined}
                                         className="w-full rounded-lg border p-2.5 text-left transition-all disabled:cursor-default"
                                         style={{
@@ -234,13 +270,23 @@ export default function AvatarServicesCatalog({
                                         }}
                                     >
                                         <div className="flex items-start gap-2.5">
-                                            {item.imageUrl && (
-                                                <img
-                                                    src={item.imageUrl}
-                                                    alt=""
-                                                    className="h-11 w-11 shrink-0 rounded object-cover"
-                                                />
-                                            )}
+                                            {(() => {
+                                                const src =
+                                                    (item.s3Key && signedImages[item.s3Key]) ||
+                                                    item.imageUrl;
+                                                return src ? (
+                                                    <img
+                                                        src={src}
+                                                        alt=""
+                                                        className="h-11 w-11 shrink-0 rounded object-cover"
+                                                        // A stale/broken URL should leave the card
+                                                        // clean rather than show a broken-image icon.
+                                                        onError={(e) => {
+                                                            e.currentTarget.style.display = "none";
+                                                        }}
+                                                    />
+                                                ) : null;
+                                            })()}
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <span
@@ -286,7 +332,8 @@ export default function AvatarServicesCatalog({
                                                                 key={b}
                                                                 className="rounded px-1.5 py-0.5 text-[9px]"
                                                                 style={{
-                                                                    background: "var(--app-surface)",
+                                                                    background:
+                                                                        "var(--app-surface)",
                                                                     border: "1px solid var(--app-border)",
                                                                     color: "var(--app-text-muted)",
                                                                 }}

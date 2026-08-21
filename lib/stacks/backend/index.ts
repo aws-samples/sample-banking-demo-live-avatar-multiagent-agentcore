@@ -1976,6 +1976,9 @@ export class Backend extends Stack {
                     environment: {
                         METADATA_TABLE: shared.metadataTable.tableName,
                         REPORTS_BUCKET: shared.reportsBucket.bucketName,
+                        // For GET /catalog-images: re-sign services-catalog
+                        // product images from their durable s3_key.
+                        IMAGES_BUCKET: shared.imagesBucket.bucketName,
                     },
                     timeout: Duration.seconds(30),
                 });
@@ -1983,6 +1986,7 @@ export class Backend extends Stack {
                 shared.metadataTable.grantReadData(reportsHistoryLambda);
                 // Read is enough: the function only signs GETs, never writes.
                 shared.reportsBucket.grantRead(reportsHistoryLambda);
+                shared.imagesBucket.grantRead(reportsHistoryLambda);
 
                 const reportsResource = api.root.addResource("reports");
                 const reportsIntegration = new apigateway.LambdaIntegration(reportsHistoryLambda);
@@ -1999,6 +2003,14 @@ export class Backend extends Stack {
                 // freshly signed, for the Avatar/Digital Human showcase. Same
                 // lambda (reuses the metadata table + reports bucket + signing).
                 api.root.addResource("website-latest").addMethod("GET", reportsIntegration, {
+                    authorizer,
+                    authorizationType: apigateway.AuthorizationType.COGNITO,
+                });
+
+                // GET /catalog-images?keys=... — fresh presigned URLs for the
+                // avatar services-catalog product images (their generation-time
+                // URLs expire within the hour). Same lambda + images-bucket read.
+                api.root.addResource("catalog-images").addMethod("GET", reportsIntegration, {
                     authorizer,
                     authorizationType: apigateway.AuthorizationType.COGNITO,
                 });

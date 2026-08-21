@@ -41,6 +41,10 @@ s3_client = boto3.client("s3")
 
 METADATA_TABLE = os.environ.get("METADATA_TABLE", "")
 REPORTS_BUCKET = os.environ.get("REPORTS_BUCKET", "")
+# Product images for the services catalog live in a separate bucket. The avatar
+# catalog panel re-signs item images from their durable s3_key on load, since a
+# presigned URL captured at catalog-generation time expires within the hour.
+IMAGES_BUCKET = os.environ.get("IMAGES_BUCKET", "")
 
 # Short enough that a leaked link is not a lasting exposure, long enough to read
 # a report without it dying mid-scroll. A new URL is one request away.
@@ -136,6 +140,41 @@ def _latest_website(table, user_id: str) -> dict:
     }
 
 
+def _sign_image(s3_key: str) -> str | None:
+    """Mint a short-lived URL for one product image in the images bucket.
+
+    Scoped to keys under the images/ prefix so a caller can't sign arbitrary
+    objects. Returns None on any failure so one bad key never sinks the batch.
+    """
+    if not IMAGES_BUCKET or not s3_key or not s3_key.startswith("images/"):
+        return None
+    try:
+        return s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": IMAGES_BUCKET, "Key": s3_key},
+            ExpiresIn=URL_TTL_SECONDS,
+        )
+    except ClientError as e:
+        logger.warning("Could not sign image %s: %s", s3_key, e)
+        return None
+
+
+def _catalog_images(event: dict) -> dict:
+    """Re-sign a batch of catalog product-image keys.
+
+    GET /catalog-images?keys=<key1>,<key2>,... → {"images": {key: url}}. Bounded
+    to a sane number of keys; unsignable keys are simply omitted.
+    """
+    raw = ((event.get("queryStringParameters") or {}).get("keys") or "").strip()
+    keys = [k for k in (s.strip() for s in raw.split(",")) if k][:40]
+    signed = {}
+    for key in keys:
+        url = _sign_image(key)
+        if url:
+            signed[key] = url
+    return {"images": signed}
+
+
 def _to_item(record: dict, disposition: str = "inline") -> dict:
     s3_key = record.get("s3_key", "")
     filename = s3_key.rsplit("/", 1)[-1] or "report.pdf"
@@ -174,6 +213,12 @@ def handler(event, _context):
         except ClientError as e:
             logger.error("DynamoDB error (website-latest): %s", e, exc_info=True)
             return _response(500, {"error": "Could not read website history"})
+
+    # GET /catalog-images?keys=... — fresh presigned URLs for services-catalog
+    # product images, so the avatar catalog panel shows images even after the
+    # generation-time URLs have expired. No table read; signs images-bucket keys.
+    if "catalog-images" in resource:
+        return _response(200, _catalog_images(event))
 
     report_id = (event.get("pathParameters") or {}).get("reportId")
 
