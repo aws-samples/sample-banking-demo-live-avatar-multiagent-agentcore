@@ -385,7 +385,7 @@ function ConciergeFlowInner() {
         if (refitFrameRef.current !== null) cancelAnimationFrame(refitFrameRef.current);
         refitFrameRef.current = requestAnimationFrame(() => {
             refitFrameRef.current = null;
-            void reactFlow.fitView({ padding: 0.08, duration: 200, maxZoom: 1.75 });
+            void reactFlow.fitView({ padding: 0.02, duration: 200, maxZoom: 2 });
         });
     }, [reactFlow]);
 
@@ -414,14 +414,14 @@ function ConciergeFlowInner() {
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 fitView
-                fitViewOptions={{ padding: 0.08, maxZoom: 1.75 }}
+                fitViewOptions={{ padding: 0.02, maxZoom: 2 }}
                 nodesDraggable={false}
                 nodesConnectable={false}
                 panOnDrag={true}
                 zoomOnScroll={true}
                 zoomOnPinch={true}
                 minZoom={0.3}
-                maxZoom={1.75}
+                maxZoom={2}
                 onNodeClick={(_, node) => setSelectedNode(node.id)}
                 proOptions={{ hideAttribution: true }}
             >
