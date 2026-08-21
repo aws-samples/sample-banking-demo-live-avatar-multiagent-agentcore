@@ -181,12 +181,16 @@ export default function AvatarInterface(): JSX.Element {
     // that names a catalog item wins, so the highlight tracks what is being said
     // and persists through follow-ups that don't repeat the name.
     const catalogSections = useAvatarCatalog();
-    // Generated services website from the AI Assistant step, and the section
-    // the user has dismissed (so it does not immediately reopen). The showcase
-    // shrinks the avatar and shows the relevant section as the customer asks
-    // about a product category.
+    // Generated services website from the AI Assistant step. The showcase opens
+    // ONLY when the customer's own question maps to a section the site covers —
+    // never on the avatar's own chatter — and then stays pinned to that section
+    // (no re-navigating while the avatar talks) until the customer closes it or
+    // asks about a different section.
     const [website, setWebsite] = useState<LatestWebsite | null>(null);
-    const [dismissedAnchor, setDismissedAnchor] = useState<string | null>(null);
+    const [showcaseTarget, setShowcaseTarget] = useState<{ anchor: string; label: string } | null>(
+        null
+    );
+    const [showcaseClosed, setShowcaseClosed] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [showPromptEditor, setShowPromptEditor] = useState(false);
     const [systemPrompt, setSystemPrompt] = useState(() => {
@@ -343,26 +347,46 @@ export default function AvatarInterface(): JSX.Element {
         };
     }, [idToken]);
 
-    // Which website section (if any) matches what the avatar is currently
-    // discussing. Maps the active catalog item → its section → the website
-    // anchor, so speaking about "high-yield savings" surfaces that section.
-    const showcaseTarget = useMemo(() => {
-        if (!website?.url || !activeCatalogItem) return null;
-        const section = catalogSections.find((s) =>
-            s.items.some((it) => it.name === activeCatalogItem)
-        );
-        if (!section) return null;
+    // The showcase is driven by the CUSTOMER's questions, not the avatar's
+    // speech: when the newest user turn asks about a product the site covers,
+    // pin the showcase to that section. It does not react to the avatar's
+    // replies, so it never auto-pops at the start of a conversation and never
+    // re-navigates every few seconds while the avatar is talking. A new user
+    // question about a different section moves it (and reopens if closed); a
+    // question with no site match leaves the current view untouched.
+    const lastUserQuestionRef = useRef<string>("");
+    useEffect(() => {
+        if (!website?.url) return;
+        let userText = "";
+        for (let i = transcript.length - 1; i >= 0; i--) {
+            if (transcript[i].role === "user") {
+                userText = transcript[i].segments
+                    .map((s) => (s.kind === "text" ? s.content : ""))
+                    .join(" ")
+                    .trim();
+                break;
+            }
+        }
+        if (!userText || userText === lastUserQuestionRef.current) return;
+        lastUserQuestionRef.current = userText;
+
+        const item = findActiveItem(userText, catalogSections);
+        if (!item) return; // the customer didn't ask about a site-covered product
+        const section = catalogSections.find((s) => s.items.some((it) => it.name === item));
+        if (!section) return;
         const anchor = sectionAnchor(section.category);
         const match = website.sections.find(
             (ws) =>
                 ws.anchor === anchor || ws.heading.toLowerCase() === section.category.toLowerCase()
         );
-        return match ? { anchor: match.anchor, label: match.heading } : null;
-    }, [website, activeCatalogItem, catalogSections]);
+        if (!match) return;
+        // Setting an identical anchor is a no-op for the iframe src, so this
+        // won't reload the page when the same section is re-asked.
+        setShowcaseTarget({ anchor: match.anchor, label: match.heading });
+        setShowcaseClosed(false);
+    }, [transcript, website, catalogSections]);
 
-    // Open unless the user dismissed this exact section; a new section reopens
-    // it automatically because the dismissed anchor no longer matches.
-    const showcaseOpen = !!showcaseTarget && showcaseTarget.anchor !== dismissedAnchor;
+    const showcaseOpen = !!showcaseTarget && !showcaseClosed;
 
     // --- Smart auto-scroll ---
     useEffect(() => {
@@ -1083,6 +1107,29 @@ export default function AvatarInterface(): JSX.Element {
         [connectionState, liveKitTokenUrl]
     );
 
+    // Transport-agnostic teardown: stop EVERY transport regardless of the
+    // currently-selected variant, then reset audio UI state. The public
+    // disconnect() branches on isTavus, but during a variant swap isTavus is
+    // already the NEW variant — so disconnecting "the current transport" leaves
+    // the OLD one (e.g. a live Tavus Daily call) still playing, which is what
+    // caused overlapping voices when switching avatars. Tearing all of them
+    // down unconditionally guarantees a single live transport.
+    const teardownTransports = useCallback((): void => {
+        tavusClientRef.current?.disconnect();
+        tavusClientRef.current = null;
+        liveKitClientRef.current?.disconnect();
+        liveKitClientRef.current = null;
+        wsClientRef.current?.disconnect();
+        wsClientRef.current = null;
+        activeTransportRef.current = "none";
+        setLiveKitSpeaking(false);
+        setTavusSpeaking(false);
+        setAudioLevel(0);
+        setVisemeShape("neutral");
+        clearQueue();
+        resetAnalyzer();
+    }, [clearQueue]);
+
     // --- Connect ---
     const connect = useCallback(async (): Promise<void> => {
         if (!config || !auth.user?.access_token) {
@@ -1091,7 +1138,9 @@ export default function AvatarInterface(): JSX.Element {
         }
 
         setError(null);
-        clearQueue();
+        // Ensure no prior transport is still live (and audible) before standing
+        // up the new one — prevents two voices overlapping across a swap.
+        teardownTransports();
         setInterruptCount(0);
 
         // --- Tavus video-avatar path (only for the "tavus" variant) ---
@@ -1364,21 +1413,23 @@ export default function AvatarInterface(): JSX.Element {
     // stand the other up. Refs hold the latest connect/disconnect so this
     // effect can key on the variant alone without re-running on every render.
     const connectRef = useRef(connect);
-    const disconnectRef = useRef(disconnect);
+    const teardownRef = useRef(teardownTransports);
     useEffect(() => {
         connectRef.current = connect;
-        disconnectRef.current = disconnect;
+        teardownRef.current = teardownTransports;
     });
     useEffect(() => {
         const desired = isTavus ? "tavus" : "other";
         if (activeTransportRef.current === "none" || activeTransportRef.current === desired) {
             return;
         }
-        disconnectRef.current();
-        // Let teardown settle before establishing the other transport.
+        // Tear down ALL transports (not just the current-variant one) so the
+        // old transport's audio can't linger under the new one, then stand up
+        // the newly-selected transport once teardown has settled.
+        teardownRef.current();
         const timer = setTimeout(() => {
             void connectRef.current();
-        }, 100);
+        }, 250);
         return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [avatarVariant]);
@@ -1465,7 +1516,7 @@ export default function AvatarInterface(): JSX.Element {
                         url={website.url}
                         anchor={showcaseTarget.anchor}
                         label={showcaseTarget.label}
-                        onClose={() => setDismissedAnchor(showcaseTarget.anchor)}
+                        onClose={() => setShowcaseClosed(true)}
                     />
                 </div>
             )}
