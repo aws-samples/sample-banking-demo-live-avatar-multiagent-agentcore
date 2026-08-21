@@ -191,6 +191,13 @@ export default function AvatarInterface(): JSX.Element {
         null
     );
     const [showcaseClosed, setShowcaseClosed] = useState(false);
+    // A matching user question doesn't open the site directly — it offers to,
+    // via a confirmation card in the transcript. The customer chooses to show
+    // the page or continue without it.
+    const [pendingShowcase, setPendingShowcase] = useState<{
+        anchor: string;
+        label: string;
+    } | null>(null);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [showPromptEditor, setShowPromptEditor] = useState(false);
     const [systemPrompt, setSystemPrompt] = useState(() => {
@@ -380,13 +387,26 @@ export default function AvatarInterface(): JSX.Element {
                 ws.anchor === anchor || ws.heading.toLowerCase() === section.category.toLowerCase()
         );
         if (!match) return;
-        // Setting an identical anchor is a no-op for the iframe src, so this
-        // won't reload the page when the same section is re-asked.
-        setShowcaseTarget({ anchor: match.anchor, label: match.heading });
-        setShowcaseClosed(false);
-    }, [transcript, website, catalogSections]);
+        // Don't open the site automatically — offer it. The customer confirms
+        // via a card in the transcript (or declines and the chat continues).
+        // Skip the offer if this exact section is already on screen.
+        if (showcaseTarget?.anchor === match.anchor && !showcaseClosed) return;
+        setPendingShowcase({ anchor: match.anchor, label: match.heading });
+    }, [transcript, website, catalogSections, showcaseTarget, showcaseClosed]);
 
     const showcaseOpen = !!showcaseTarget && !showcaseClosed;
+
+    const confirmShowcase = useCallback((): void => {
+        setPendingShowcase((pending) => {
+            if (pending) {
+                setShowcaseTarget(pending);
+                setShowcaseClosed(false);
+            }
+            return null;
+        });
+    }, []);
+
+    const declineShowcase = useCallback((): void => setPendingShowcase(null), []);
 
     // --- Smart auto-scroll ---
     useEffect(() => {
@@ -1903,6 +1923,26 @@ export default function AvatarInterface(): JSX.Element {
                                         </span>
                                     </div>
                                 ))}
+                                {pendingShowcase && !showcaseOpen && (
+                                    <div className="avatar-page__bubble avatar-page__bubble--assistant">
+                                        <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-br from-gray-900 to-gray-800 p-4 shadow-lg my-2">
+                                            <div className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+                                                <FileText size={16} />
+                                                Show the “{pendingShowcase.label}” page?
+                                            </div>
+                                            <p className="mt-1 text-xs text-slate-400">
+                                                I can open the {pendingShowcase.label} section of
+                                                our services site alongside the conversation.
+                                            </p>
+                                            <div className="mt-3 flex gap-2">
+                                                <Button variant="primary" onClick={confirmShowcase}>
+                                                    Show the page
+                                                </Button>
+                                                <Button onClick={declineShowcase}>Not now</Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 <div ref={transcriptEndRef} />
                             </div>
                         )}

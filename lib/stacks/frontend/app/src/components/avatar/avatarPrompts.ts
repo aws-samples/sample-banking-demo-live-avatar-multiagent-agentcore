@@ -45,7 +45,10 @@ export const PROMPT_GROUPS: PromptGroup[] = [
         title: "Products & Rates",
         icon: Landmark,
         prompts: [
-            { label: "Savings rate", prompt: "What is the High-Yield Savings APY?" },
+            {
+                label: "Services catalog",
+                prompt: "What services do you have in your catalog?",
+            },
             {
                 label: "Compare accounts",
                 prompt: "Compare Everyday Checking and High-Yield Savings",
