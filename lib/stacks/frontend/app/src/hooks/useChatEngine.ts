@@ -379,6 +379,7 @@ export function useChatEngine(options?: UseChatEngineOptions): UseChatEngineRetu
                                                 (it.image_url as string) ??
                                                 (it.imageUrl as string) ??
                                                 undefined,
+                                            s3_key: (it.s3_key as string) ?? undefined,
                                         })),
                                     }));
                                     useChatStore

@@ -8,6 +8,9 @@ export interface MenuItem {
     category: string;
     dietary?: string[];
     imageUrl?: string;
+    /** Durable S3 key for the product image; carried so a catalog exported from
+     * the shared store (e.g. after applying an A/B winner) keeps its images. */
+    s3_key?: string;
 }
 
 export interface MenuSection {

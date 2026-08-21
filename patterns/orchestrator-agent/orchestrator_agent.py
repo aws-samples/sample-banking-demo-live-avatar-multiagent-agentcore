@@ -1154,6 +1154,34 @@ def _flatten_catalog_entries(catalog: dict) -> list[tuple[str, str]]:
     return entries
 
 
+def _variant_sections(catalog: dict, descriptions: list[str]) -> list[dict]:
+    """Return the catalog's sections with each described item's description
+    swapped for the aligned entry in ``descriptions`` (flatten order matches
+    ``_flatten_catalog_entries``). All other fields (name, price, image_url,
+    s3_key) are preserved so a variant can be applied as the app's live catalog
+    directly. Used to hand the frontend both models' copy so the winner can be
+    made the app's context."""
+    import copy as _copy
+
+    sections_out: list[dict] = []
+    idx = 0
+    for section in catalog.get("sections", []) or []:
+        if not isinstance(section, dict):
+            continue
+        items_out: list[dict] = []
+        for item in section.get("items", []) or []:
+            if not isinstance(item, dict):
+                continue
+            new_item = _copy.deepcopy(item)
+            desc = str(item.get("description") or "").strip()
+            if desc and idx < len(descriptions):
+                new_item["description"] = descriptions[idx]
+                idx += 1
+            items_out.append(new_item)
+        sections_out.append({"name": section.get("name"), "items": items_out})
+    return sections_out
+
+
 def _write_eval_dataset(s3, bucket: str, key: str, entries: list[tuple[str, str]], model_identifier: str) -> None:
     """Write a BYOIR .jsonl dataset: one line per item, each carrying the brief
     and the model's response under a single ``modelIdentifier``."""
@@ -1323,6 +1351,20 @@ def _launch_catalog_evaluation(catalog: dict, *, base_model_id: str, session_id:
         "consoleUrl": console_url,
         "itemCount": len(entries),
         "jobs": jobs,
+        # Both models' full catalog copy, so the frontend can apply the winner
+        # as the app's live catalog once the user picks one.
+        "variants": [
+            {
+                "role": "base",
+                "model": _catalog_model_label(base_model_id),
+                "sections": _variant_sections(catalog, [d for _, d in entries]),
+            },
+            {
+                "role": "challenger",
+                "model": _catalog_model_label(CATALOG_CHALLENGER_MODEL_ID),
+                "sections": _variant_sections(catalog, [d for _, d in challenger_entries]),
+            },
+        ],
     }
 
 

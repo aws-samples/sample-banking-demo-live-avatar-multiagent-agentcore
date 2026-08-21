@@ -11,6 +11,7 @@ import { KbSearchResultCard } from "./KbSearchResultCard";
 import { KbImageStrip } from "./KbImageStrip";
 import { ConciergeFlowSidebar } from "@/components/concierge-flow/ConciergeFlowSidebar";
 import { useConciergeFlowStore } from "@/stores/conciergeFlowStore";
+import { useChatStore } from "@/stores/chatStore";
 import { usePromptImprovementStore } from "@/stores/usePromptImprovementStore";
 import { BrowserLiveViewSidebar } from "./BrowserLiveViewSidebar";
 import { useBrowserLiveViewStore } from "@/stores/browserLiveViewStore";
@@ -148,6 +149,48 @@ export default function ChatInterface({
                 // Managed A/B: launch two real Bedrock model-as-a-judge jobs
                 // over the current catalog copy; scorecards live in the console.
                 launchCatalogEvaluation(payload.catalog as Record<string, unknown>);
+            } else if (action === "apply_catalog_variant") {
+                // The user picked the winning model's copy from the A/B — make
+                // it the app's live catalog (avatar, side panel, studio all read
+                // menuState). Mirrors the ServicesCatalog → menuState mapping.
+                const secs =
+                    (payload.sections as { name?: string; items?: Record<string, unknown>[] }[]) ??
+                    [];
+                const mapped = secs.map((sec, si) => ({
+                    category: sec.name ?? `Section ${si + 1}`,
+                    items: (sec.items ?? []).map((it, ii) => ({
+                        id: `${si}-${ii}`,
+                        name: String(it.name ?? ""),
+                        description: String(it.description ?? ""),
+                        price: String(it.price ?? ""),
+                        category: sec.name ?? `Section ${si + 1}`,
+                        dietary: Array.isArray(it.dietary) ? (it.dietary as string[]) : undefined,
+                        imageUrl: (it.image_url as string) ?? (it.imageUrl as string) ?? undefined,
+                        s3_key: (it.s3_key as string) ?? undefined,
+                    })),
+                }));
+                useChatStore.getState().dispatchMenu({ type: "SET_SECTIONS", sections: mapped });
+            } else if (action === "approve_export") {
+                // Approve & export the app's current catalog straight from the
+                // prompt-optimization card. Sourced from the shared menuState so
+                // it reflects any applied A/B winner; s3_key is preserved so the
+                // exported PDF keeps its product images.
+                const sections = useChatStore.getState().menuState.sections;
+                const catalog = {
+                    title: "Services Catalog",
+                    sections: sections.map((sec) => ({
+                        name: sec.category,
+                        items: sec.items.map((it) => ({
+                            name: it.name,
+                            description: it.description,
+                            price: it.price,
+                            dietary: it.dietary,
+                            image_url: it.imageUrl,
+                            s3_key: it.s3_key,
+                        })),
+                    })),
+                };
+                exportCatalog(catalog as Record<string, unknown>);
             } else if (action === "research_revise") {
                 // Targeted revision: re-synthesize the flagged report to lift
                 // its sub-threshold dimensions, then re-evaluate.

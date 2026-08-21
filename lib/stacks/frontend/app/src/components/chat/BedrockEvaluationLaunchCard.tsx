@@ -32,6 +32,12 @@ interface EvalJob {
     message?: string;
 }
 
+interface EvalVariant {
+    role?: string;
+    model?: string;
+    sections?: { name?: string; items?: Record<string, unknown>[] }[];
+}
+
 interface BedrockEvaluationLaunchCardProps {
     status?: "ok" | "error";
     judgeModel?: string;
@@ -41,6 +47,9 @@ interface BedrockEvaluationLaunchCardProps {
     itemCount?: number;
     message?: string;
     jobs?: EvalJob[];
+    /** Both models' full catalog copy, so the winner can be applied as the app's catalog. */
+    variants?: EvalVariant[];
+    onAction?: (action: string, data: unknown) => void;
 }
 
 // Poll every 20s, up to ~25 min — model-eval jobs typically finish in a few
@@ -74,9 +83,12 @@ export function BedrockEvaluationLaunchCard({
     itemCount,
     message,
     jobs = [],
+    variants = [],
+    onAction,
 }: BedrockEvaluationLaunchCardProps): JSX.Element {
     const auth = useAuth();
     const idToken = auth.user?.id_token;
+    const [applied, setApplied] = useState<string | null>(null);
     const launched = jobs.filter((j) => j.jobArn);
     const failed = jobs.filter((j) => !j.jobArn);
     const launchedArns = launched.map((j) => j.jobArn as string);
@@ -133,6 +145,12 @@ export function BedrockEvaluationLaunchCard({
             ? scored.reduce((a, b) => ((b.s.score as number) > (a.s.score as number) ? b : a)).job
                   .jobArn
             : undefined;
+    const winnerModel = launched.find((j) => j.jobArn === winnerArn)?.model;
+
+    const applyVariant = (v: EvalVariant): void => {
+        setApplied(v.model ?? v.role ?? "selected");
+        onAction?.("apply_catalog_variant", { model: v.model, sections: v.sections });
+    };
 
     const band = (score: number): string =>
         score >= 85 ? "#37b24d" : score >= 70 ? "#e0b850" : "#f03e3e";
@@ -270,6 +288,51 @@ export function BedrockEvaluationLaunchCard({
                             </div>
                         );
                     })}
+
+                    {/* Once both jobs finish, let the user make the winning
+                        model's copy the catalog the app actually uses. */}
+                    {allDone && variants.length > 0 && (
+                        <div
+                            className="rounded-md p-3"
+                            style={{
+                                border: "1px solid var(--glass-border)",
+                                background: "var(--glass-bg)",
+                            }}
+                        >
+                            {applied ? (
+                                <StatusIndicator type="success">
+                                    Applied {applied}&apos;s copy — it&apos;s now the catalog the
+                                    app uses.
+                                </StatusIndicator>
+                            ) : (
+                                <>
+                                    <Box variant="small" color="text-body-secondary">
+                                        Choose which model&apos;s copy the app should use. The
+                                        winner is recommended; your pick becomes the live catalog.
+                                    </Box>
+                                    <div className="mt-2">
+                                        <SpaceBetween direction="horizontal" size="xs">
+                                            {variants.map((v) => {
+                                                const isWin =
+                                                    winnerModel !== undefined &&
+                                                    v.model === winnerModel;
+                                                return (
+                                                    <Button
+                                                        key={v.role ?? v.model}
+                                                        variant={isWin ? "primary" : "normal"}
+                                                        onClick={() => applyVariant(v)}
+                                                    >
+                                                        Use {v.model}
+                                                        {isWin ? " (winner)" : ""}
+                                                    </Button>
+                                                );
+                                            })}
+                                        </SpaceBetween>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
 
                     {failed.map((job, i) => (
                         <StatusIndicator key={`f-${i}`} type="warning">

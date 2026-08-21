@@ -32,6 +32,7 @@ export function PromptImprovementCard({
     onAction,
 }: PromptImprovementProps): JSX.Element {
     const [applied, setApplied] = useState(false);
+    const [exported, setExported] = useState(false);
 
     if (status === "insufficient") {
         return (
@@ -143,6 +144,34 @@ export function PromptImprovementCard({
                     )}
                 </button>
             </div>
+
+            {/* Once the refinement is applied, offer to approve & export the
+                current catalog right here — no need to scroll back to the
+                review card. Exports the app's current catalog. */}
+            {applied && (
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-800 pt-3">
+                    <span className="text-[10px] text-slate-500">
+                        {exported
+                            ? "Exporting the current catalog to PDF…"
+                            : "Ready to ship this catalog? Approve and export it now."}
+                    </span>
+                    <button
+                        onClick={() => {
+                            setExported(true);
+                            onAction?.("approve_export", {});
+                        }}
+                        disabled={exported}
+                        className={`flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                            exported
+                                ? "cursor-default border border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                                : "border border-emerald-400/50 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                        }`}
+                    >
+                        <Check className="h-3.5 w-3.5" />
+                        {exported ? "Exporting…" : "Approve & Export"}
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
