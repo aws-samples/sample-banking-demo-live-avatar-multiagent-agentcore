@@ -45,3 +45,36 @@ export async function fetchEvalStatus(
     }
     return (await response.json()) as EvalStatusResponse;
 }
+
+export interface BatchEvalStatus {
+    batchEvaluationId: string;
+    /** AgentCore batch status: PENDING | IN_PROGRESS | COMPLETED | ... */
+    status: string;
+    done: boolean;
+    /** Mean copy-quality score (0-100) once complete, else null. */
+    score: number | null;
+    /** Number of per-session scores read from the results log stream. */
+    count?: number;
+    /** A sample evaluator explanation, when available. */
+    explanation?: string;
+    error?: string;
+}
+
+/** Fetch current status/scores for an AgentCore batch evaluation. */
+export async function fetchBatchStatus(
+    batchEvaluationId: string,
+    idToken: string
+): Promise<BatchEvalStatus> {
+    const apiUrl = getApiUrl();
+    if (!apiUrl || !batchEvaluationId) {
+        return { batchEvaluationId, status: "Unknown", done: false, score: null };
+    }
+    const url = `${apiUrl}?batch=${encodeURIComponent(batchEvaluationId)}`;
+    const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${idToken}` },
+    });
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return (await response.json()) as BatchEvalStatus;
+}

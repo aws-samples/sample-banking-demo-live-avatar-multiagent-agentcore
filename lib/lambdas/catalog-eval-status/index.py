@@ -29,6 +29,11 @@ _TERMINAL = {"Completed", "Failed", "Stopped", "Deleting"}
 
 _bedrock = boto3.client("bedrock", region_name=REGION)
 _s3 = boto3.client("s3", region_name=REGION)
+_agentcore = boto3.client("bedrock-agentcore", region_name=REGION)
+_logs = boto3.client("logs", region_name=REGION)
+
+# AgentCore batch-evaluation terminal states.
+_BATCH_TERMINAL = {"COMPLETED", "COMPLETED_WITH_ERRORS", "FAILED", "STOPPED", "DELETING"}
 
 
 def _headers() -> dict:
@@ -123,10 +128,79 @@ def _job_entry(job_arn: str) -> dict:
     return entry
 
 
+def _batch_scores(log_group: str, log_stream: str) -> dict:
+    """Read an AgentCore batch-eval results log stream and summarize scores.
+
+    Each result is an OTEL record named ``gen_ai.evaluation.result`` with a
+    ``gen_ai.evaluation.score.value`` (0-1). Returns mean (0-100), count, and a
+    sample explanation. Best-effort — returns empty summary on any failure.
+    """
+    try:
+        values: list[float] = []
+        sample_explanation = ""
+        token: dict = {}
+        for _ in range(10):  # bound pagination
+            resp = _logs.get_log_events(
+                logGroupName=log_group, logStreamName=log_stream, limit=200, startFromHead=True, **token
+            )
+            for e in resp.get("events", []):
+                try:
+                    rec = json.loads(e["message"])
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("name") != "gen_ai.evaluation.result":
+                    continue
+                attrs = rec.get("attributes") or {}
+                v = attrs.get("gen_ai.evaluation.score.value")
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    values.append(float(v))
+                if not sample_explanation:
+                    sample_explanation = str(attrs.get("gen_ai.evaluation.explanation") or "")[:400]
+            nxt = resp.get("nextForwardToken")
+            if not nxt or nxt == token.get("nextToken"):
+                break
+            token = {"nextToken": nxt}
+        if not values:
+            return {"count": 0, "score": None}
+        mean = sum(values) / len(values)
+        return {
+            "count": len(values),
+            "score": round(mean * 100, 1) if mean <= 1.0 else round(mean, 1),
+            "explanation": sample_explanation,
+        }
+    except Exception as exc:  # noqa: BLE001 - best effort
+        logger.warning("batch score read failed: %s", exc)
+        return {"count": 0, "score": None}
+
+
+def _batch_entry(batch_id: str) -> dict:
+    entry: dict = {"batchEvaluationId": batch_id, "status": "Unknown", "done": False, "score": None}
+    try:
+        b = _agentcore.get_batch_evaluation(batchEvaluationId=batch_id)
+        status = b.get("status", "Unknown")
+        entry["status"] = status
+        entry["done"] = status in _BATCH_TERMINAL
+        if status in ("COMPLETED", "COMPLETED_WITH_ERRORS"):
+            out = (b.get("outputConfig") or {}).get("cloudWatchConfig") or {}
+            lg, ls = out.get("logGroupName"), out.get("logStreamName")
+            if lg and ls:
+                entry.update(_batch_scores(lg, ls))
+    except Exception as exc:  # noqa: BLE001 - report, never 500
+        logger.warning("get_batch_evaluation failed for %s: %s", batch_id, exc)
+        entry["status"] = "Error"
+        entry["error"] = str(exc)[:200]
+    return entry
+
+
 def handler(event, _context):
     if (event.get("httpMethod") or "").upper() == "OPTIONS":
         return {"statusCode": 200, "headers": _headers(), "body": "{}"}
     params = event.get("queryStringParameters") or {}
+    # AgentCore batch evaluation status/scores.
+    batch_id = (params.get("batch") or "").strip()
+    if batch_id:
+        entry = _batch_entry(batch_id)
+        return {"statusCode": 200, "headers": _headers(), "body": json.dumps(entry)}
     raw = params.get("jobs") or ""
     job_arns = [a for a in (s.strip() for s in raw.split(",")) if a]
     if not job_arns:

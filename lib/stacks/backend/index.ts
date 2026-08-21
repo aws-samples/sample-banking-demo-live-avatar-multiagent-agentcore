@@ -100,6 +100,7 @@ export class Backend extends Stack {
             sagemakerEndpointName: sagemaker.endpointName,
             enableAgentCoreIdentity: features.agentcore_identity,
             enableManagedEval: features.bedrock_managed_eval,
+            enableAgentCoreEval: features.agentcore_evaluation,
         });
 
         // ─── AgentCore Identity credential provider (flag-gated) ────────
@@ -1491,6 +1492,13 @@ export class Backend extends Stack {
                     ...(features.bedrock_managed_eval && profile === "ai_assistant"
                         ? { AGENTCORE_ROLE_ARN: agentCoreRole.roleArn }
                         : {}),
+                    // AgentCore batch evaluation (features.agentcore_evaluation).
+                    // Only the AI Assistant runs the catalog flow, so it auto-fires
+                    // the pollable batch eval there.
+                    AGENTCORE_EVAL_ENABLED:
+                        features.agentcore_evaluation && profile === "ai_assistant"
+                            ? "true"
+                            : "false",
                     // AgentCore A/B config-bundle routing (features.agentcore_evaluation).
                     // The system-prompt A/B targets the AI Agent (chatbot), so the
                     // config-bundle hook is enabled there; it is a no-op unless a
@@ -1780,12 +1788,25 @@ export class Backend extends Stack {
                     }),
                     environment: { CORS_ALLOWED_ORIGINS: corsOrigins.join(",") },
                 });
-                // Read job status + read results from the images bucket output.
+                // Read Bedrock model-eval job status + results from the images
+                // bucket, and AgentCore batch-eval status + its results log stream.
                 evalStatusLambda.addToRolePolicy(
                     new PolicyStatement({
                         effect: Effect.ALLOW,
-                        actions: ["bedrock:GetEvaluationJob"],
+                        actions: [
+                            "bedrock:GetEvaluationJob",
+                            "bedrock-agentcore:GetBatchEvaluation",
+                        ],
                         resources: ["*"],
+                    })
+                );
+                evalStatusLambda.addToRolePolicy(
+                    new PolicyStatement({
+                        effect: Effect.ALLOW,
+                        actions: ["logs:GetLogEvents"],
+                        resources: [
+                            `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/evaluations/batch-evaluations/results*`,
+                        ],
                     })
                 );
                 shared.imagesBucket.grantRead(evalStatusLambda);

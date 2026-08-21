@@ -65,6 +65,14 @@ export interface AgentCoreRoleProps {
      * undefined (off).
      */
     enableManagedEval?: boolean;
+    /**
+     * AgentCore batch evaluation for the AI Assistant (`features.agentcore_evaluation`).
+     * When true, the AI Assistant runtime is granted the actions to look up the
+     * custom evaluator and start/poll an on-demand batch evaluation of recent
+     * session traces (the console-visible, pollable eval artifact). Added only
+     * when enabled. Defaults to undefined (off).
+     */
+    enableAgentCoreEval?: boolean;
 }
 
 export function createAgentCoreRole(
@@ -298,6 +306,26 @@ export function createAgentCoreRole(
                 conditions: {
                     StringEquals: { "iam:PassedToService": "bedrock.amazonaws.com" },
                 },
+            })
+        );
+    }
+
+    // AgentCore batch evaluation (features.agentcore_evaluation). Lets the AI
+    // Assistant runtime find the custom evaluator and start/poll an on-demand
+    // batch evaluation of recent session traces. Not resource-scopeable (the
+    // evaluator/batch ARNs are created at runtime), so `*`. Added only when on.
+    if (props.enableAgentCoreEval) {
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    "bedrock-agentcore:ListEvaluators",
+                    "bedrock-agentcore:GetEvaluator",
+                    "bedrock-agentcore:StartBatchEvaluation",
+                    "bedrock-agentcore:GetBatchEvaluation",
+                    "bedrock-agentcore:ListBatchEvaluations",
+                ],
+                resources: ["*"],
             })
         );
     }

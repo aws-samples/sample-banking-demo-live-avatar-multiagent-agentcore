@@ -1351,8 +1351,8 @@ def _launch_catalog_evaluation(catalog: dict, *, base_model_id: str, session_id:
         "consoleUrl": console_url,
         "itemCount": len(entries),
         "jobs": jobs,
-        # Both models' full catalog copy, so the frontend can apply the winner
-        # as the app's live catalog once the user picks one.
+        # NOTE: variants (both models' full catalog copy) appended just below so
+        # the frontend can apply the winner as the app's live catalog.
         "variants": [
             {
                 "role": "base",
@@ -1366,6 +1366,84 @@ def _launch_catalog_evaluation(catalog: dict, *, base_model_id: str, session_id:
             },
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# AgentCore batch evaluation (on-demand, pollable) for the AI Assistant
+# ---------------------------------------------------------------------------
+# Complements the passive online evaluation: an on-demand batch evaluation runs
+# the custom evaluator over the AI Assistant's recent session traces and returns
+# a job with a PENDING -> IN_PROGRESS -> COMPLETED status plus per-session scores
+# (written to a CloudWatch results log stream). This gives the app a concrete,
+# console-visible artifact (the AgentCore console "Batch evaluation" tab) that
+# the frontend can poll and render — verified to complete in ~1-2 minutes.
+
+# Enabled by CDK on the ai_assistant profile when features.agentcore_evaluation
+# is on. The evaluator is looked up by name at runtime (its id carries a
+# service-generated suffix not known at deploy time).
+_AGENTCORE_EVAL_ENABLED = os.environ.get("AGENTCORE_EVAL_ENABLED", "false").lower() == "true"
+
+
+def _find_evaluator_id_by_name(ctl, name: str) -> str | None:
+    token: dict = {}
+    while True:
+        resp = ctl.list_evaluators(maxResults=50, **token)
+        for e in resp.get("evaluators", []):
+            if e.get("evaluatorName") == name:
+                return e.get("evaluatorId")
+        nt = resp.get("nextToken")
+        if not nt:
+            return None
+        token = {"nextToken": nt}
+
+
+def _launch_batch_evaluation() -> dict:
+    """Start an AgentCore batch evaluation of the AI Assistant's recent sessions
+    with the custom copy-quality evaluator. Returns a record for the
+    BatchEvaluation card (id + status + results log location). Never raises."""
+    import time as _t
+
+    import boto3
+
+    region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+    stack = os.environ.get("STACK_NAME", "")
+    console_url = f"https://{region}.console.aws.amazon.com/bedrock/home?region={region}"
+    safe_stack = stack.replace("-", "_")
+    evaluator_name = f"{safe_stack}_copy_quality"
+    service_name = f"{safe_stack}_ai_assistant.DEFAULT"
+    try:
+        ctl = boto3.client("bedrock-agentcore-control", region_name=region)
+        dp = boto3.client("bedrock-agentcore", region_name=region)
+        evaluator_id = _find_evaluator_id_by_name(ctl, evaluator_name)
+        if not evaluator_id:
+            return {"status": "error", "message": "Evaluator not found.", "consoleUrl": console_url}
+        now = int(_t.time())
+        r = dp.start_batch_evaluation(
+            batchEvaluationName=f"catalog{now}",
+            evaluators=[{"evaluatorId": evaluator_id}],
+            dataSourceConfig={
+                "cloudWatchLogs": {
+                    "serviceNames": [service_name],
+                    "logGroupNames": ["aws/spans"],
+                    "filterConfig": {"timeRange": {"startTime": now - 7 * 86400, "endTime": now}},
+                }
+            },
+        )
+        out = (r.get("outputConfig") or {}).get("cloudWatchConfig") or {}
+        return {
+            "status": "ok",
+            "batchEvaluationId": r.get("batchEvaluationId"),
+            "batchStatus": r.get("status"),
+            "evaluator": evaluator_name,
+            "metric": "copy_quality",
+            "region": region,
+            "logGroupName": out.get("logGroupName"),
+            "logStreamName": out.get("logStreamName"),
+            "consoleUrl": console_url,
+        }
+    except Exception as exc:  # noqa: BLE001 - never crash the runtime
+        logger.warning("start_batch_evaluation failed: %s", exc)
+        return {"status": "error", "message": str(exc)[:300], "consoleUrl": console_url}
 
 
 # ---------------------------------------------------------------------------
@@ -6730,6 +6808,32 @@ async def _run_pipeline(
                     # earlier in the run and often already expired at render.
                     parsed_catalog = _resign_catalog_images(parsed_catalog)
                     yield {"_ui": {"component": "ServicesCatalog", "props": parsed_catalog}}
+
+                    # Kick off an AgentCore batch evaluation of recent sessions
+                    # so a pollable, console-visible eval is already PENDING
+                    # while the user reviews. The card renders live status and
+                    # per-session scores when it completes (~1-2 min). Flag-gated
+                    # + best-effort — a failure never affects the catalog.
+                    if _AGENTCORE_EVAL_ENABLED:
+                        try:
+                            yield {
+                                "agent_phase": {
+                                    "agent": "menu_batch_eval",
+                                    "phase": "batch evaluation",
+                                    "status": "start",
+                                }
+                            }
+                            batch_result = _launch_batch_evaluation()
+                            yield {"_ui": {"component": "BatchEvaluation", "props": batch_result}}
+                            yield {
+                                "agent_phase": {
+                                    "agent": "menu_batch_eval",
+                                    "phase": "batch evaluation",
+                                    "status": "end",
+                                }
+                            }
+                        except Exception as batch_exc:  # noqa: BLE001 - never break the pipeline
+                            logger.debug("Batch evaluation launch failed: %s", batch_exc)
 
                 # ── Human-in-the-loop review (menu_review flow step) ──
                 # The pipeline hands the catalog to a person: the interactive
