@@ -50,7 +50,8 @@
             "agent_registry": true,
             "agentcore_identity": true,
             "managed_web_search": true,
-            "bedrock_managed_eval": true
+            "bedrock_managed_eval": true,
+            "agentcore_evaluation": true
         },
         "webSearch": {
             "excludeDomains": [

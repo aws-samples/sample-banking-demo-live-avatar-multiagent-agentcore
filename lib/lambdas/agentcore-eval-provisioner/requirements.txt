@@ -1,0 +1,6 @@
+# AgentCore Evaluations control-plane APIs (CreateEvaluator,
+# CreateOnlineEvaluationConfig, ...) only exist in a recent boto3 — the Lambda
+# runtime's built-in SDK is older — so a current boto3 is vendored into the
+# asset (same pattern as harness-provisioner / agent-registry-cr). Pinned to the
+# version whose eval/online-eval shapes were verified end-to-end against us-east-1.
+boto3>=1.43.74

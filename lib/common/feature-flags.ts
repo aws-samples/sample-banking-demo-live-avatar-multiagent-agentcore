@@ -212,6 +212,20 @@ export interface FeatureFlags {
      * still deploys and destroys cleanly. Defaults to FALSE.
      */
     bedrock_managed_eval: boolean;
+    /**
+     * AgentCore Evaluations for the AI Assistant. When true, a custom-resource
+     * provisioner creates a custom LLM-as-a-judge evaluator plus an online
+     * evaluation configuration that scores the AI Assistant runtime's live spans
+     * (from CloudWatch `aws/spans`, filtered by service name) — populating the
+     * AgentCore console's "Custom evaluators" and "Evaluation configurations"
+     * tabs and feeding AgentCore Observability. This is the foundation of the
+     * AgentCore evaluation/optimization/A-B story (Option B). Requires per-runtime
+     * Tracing + CloudWatch Transaction Search to be enabled so spans exist.
+     * Provisioning is best-effort (preview control-plane API): if unavailable,
+     * the deploy still succeeds and the entries simply do not appear. Defaults to
+     * FALSE.
+     */
+    agentcore_evaluation: boolean;
 }
 
 export interface ModelConfig {
@@ -254,6 +268,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
     agentcore_identity: false,
     managed_web_search: false,
     bedrock_managed_eval: false,
+    agentcore_evaluation: false,
 };
 
 const DEFAULT_MODELS: ModelConfig = {

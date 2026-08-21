@@ -949,6 +949,202 @@ export class Backend extends Stack {
             );
         }
 
+        // ─── AgentCore Evaluations (custom resource, feature-gated) ────
+        // Provisions a custom LLM-as-a-judge evaluator + an online evaluation
+        // config that scores the AI Assistant runtime's live spans (from the
+        // shared `aws/spans` log group, filtered by service name). This makes
+        // the AgentCore console's "Custom evaluators" and "Evaluation
+        // configurations" tabs show real, app-tied entries and starts scoring
+        // sessions in Observability — the foundation for the AgentCore
+        // evaluation / optimization / A-B story. There is no CloudFormation
+        // resource for Evaluations, so a small custom resource calls the preview
+        // `bedrock-agentcore-control` API. BEST-EFFORT: if the preview API is
+        // unavailable/denied, the deploy still succeeds and the entries simply
+        // do not appear. Requires per-runtime Tracing + Transaction Search on
+        // (so spans exist) — enabled out of band.
+        if (features.agentcore_evaluation) {
+            // The online-eval scores the AI Assistant runtime. The OTEL service
+            // name AgentCore emits is `<runtime_name>.DEFAULT`.
+            const assistantServiceName = `${stackName.replace(/-/g, "_")}_ai_assistant.DEFAULT`;
+
+            // Execution role AgentCore assumes to run the evaluation: read the
+            // spans, write results to its own results log group, and invoke the
+            // judge model. Trusts ONLY bedrock-agentcore (role validation
+            // rejects the shared agentCoreRole, which also trusts bedrock).
+            const evalExecutionRole = new Role(this, "EvalExecutionRole", {
+                roleName: `${stackName}-eval-exec-role`,
+                assumedBy: new ServicePrincipal("bedrock-agentcore.amazonaws.com"),
+                description: "Execution role for AgentCore online evaluation of the AI Assistant",
+            });
+            evalExecutionRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: [
+                        "logs:StartQuery",
+                        "logs:GetQueryResults",
+                        "logs:FilterLogEvents",
+                        "logs:GetLogEvents",
+                        "logs:DescribeLogGroups",
+                    ],
+                    resources: ["*"],
+                })
+            );
+            evalExecutionRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    // The service creates a per-config results log group under
+                    // this prefix and writes evaluation results to it.
+                    actions: [
+                        "logs:CreateLogGroup",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents",
+                        "logs:DescribeLogStreams",
+                    ],
+                    resources: [
+                        `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/evaluations/*`,
+                    ],
+                })
+            );
+            evalExecutionRole.addToPolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["bedrock:InvokeModel"],
+                    resources: ["*"],
+                })
+            );
+            NagSuppressions.addResourceSuppressions(
+                evalExecutionRole,
+                [
+                    {
+                        id: "AwsSolutions-IAM5",
+                        reason: "Evaluation execution role reads spans (log group names are dynamic) and invokes the judge model; scoped to the evaluations results log-group prefix where possible.",
+                    },
+                ],
+                true
+            );
+
+            const evalProvisionerFn = new LambdaFunction(this, "EvalProvisioner", {
+                functionName: `${stackName}-eval-provisioner`,
+                runtime: LambdaRuntime.PYTHON_3_13,
+                architecture: Architecture.ARM_64,
+                handler: "index.on_event",
+                timeout: Duration.minutes(10),
+                memorySize: 256,
+                // Vendors a recent boto3 — the Evaluations control-plane API is
+                // newer than the runtime-bundled SDK. Pure-Python, so the bundle
+                // is architecture-independent.
+                code: Code.fromAsset(
+                    path.join(repoRoot, "lib", "lambdas", "agentcore-eval-provisioner"),
+                    {
+                        bundling: {
+                            image: LambdaRuntime.PYTHON_3_13.bundlingImage,
+                            command: [
+                                "bash",
+                                "-c",
+                                "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output",
+                            ],
+                        },
+                    }
+                ),
+                environment: {
+                    EVALUATOR_NAME: `${stackName.replace(/-/g, "_")}_copy_quality`,
+                    ONLINE_EVAL_NAME: `${stackName.replace(/-/g, "_")}_ai_assistant_eval`,
+                    JUDGE_MODEL_ID: "us.amazon.nova-pro-v1:0",
+                    EXECUTION_ROLE_ARN: evalExecutionRole.roleArn,
+                    SPANS_LOG_GROUP: "aws/spans",
+                    SERVICE_NAMES: assistantServiceName,
+                    SAMPLING_PERCENTAGE: "100",
+                    SESSION_TIMEOUT_MINUTES: "5",
+                },
+            });
+
+            // The provisioner creates/deletes evaluator + online-eval resources
+            // (ARNs minted at runtime) and passes the execution role to the
+            // service. Grant the eval control-plane family + scoped PassRole.
+            evalProvisionerFn.addToRolePolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: [
+                        "bedrock-agentcore:CreateEvaluator",
+                        "bedrock-agentcore:GetEvaluator",
+                        "bedrock-agentcore:ListEvaluators",
+                        "bedrock-agentcore:UpdateEvaluator",
+                        "bedrock-agentcore:DeleteEvaluator",
+                        "bedrock-agentcore:CreateOnlineEvaluationConfig",
+                        "bedrock-agentcore:GetOnlineEvaluationConfig",
+                        "bedrock-agentcore:ListOnlineEvaluationConfigs",
+                        "bedrock-agentcore:UpdateOnlineEvaluationConfig",
+                        "bedrock-agentcore:DeleteOnlineEvaluationConfig",
+                    ],
+                    resources: ["*"],
+                })
+            );
+            evalProvisionerFn.addToRolePolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["iam:PassRole"],
+                    resources: [evalExecutionRole.roleArn],
+                    conditions: {
+                        StringEquals: { "iam:PassedToService": "bedrock-agentcore.amazonaws.com" },
+                    },
+                })
+            );
+
+            const evalProvider = new Provider(this, "EvalProvider", {
+                onEventHandler: evalProvisionerFn,
+            });
+
+            const evalResource = new CustomResource(this, "EvalResource", {
+                serviceToken: evalProvider.serviceToken,
+                properties: {
+                    ServiceNames: assistantServiceName,
+                    JudgeModel: "us.amazon.nova-pro-v1:0",
+                    // Bump to force the custom resource to re-run.
+                    Rev: "1",
+                },
+            });
+            evalResource.node.addDependency(evalExecutionRole);
+
+            new CfnOutput(this, "EvalEvaluatorId_Output", {
+                value: evalResource.getAttString("EvaluatorId"),
+                description:
+                    "AgentCore custom evaluator id for the AI Assistant; empty if the preview API was unavailable",
+            });
+            new CfnOutput(this, "EvalOnlineConfigId_Output", {
+                value: evalResource.getAttString("OnlineEvalId"),
+                description: "AgentCore online evaluation config id; empty if unavailable",
+            });
+
+            NagSuppressions.addResourceSuppressions(
+                evalProvisionerFn,
+                [
+                    {
+                        id: "AwsSolutions-IAM5",
+                        reason: "Eval provisioner needs the bedrock-agentcore evaluator/online-eval actions on * (resource ARNs are created at runtime) and PassRole on the eval execution role.",
+                    },
+                ],
+                true
+            );
+            NagSuppressions.addResourceSuppressions(
+                evalProvider,
+                [
+                    {
+                        id: "AwsSolutions-IAM4",
+                        reason: "CDK Provider framework Lambda uses the managed basic-execution role.",
+                    },
+                    {
+                        id: "AwsSolutions-IAM5",
+                        reason: "CDK Provider framework grants wildcard invoke on its own onEvent handler.",
+                    },
+                    {
+                        id: "AwsSolutions-L1",
+                        reason: "CDK Provider framework manages its own Lambda runtime version.",
+                    },
+                ],
+                true
+            );
+        }
+
         // ─── AgentCore Runtimes ────────────────────────────────────────
         const jwtDiscoveryUrl = `${cognitoIssuer}/.well-known/openid-configuration`;
 
