@@ -5,6 +5,7 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import { FlaskConical, Check } from "lucide-react";
 import { useAuth } from "react-oidc-context";
 import { fetchEvalStatus, type EvalJobStatus } from "@/services/catalogEvalService";
@@ -72,6 +73,100 @@ function statusLabel(s: string | undefined): string {
         default:
             return s;
     }
+}
+
+function scoreBand(score: number): string {
+    return score >= 85 ? "#37b24d" : score >= 70 ? "#e0b850" : "#f03e3e";
+}
+
+/**
+ * Per-variant explainer: how the score was reached. Shows the rubric
+ * dimensions the judge scored against, each item's score + the judge's
+ * reasoning, and a nested "raw JSON" sub-section with the verbatim
+ * evaluation-output records.
+ */
+function EvalReasoning({ job }: { job: EvalJobStatus }): JSX.Element | null {
+    const items = job.items ?? [];
+    const raw = job.raw ?? [];
+    if (items.length === 0 && raw.length === 0) return null;
+    return (
+        <ExpandableSection
+            headerText="Why this score — judge reasoning"
+            variant="footer"
+            headerDescription={
+                job.dimensions && job.dimensions.length > 0
+                    ? `Scored on: ${job.dimensions.join(" · ")}`
+                    : undefined
+            }
+        >
+            <SpaceBetween size="s">
+                <Box variant="small" color="text-body-secondary">
+                    {typeof job.count === "number"
+                        ? `${job.count} item${job.count === 1 ? "" : "s"} judged`
+                        : ""}
+                    {typeof job.passRate === "number" ? ` · ${job.passRate}% rated excellent` : ""}
+                    {job.jobName ? ` · job ${job.jobName}` : ""}
+                </Box>
+
+                {items.map((it, i) => (
+                    <div
+                        key={i}
+                        className="rounded-md p-2"
+                        style={{
+                            border: "1px solid var(--glass-border)",
+                            background: "var(--glass-bg)",
+                        }}
+                    >
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-xs font-semibold" title={it.product}>
+                                {it.product || `Item ${i + 1}`}
+                            </span>
+                            {typeof it.score === "number" ? (
+                                <span
+                                    className="shrink-0 text-sm font-semibold"
+                                    style={{ color: scoreBand(it.score) }}
+                                >
+                                    {it.score}
+                                    <span className="ml-0.5 text-[9px] font-normal opacity-70">
+                                        /100
+                                    </span>
+                                </span>
+                            ) : null}
+                        </div>
+                        {it.response ? (
+                            <p
+                                className="mt-1 text-[11px] italic"
+                                style={{ color: "var(--app-text-secondary)" }}
+                            >
+                                “{it.response}”
+                            </p>
+                        ) : null}
+                        {it.reasoning ? (
+                            <p className="mt-1 text-[11px]" style={{ color: "var(--app-text)" }}>
+                                {it.reasoning}
+                            </p>
+                        ) : null}
+                    </div>
+                ))}
+
+                {raw.length > 0 && (
+                    <ExpandableSection headerText="Raw evaluation output (JSON)" variant="footer">
+                        <pre
+                            className="overflow-auto rounded-md p-2 text-[10px] leading-snug"
+                            style={{
+                                maxHeight: 320,
+                                border: "1px solid var(--glass-border)",
+                                background: "var(--glass-bg)",
+                                color: "var(--app-text)",
+                            }}
+                        >
+                            {JSON.stringify(raw, null, 2)}
+                        </pre>
+                    </ExpandableSection>
+                )}
+            </SpaceBetween>
+        </ExpandableSection>
+    );
 }
 
 export function BedrockEvaluationLaunchCard({
@@ -152,8 +247,7 @@ export function BedrockEvaluationLaunchCard({
         onAction?.("apply_catalog_variant", { model: v.model, sections: v.sections });
     };
 
-    const band = (score: number): string =>
-        score >= 85 ? "#37b24d" : score >= 70 ? "#e0b850" : "#f03e3e";
+    const band = scoreBand;
 
     return (
         <div className="my-3">
@@ -282,6 +376,11 @@ export function BedrockEvaluationLaunchCard({
                                     <p className="mt-1 text-[10px]" style={{ color: "#f03e3e" }}>
                                         {s.failure}
                                     </p>
+                                ) : null}
+                                {completed && s ? (
+                                    <div className="mt-2">
+                                        <EvalReasoning job={s} />
+                                    </div>
                                 ) : null}
                             </div>
                         );

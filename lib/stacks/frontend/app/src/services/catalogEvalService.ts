@@ -6,6 +6,14 @@
  * show live status and render the copy-quality score once each job completes.
  */
 
+/** One judged catalog item: the copy, its score, and the judge's reasoning. */
+export interface EvalItemResult {
+    product?: string;
+    response?: string;
+    score?: number | null;
+    reasoning?: string;
+}
+
 export interface EvalJobStatus {
     jobArn: string;
     jobName?: string;
@@ -14,6 +22,16 @@ export interface EvalJobStatus {
     done: boolean;
     /** Mean copy_quality score (0-100) once Completed, else null. */
     score: number | null;
+    /** Percentage of items the judge rated excellent (0-100). */
+    passRate?: number | null;
+    /** Number of items scored. */
+    count?: number;
+    /** Rubric dimensions the judge scored against. */
+    dimensions?: string[];
+    /** Per-item score + judge reasoning (capped). */
+    items?: EvalItemResult[];
+    /** A few verbatim raw output records, for the "raw JSON" view. */
+    raw?: unknown[];
     failure?: string;
 }
 

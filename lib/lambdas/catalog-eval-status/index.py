@@ -52,22 +52,43 @@ def _split_s3_uri(uri: str) -> tuple[str, str]:
 
 
 METRIC_NAME = "copy_quality"
+# The four rubric dimensions the custom judge scores against (mirrors the
+# evaluator instructions). Surfaced so the UI can show WHAT was assessed.
+RUBRIC_DIMENSIONS = ["benefit-led language", "clarity", "on-brand voice", "length discipline"]
+_MAX_ITEMS = 12  # per-item reasoning rows returned to the UI
+_MAX_RAW = 3  # verbatim raw output records for the "raw JSON" view
+_REASON_MAX = 700  # trim each judge explanation
 
 
-def _score_from_output(output_s3_uri: str) -> float | None:
-    """Read a completed job's S3 output and return the mean copy_quality score
-    on a 0-100 scale, or None if it cannot be determined.
+def _product_from_prompt(prompt: str) -> str:
+    """Best-effort product name from the eval prompt (``...product: <Name>.``)."""
+    marker = "product:"
+    if marker in prompt:
+        return prompt.split(marker, 1)[1].strip().rstrip(".")[:80]
+    return ""
+
+
+def _scale(val: float) -> float:
+    """Normalize a metric result to 0-100 (our scale emits 0-1)."""
+    return round(val * 100, 1) if val <= 1.0 else round(val, 1)
+
+
+def _results_from_output(output_s3_uri: str) -> dict:
+    """Read a completed job's S3 output and return the score plus the per-item
+    judge reasoning and a few verbatim raw records for the UI's explain view.
 
     Verified output shape (one JSON object per line under
     ``.../models/<id>/taskTypes/General/datasets/<name>/<uuid>_output.jsonl``):
 
         {"automatedEvaluationResult": {"scores": [
-            {"metricName": "copy_quality", "result": 1.0, "evaluatorDetails": [...]}
-        ]}, "inputRecord": {...}, "modelResponses": [...]}
+            {"metricName": "copy_quality", "result": 1.0,
+             "evaluatorDetails": [{"modelIdentifier": "...", "explanation": "..."}]}
+        ]}, "inputRecord": {"prompt": "...", ...}, "modelResponses": [{"response": "..."}]}
 
     ``result`` is normalized to 0-1 (our two-point excellent/poor scale yields
-    1.0 / 0.0), so the mean is scaled to 0-100 for display.
+    1.0 / 0.0). Returns {score, passRate, count, dimensions, items, raw}.
     """
+    empty = {"score": None, "count": 0, "items": [], "raw": [], "dimensions": RUBRIC_DIMENSIONS}
     try:
         bucket, prefix = _split_s3_uri(output_s3_uri)
         keys: list[str] = []
@@ -80,6 +101,8 @@ def _score_from_output(output_s3_uri: str) -> float | None:
             token = {"ContinuationToken": resp["NextContinuationToken"]}
 
         results: list[float] = []
+        items: list[dict] = []
+        raw: list[dict] = []
         for key in keys:
             body = _s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8", "replace")
             for line in body.splitlines():
@@ -90,21 +113,42 @@ def _score_from_output(output_s3_uri: str) -> float | None:
                     rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if len(raw) < _MAX_RAW:
+                    raw.append(rec)
+                prompt = (rec.get("inputRecord") or {}).get("prompt", "")
+                response = ((rec.get("modelResponses") or [{}])[0] or {}).get("response", "")
                 for sc in (rec.get("automatedEvaluationResult") or {}).get("scores", []) or []:
                     if sc.get("metricName") != METRIC_NAME:
                         continue
                     val = sc.get("result")
-                    if isinstance(val, (int, float)) and not isinstance(val, bool):
-                        results.append(float(val))
+                    if not (isinstance(val, (int, float)) and not isinstance(val, bool)):
+                        continue
+                    results.append(float(val))
+                    explanation = ((sc.get("evaluatorDetails") or [{}])[0] or {}).get("explanation", "")
+                    if len(items) < _MAX_ITEMS:
+                        items.append(
+                            {
+                                "product": _product_from_prompt(prompt),
+                                "response": response[:400],
+                                "score": _scale(float(val)),
+                                "reasoning": explanation.strip()[:_REASON_MAX],
+                            }
+                        )
         if not results:
-            return None
+            return empty
         mean = sum(results) / len(results)
-        # result is 0-1 for our scale; scale to 0-100. Guard against a job that
-        # ever returns raw 0-100 by only scaling when clearly a fraction.
-        return round(mean * 100, 1) if mean <= 1.0 else round(mean, 1)
+        excellent = sum(1 for r in results if r >= (1.0 if mean <= 1.0 else 100.0))
+        return {
+            "score": _scale(mean),
+            "passRate": round(100 * excellent / len(results)),
+            "count": len(results),
+            "dimensions": RUBRIC_DIMENSIONS,
+            "items": items,
+            "raw": raw,
+        }
     except Exception as exc:  # noqa: BLE001 - best effort
-        logger.warning("score parse failed for %s: %s", output_s3_uri, exc)
-        return None
+        logger.warning("results parse failed for %s: %s", output_s3_uri, exc)
+        return empty
 
 
 def _job_entry(job_arn: str) -> dict:
@@ -118,7 +162,7 @@ def _job_entry(job_arn: str) -> dict:
         if status == "Completed":
             out = (j.get("outputDataConfig") or {}).get("s3Uri")
             if out:
-                entry["score"] = _score_from_output(out)
+                entry.update(_results_from_output(out))
         elif status == "Failed":
             entry["failure"] = (j.get("failureMessages") or [""])[0][:300]
     except Exception as exc:  # noqa: BLE001 - report per-job, never 500 the response
