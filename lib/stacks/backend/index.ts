@@ -1061,21 +1061,26 @@ export class Backend extends Stack {
             // The provisioner creates/deletes evaluator + online-eval resources
             // (ARNs minted at runtime) and passes the execution role to the
             // service. Grant the eval control-plane family + scoped PassRole.
+            // The evaluator/online-eval control-plane actions (and any fan-out
+            // they trigger) — grant the bedrock-agentcore family rather than
+            // enumerate exact action names and rediscover them through failed
+            // provisioning, matching the harness provisioner. Resource ARNs are
+            // minted at runtime, so this is scoped to the deploy-time CR role.
             evalProvisionerFn.addToRolePolicy(
                 new PolicyStatement({
                     effect: Effect.ALLOW,
-                    actions: [
-                        "bedrock-agentcore:CreateEvaluator",
-                        "bedrock-agentcore:GetEvaluator",
-                        "bedrock-agentcore:ListEvaluators",
-                        "bedrock-agentcore:UpdateEvaluator",
-                        "bedrock-agentcore:DeleteEvaluator",
-                        "bedrock-agentcore:CreateOnlineEvaluationConfig",
-                        "bedrock-agentcore:GetOnlineEvaluationConfig",
-                        "bedrock-agentcore:ListOnlineEvaluationConfigs",
-                        "bedrock-agentcore:UpdateOnlineEvaluationConfig",
-                        "bedrock-agentcore:DeleteOnlineEvaluationConfig",
-                    ],
+                    actions: ["bedrock-agentcore:*"],
+                    resources: ["*"],
+                })
+            );
+            // CreateEvaluator validates that the CALLER can invoke the judge
+            // model, so the provisioner (not just the eval execution role) needs
+            // bedrock:InvokeModel on the judge — the cross-region inference
+            // profile plus its underlying foundation models.
+            evalProvisionerFn.addToRolePolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["bedrock:InvokeModel", "bedrock:GetInferenceProfile"],
                     resources: ["*"],
                 })
             );
@@ -1100,7 +1105,7 @@ export class Backend extends Stack {
                     ServiceNames: assistantServiceName,
                     JudgeModel: "us.amazon.nova-pro-v1:0",
                     // Bump to force the custom resource to re-run.
-                    Rev: "1",
+                    Rev: "2",
                 },
             });
             evalResource.node.addDependency(evalExecutionRole);

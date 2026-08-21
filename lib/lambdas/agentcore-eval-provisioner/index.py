@@ -175,6 +175,12 @@ def _create_online(client, name: str, evaluator_id: str) -> str | None:
         return None
 
 
+def _data(evaluator_id: str, online_id: str, status: str) -> dict:
+    """CFN response Data — ALWAYS carries both attribute keys so the stack's
+    CfnOutputs never fail with a missing-attribute error (which rolls back)."""
+    return {"EvaluatorId": evaluator_id, "OnlineEvalId": online_id, "Status": status}
+
+
 def _pack(evaluator_id: str | None, online_id: str | None) -> str:
     return f"{evaluator_id or ''}|{online_id or ''}"
 
@@ -195,14 +201,16 @@ def _on_create() -> dict:
         online_id = _create_online(client, oe_name, evaluator_id) if evaluator_id else None
         if not evaluator_id and not online_id:
             print("[EVAL] nothing provisioned; continuing (deploy not blocked)")
-            return {"PhysicalResourceId": UNAVAILABLE, "Data": {"Status": "SKIPPED"}}
+            # Return the attribute keys (empty) even on skip so the stack's
+            # CfnOutputs can read them — a missing attribute rolls back the stack.
+            return {"PhysicalResourceId": UNAVAILABLE, "Data": _data("", "", "SKIPPED")}
         return {
             "PhysicalResourceId": _pack(evaluator_id, online_id),
-            "Data": {"EvaluatorId": evaluator_id or "", "OnlineEvalId": online_id or "", "Status": "CREATED"},
+            "Data": _data(evaluator_id or "", online_id or "", "CREATED"),
         }
     except Exception as exc:  # noqa: BLE001 - never fail the deploy
         print(f"[EVAL] unexpected create error, continuing: {exc}")
-        return {"PhysicalResourceId": UNAVAILABLE, "Data": {"Status": "SKIPPED"}}
+        return {"PhysicalResourceId": UNAVAILABLE, "Data": _data("", "", "SKIPPED")}
 
 
 def _delete_online(client, online_id: str) -> None:
