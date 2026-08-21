@@ -1597,6 +1597,28 @@ export class Backend extends Stack {
                     MODEL_ID: models.avatar_sonic,
                     TOOL_SELECTOR_MODEL_ID: models.avatar_tool_selector,
                     PERSONA: "friendly",
+                    // Custom SageMaker model exposed as the `trinity_specialist`
+                    // tool (features.sagemaker_model): Nova Sonic keeps the voice
+                    // but routes substantive banking questions to the fine-tuned
+                    // model behind the tool. Present only when the flag is on; the
+                    // shared agentCoreRole already carries the InvokeEndpoint grant.
+                    // The endpoint's presence (SAGEMAKER_ENDPOINT_NAME) is what
+                    // gates the tool in avatar_agent.py.
+                    ...(features.sagemaker_model
+                        ? {
+                              SAGEMAKER_ENDPOINT_NAME: sagemaker.endpointName,
+                              ...(sagemaker.regionName
+                                  ? { SAGEMAKER_REGION: sagemaker.regionName }
+                                  : {}),
+                              ...(sagemaker.inferenceComponentName
+                                  ? {
+                                        SAGEMAKER_INFERENCE_COMPONENT_NAME:
+                                            sagemaker.inferenceComponentName,
+                                    }
+                                  : {}),
+                              SAGEMAKER_MAX_TOKENS: String(sagemaker.maxTokens),
+                          }
+                        : {}),
                     // AgentCore Identity token path (features.agentcore_identity).
                     ...identityEnvFor(avatarRuntimeName),
                 },

@@ -17,6 +17,7 @@ import traceback
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from persona_prompts import get_persona_prompt
+from sagemaker_specialist import build_specialist_tool
 from strands.experimental.bidi import BidiAgent
 from strands.experimental.bidi.models import BidiNovaSonicModel
 from strands.tools.mcp import MCPClient
@@ -190,9 +191,32 @@ def create_avatar_agent(
         },
     )
 
+    # Optional: Trinity Reserve's fine-tuned specialist model on SageMaker,
+    # exposed as a tool so the voice agent's reasoning for substantive banking
+    # questions runs on the custom model while Nova Sonic keeps the voice.
+    # Present only when SAGEMAKER_ENDPOINT_NAME is set on the runtime.
+    specialist_tool = build_specialist_tool()
+    tool_names = list(GATEWAY_TOOL_NAMES)
+    if specialist_tool is not None:
+        tools = [*tools, specialist_tool]
+        tool_names.append("trinity_specialist")
+        logger.info("[AVATAR] Registered SageMaker specialist tool (trinity_specialist)")
+
     # Load and augment persona prompt
     base_prompt = get_persona_prompt(persona)
-    system_prompt = augment_system_prompt(base_prompt, GATEWAY_TOOL_NAMES)
+    system_prompt = augment_system_prompt(base_prompt, tool_names)
+    if specialist_tool is not None:
+        # Route substantive answers through the custom model and speak them
+        # faithfully — this is what makes the digital human "powered by" the
+        # fine-tuned model rather than Nova Sonic's own knowledge.
+        system_prompt += (
+            "\n\nSPECIALIST MODEL: For any substantive question about Trinity Reserve "
+            "products, accounts, fees, eligibility, or financial guidance, call the "
+            "`trinity_specialist` tool and speak its answer to the customer faithfully — "
+            "relay it as given without adding facts, changing figures, or contradicting "
+            "it. Use your own voice only for greetings, small talk, and clarifying "
+            "questions."
+        )
 
     # Hooks force-inject the verified user_id and mode-specific KB read filter
     # into all relevant Gateway tool calls. The avatar wires both: UserScopeHook
