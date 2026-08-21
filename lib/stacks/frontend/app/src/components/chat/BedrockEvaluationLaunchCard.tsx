@@ -1,20 +1,24 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Check } from "lucide-react";
+import { useAuth } from "react-oidc-context";
+import { fetchEvalStatus, type EvalJobStatus } from "@/services/catalogEvalService";
 
 /**
- * Launch receipt for the managed Bedrock evaluation of the Services Catalog.
+ * Launch receipt + live tracker for the managed Bedrock evaluation of the
+ * Services Catalog.
  *
- * The A/B is a REAL, console-visible evaluation, not an inline widget: each
- * model's descriptions were shipped to Amazon Bedrock's model-evaluation
- * service as a model-as-a-judge job scored against a custom rubric. Those jobs
- * run asynchronously (minutes), so this card is the launch confirmation — it
- * names the jobs and links out to the Bedrock console where the scorecards
- * appear once each job completes.
+ * The A/B is a REAL, console-visible evaluation: each model's descriptions were
+ * shipped to Amazon Bedrock's model-evaluation service as a model-as-a-judge
+ * job scored against a custom rubric. Those jobs run asynchronously (minutes),
+ * so this card polls the backend `/catalog-eval` endpoint to show live status
+ * per job and renders the copy-quality score — and the winning model — once the
+ * jobs complete. It also links out to the Bedrock console.
  */
 
 interface EvalJob {
@@ -39,6 +43,28 @@ interface BedrockEvaluationLaunchCardProps {
     jobs?: EvalJob[];
 }
 
+// Poll every 20s, up to ~25 min — model-eval jobs typically finish in a few
+// minutes but can run longer.
+const POLL_MS = 20_000;
+const MAX_POLLS = 75;
+
+function statusLabel(s: string | undefined): string {
+    switch (s) {
+        case "InProgress":
+            return "In progress";
+        case "Completed":
+            return "Completed";
+        case "Failed":
+            return "Failed";
+        case "Stopped":
+            return "Stopped";
+        case undefined:
+            return "Queued";
+        default:
+            return s;
+    }
+}
+
 export function BedrockEvaluationLaunchCard({
     status = "error",
     judgeModel,
@@ -49,8 +75,67 @@ export function BedrockEvaluationLaunchCard({
     message,
     jobs = [],
 }: BedrockEvaluationLaunchCardProps): JSX.Element {
+    const auth = useAuth();
+    const idToken = auth.user?.id_token;
     const launched = jobs.filter((j) => j.jobArn);
     const failed = jobs.filter((j) => !j.jobArn);
+    const launchedArns = launched.map((j) => j.jobArn as string);
+    const arnsKey = launchedArns.join(",");
+
+    const [live, setLive] = useState<Record<string, EvalJobStatus>>({});
+    const [allDone, setAllDone] = useState(false);
+    const pollsRef = useRef(0);
+
+    const poll = useCallback(async (): Promise<boolean> => {
+        if (!idToken || launchedArns.length === 0) return true;
+        try {
+            const resp = await fetchEvalStatus(launchedArns, idToken);
+            const map: Record<string, EvalJobStatus> = {};
+            for (const j of resp.jobs) map[j.jobArn] = j;
+            setLive(map);
+            if (resp.allDone) setAllDone(true);
+            return resp.allDone;
+        } catch {
+            return false; // transient; keep polling
+        }
+        // arnsKey stands in for launchedArns (stable string) to satisfy deps.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [idToken, arnsKey]);
+
+    useEffect(() => {
+        if (status !== "ok" || launchedArns.length === 0 || allDone) return;
+        pollsRef.current = 0;
+        let timer: ReturnType<typeof setInterval> | undefined;
+        // Kick off immediately, then on an interval until done or capped.
+        void poll();
+        timer = setInterval(() => {
+            pollsRef.current += 1;
+            if (pollsRef.current > MAX_POLLS) {
+                if (timer) clearInterval(timer);
+                return;
+            }
+            void poll().then((done) => {
+                if (done && timer) clearInterval(timer);
+            });
+        }, POLL_MS);
+        return () => {
+            if (timer) clearInterval(timer);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [status, arnsKey, allDone, poll]);
+
+    // Determine the winner once everything with a score is done.
+    const scored = launched
+        .map((j) => ({ job: j, s: live[j.jobArn as string] }))
+        .filter((x) => x.s && typeof x.s.score === "number");
+    const winnerArn =
+        allDone && scored.length > 1
+            ? scored.reduce((a, b) => ((b.s.score as number) > (a.s.score as number) ? b : a)).job
+                  .jobArn
+            : undefined;
+
+    const band = (score: number): string =>
+        score >= 85 ? "#37b24d" : score >= 70 ? "#e0b850" : "#f03e3e";
 
     return (
         <div className="my-3">
@@ -60,7 +145,9 @@ export function BedrockEvaluationLaunchCard({
                         variant="h2"
                         description={
                             status === "ok"
-                                ? `${launched.length} model-as-a-judge job${launched.length === 1 ? "" : "s"} launched on Amazon Bedrock. Scorecards appear in the console when each job completes.`
+                                ? allDone
+                                    ? "Evaluation complete — scores below, and full scorecards in the Bedrock console."
+                                    : `${launched.length} model-as-a-judge job${launched.length === 1 ? "" : "s"} running on Amazon Bedrock. Tracking live…`
                                 : "The managed evaluation could not be launched."
                         }
                         actions={
@@ -93,10 +180,11 @@ export function BedrockEvaluationLaunchCard({
                                 {metric ? ` on the “${metric}” rubric` : ""}.
                             </Box>
                             <Box variant="small" color="text-body-secondary">
-                                Find these in the <strong>Amazon Bedrock</strong> console →{" "}
+                                Full scorecards live in the <strong>Amazon Bedrock</strong> console
+                                →{" "}
                                 <em>Inference and assessment → Evaluations → Model evaluations</em>
-                                {region ? ` (${region})` : ""}. This is separate from the AgentCore
-                                evaluations page. Jobs take a few minutes to complete.
+                                {region ? ` (${region})` : ""} — separate from the AgentCore
+                                evaluations page.
                             </Box>
                         </>
                     ) : (
@@ -105,39 +193,83 @@ export function BedrockEvaluationLaunchCard({
                         </StatusIndicator>
                     )}
 
-                    {launched.map((job) => (
-                        <div
-                            key={job.jobArn}
-                            className="rounded-md p-3"
-                            style={{
-                                border: "1px solid var(--glass-border)",
-                                background: "var(--glass-bg)",
-                            }}
-                        >
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="flex items-center gap-2 text-sm font-semibold">
-                                    <StatusIndicator type="in-progress">
-                                        {job.model ?? job.role}
-                                    </StatusIndicator>
-                                </span>
-                                {typeof job.items === "number" ? (
-                                    <span
-                                        className="shrink-0 text-xs"
-                                        style={{ color: "var(--app-text-secondary)" }}
-                                    >
-                                        {job.items} item{job.items === 1 ? "" : "s"}
+                    {launched.map((job) => {
+                        const s = live[job.jobArn as string];
+                        const isWinner = winnerArn && job.jobArn === winnerArn;
+                        const done = s?.done;
+                        const completed = s?.status === "Completed";
+                        const jobFailed = s?.status === "Failed";
+                        return (
+                            <div
+                                key={job.jobArn}
+                                className="rounded-md p-3"
+                                style={{
+                                    border: isWinner
+                                        ? "1px solid #37b24d66"
+                                        : "1px solid var(--glass-border)",
+                                    background: isWinner ? "#37b24d0d" : "var(--glass-bg)",
+                                }}
+                            >
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="flex items-center gap-2 text-sm font-semibold">
+                                        <StatusIndicator
+                                            type={
+                                                jobFailed
+                                                    ? "error"
+                                                    : completed
+                                                      ? "success"
+                                                      : "loading"
+                                            }
+                                        >
+                                            {job.model ?? job.role}
+                                        </StatusIndicator>
+                                        {isWinner ? (
+                                            <span className="flex items-center gap-1 text-[10px] text-emerald-500">
+                                                <Check size={11} /> winner
+                                            </span>
+                                        ) : null}
                                     </span>
+                                    {completed && typeof s?.score === "number" ? (
+                                        <span
+                                            className="text-lg font-semibold"
+                                            style={{ color: band(s.score) }}
+                                        >
+                                            {s.score}
+                                            <span
+                                                className="ml-0.5 text-[9.5px] font-normal"
+                                                style={{ color: "var(--app-text-secondary)" }}
+                                            >
+                                                /100
+                                            </span>
+                                        </span>
+                                    ) : (
+                                        <span
+                                            className="shrink-0 text-xs"
+                                            style={{ color: "var(--app-text-secondary)" }}
+                                        >
+                                            {statusLabel(s?.status)}
+                                            {!done && "…"}
+                                        </span>
+                                    )}
+                                </div>
+                                <p
+                                    className="mt-1 truncate text-[11px]"
+                                    style={{ color: "var(--app-text-secondary)" }}
+                                    title={job.jobName}
+                                >
+                                    Job name: {job.jobName}
+                                    {typeof job.items === "number"
+                                        ? ` · ${job.items} item${job.items === 1 ? "" : "s"}`
+                                        : ""}
+                                </p>
+                                {jobFailed && s?.failure ? (
+                                    <p className="mt-1 text-[10px]" style={{ color: "#f03e3e" }}>
+                                        {s.failure}
+                                    </p>
                                 ) : null}
                             </div>
-                            <p
-                                className="mt-1 truncate text-[11px]"
-                                style={{ color: "var(--app-text-secondary)" }}
-                                title={job.jobName}
-                            >
-                                Job name: {job.jobName}
-                            </p>
-                        </div>
-                    ))}
+                        );
+                    })}
 
                     {failed.map((job, i) => (
                         <StatusIndicator key={`f-${i}`} type="warning">

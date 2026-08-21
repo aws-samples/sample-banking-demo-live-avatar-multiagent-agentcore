@@ -1,0 +1,3 @@
+# get_evaluation_job / model-evaluation shapes verified against this boto3;
+# vendor it so the Lambda's SDK matches what we tested.
+boto3>=1.43.74

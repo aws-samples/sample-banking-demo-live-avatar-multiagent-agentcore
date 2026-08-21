@@ -1742,6 +1742,71 @@ export class Backend extends Stack {
                 authorizationType: apigateway.AuthorizationType.COGNITO,
             });
 
+            // ─── Catalog eval status endpoint (Bedrock model-eval A/B) ──
+            // GET /catalog-eval?jobs=<arn1>,<arn2> — lets the ServicesCatalog
+            // card poll the async Bedrock model-evaluation jobs it launched and
+            // render live status + the copy-quality score once each completes.
+            // Gated on the same flag as the launch button.
+            if (features.bedrock_managed_eval) {
+                const evalStatusDir = path.join(
+                    __dirname,
+                    "..",
+                    "..",
+                    "lambdas",
+                    "catalog-eval-status"
+                );
+                const evalStatusLogGroup = new LogGroup(this, "CatalogEvalStatusLogGroup", {
+                    logGroupName: `/aws/lambda/${stackName}-catalog-eval-status`,
+                    retention: RetentionDays.ONE_WEEK,
+                    removalPolicy: RemovalPolicy.DESTROY,
+                });
+                const evalStatusLambda = new LambdaFunction(this, "CatalogEvalStatusLambda", {
+                    functionName: `${stackName}-catalog-eval-status`,
+                    runtime: LambdaRuntime.PYTHON_3_13,
+                    handler: "index.handler",
+                    architecture: Architecture.ARM_64,
+                    logGroup: evalStatusLogGroup,
+                    timeout: Duration.seconds(30),
+                    memorySize: 256,
+                    code: Code.fromAsset(evalStatusDir, {
+                        bundling: {
+                            image: LambdaRuntime.PYTHON_3_13.bundlingImage,
+                            command: [
+                                "bash",
+                                "-c",
+                                "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output",
+                            ],
+                        },
+                    }),
+                    environment: { CORS_ALLOWED_ORIGINS: corsOrigins.join(",") },
+                });
+                // Read job status + read results from the images bucket output.
+                evalStatusLambda.addToRolePolicy(
+                    new PolicyStatement({
+                        effect: Effect.ALLOW,
+                        actions: ["bedrock:GetEvaluationJob"],
+                        resources: ["*"],
+                    })
+                );
+                shared.imagesBucket.grantRead(evalStatusLambda);
+
+                const evalStatusIntegration = new apigateway.LambdaIntegration(evalStatusLambda);
+                api.root.addResource("catalog-eval").addMethod("GET", evalStatusIntegration, {
+                    authorizer,
+                    authorizationType: apigateway.AuthorizationType.COGNITO,
+                });
+                NagSuppressions.addResourceSuppressions(
+                    evalStatusLambda,
+                    [
+                        {
+                            id: "AwsSolutions-IAM5",
+                            reason: "bedrock:GetEvaluationJob is not resource-scopeable; S3 read is scoped to the images bucket via grantRead.",
+                        },
+                    ],
+                    true
+                );
+            }
+
             // ─── KB Reset Lambda ───────────────────────────────────────
             if (features.knowledge_base && kbId && kbDataSourceId) {
                 const kbResetLambdaDir = path.join(__dirname, "..", "..", "lambdas", "kb-reset");
