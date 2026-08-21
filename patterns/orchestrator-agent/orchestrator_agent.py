@@ -1425,7 +1425,7 @@ def _launch_batch_evaluation() -> dict:
                 "cloudWatchLogs": {
                     "serviceNames": [service_name],
                     "logGroupNames": ["aws/spans"],
-                    "filterConfig": {"timeRange": {"startTime": now - 7 * 86400, "endTime": now}},
+                    "filterConfig": {"timeRange": {"startTime": now - 86400, "endTime": now}},
                 }
             },
         )
