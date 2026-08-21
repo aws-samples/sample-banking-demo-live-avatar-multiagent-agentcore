@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ReactFlow,
     Background,
@@ -371,22 +371,57 @@ function ConciergeFlowInner() {
 
     const [selectedNode, setSelectedNode] = useState<string | null>(null);
 
+    // Keep the graph centered when the panel first gets real dimensions. The
+    // built-in `fitView` runs once at mount, but the flow sidebar starts at
+    // ~zero width (panel animation / persisted run rehydrate), so that first
+    // fit framed the graph for the wrong size and left it pinned off-center.
+    // Re-fit on container resize, but only when nothing is actively running so
+    // a live run's camera focus is never yanked. Padding is tight for a
+    // slightly zoomed-in, legible default view.
+    const wrapperRef = useRef<HTMLDivElement | null>(null);
+    const refitFrameRef = useRef<number | null>(null);
+    const isActive = Boolean(activeTool) || runtimeActive;
+    const refit = useCallback(() => {
+        if (refitFrameRef.current !== null) cancelAnimationFrame(refitFrameRef.current);
+        refitFrameRef.current = requestAnimationFrame(() => {
+            refitFrameRef.current = null;
+            void reactFlow.fitView({ padding: 0.08, duration: 200, maxZoom: 1.75 });
+        });
+    }, [reactFlow]);
+
+    useEffect(() => {
+        const el = wrapperRef.current;
+        if (!el || typeof ResizeObserver === "undefined") return;
+        const ro = new ResizeObserver(() => {
+            // Don't fight the live auto-zoom while a run is in progress.
+            if (!isActive) refit();
+        });
+        ro.observe(el);
+        return () => {
+            ro.disconnect();
+            if (refitFrameRef.current !== null) cancelAnimationFrame(refitFrameRef.current);
+        };
+    }, [isActive, refit]);
+
     return (
-        <div className="relative h-full w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div
+            ref={wrapperRef}
+            className="relative h-full w-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950"
+        >
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 fitView
-                fitViewOptions={{ padding: 0.15 }}
+                fitViewOptions={{ padding: 0.08, maxZoom: 1.75 }}
                 nodesDraggable={false}
                 nodesConnectable={false}
                 panOnDrag={true}
                 zoomOnScroll={true}
                 zoomOnPinch={true}
                 minZoom={0.3}
-                maxZoom={1.5}
+                maxZoom={1.75}
                 onNodeClick={(_, node) => setSelectedNode(node.id)}
                 proOptions={{ hideAttribution: true }}
             >
