@@ -168,7 +168,7 @@ function AgentFlowInner({
         // Defer to the next frame so React Flow measures the settled container.
         refitFrameRef.current = requestAnimationFrame(() => {
             refitFrameRef.current = null;
-            void fitView({ padding: 0.18, duration: 200 });
+            void fitView({ padding: 0.04, duration: 200, maxZoom: 2 });
         });
     }, [fitView]);
 
@@ -308,7 +308,7 @@ function AgentFlowInner({
                     edgeTypes={edgeTypes}
                     onNodeClick={onNodeClick}
                     fitView
-                    fitViewOptions={{ padding: 0.18 }}
+                    fitViewOptions={{ padding: 0.04, maxZoom: 2 }}
                     nodesDraggable={false}
                     nodesConnectable={false}
                     // Press-and-hold drag to pan the workflow around the grid
