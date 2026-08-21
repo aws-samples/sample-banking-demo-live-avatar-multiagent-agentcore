@@ -128,10 +128,6 @@ export function ResearchPlanCard({ plan, query, onAction }: ResearchPlanCardProp
         onAction?.("research_execute", { plan: approvedPlan, query, paymentBudgetUsd });
     };
 
-    const handleStartOver = (): void => {
-        onAction?.("start_over", { query });
-    };
-
     const handleSaveEdits = (): void => {
         setIsEditing(false);
     };
@@ -332,9 +328,6 @@ export function ResearchPlanCard({ plan, query, onAction }: ResearchPlanCardProp
                                 <>
                                     <Button onClick={() => setIsEditing(true)} variant="normal">
                                         Customize Plan
-                                    </Button>
-                                    <Button onClick={handleStartOver} variant="normal">
-                                        Start Over
                                     </Button>
                                     <Button onClick={handleApprove} variant="primary">
                                         Approve &amp; Start Research

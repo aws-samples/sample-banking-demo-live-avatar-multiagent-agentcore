@@ -180,9 +180,6 @@ export function ServicesCatalogCard({
                                 <StatusIndicator type="loading">Exporting catalog…</StatusIndicator>
                             ) : (
                                 <>
-                                    <Button onClick={() => onAction?.("start_over", {})}>
-                                        Start Over
-                                    </Button>
                                     {/* Continuous feedback loop: turn the ratings,
                                         comments and edits gathered here into
                                         designer-prompt refinements for the next run. */}

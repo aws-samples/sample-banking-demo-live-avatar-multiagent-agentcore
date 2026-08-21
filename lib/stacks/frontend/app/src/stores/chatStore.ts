@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { Message } from "@/components/chat/types";
 import type { AgentId, ResearchPhase } from "@/lib/agentcore-client/types";
 import type { MenuSection } from "@/components/menu/MenuContext";
@@ -210,120 +211,161 @@ interface ChatStore {
     setResearchDepth(depth: ResearchDepth): void;
 }
 
-export const useChatStore = create<ChatStore>((set, get) => ({
-    // -- Chat slots --
-    slots: {},
+export const useChatStore = create<ChatStore>()(
+    persist(
+        (set, get) => ({
+            // -- Chat slots --
+            slots: {},
 
-    getOrCreateSlot(mode: string): ChatSlot {
-        const existing = get().slots[mode];
-        if (existing) return existing;
-        const slot = freshSlot();
-        set((s) => ({ slots: { ...s.slots, [mode]: slot } }));
-        return slot;
-    },
+            getOrCreateSlot(mode: string): ChatSlot {
+                const existing = get().slots[mode];
+                if (existing) return existing;
+                const slot = freshSlot();
+                set((s) => ({ slots: { ...s.slots, [mode]: slot } }));
+                return slot;
+            },
 
-    setMessages(mode: string, updater: Message[] | ((prev: Message[]) => Message[])): void {
-        set((s) => {
-            const slot = s.slots[mode] ?? freshSlot();
-            const newMessages = typeof updater === "function" ? updater(slot.messages) : updater;
-            return { slots: { ...s.slots, [mode]: { ...slot, messages: newMessages } } };
-        });
-    },
+            setMessages(mode: string, updater: Message[] | ((prev: Message[]) => Message[])): void {
+                set((s) => {
+                    const slot = s.slots[mode] ?? freshSlot();
+                    const newMessages =
+                        typeof updater === "function" ? updater(slot.messages) : updater;
+                    return { slots: { ...s.slots, [mode]: { ...slot, messages: newMessages } } };
+                });
+            },
 
-    setLoading(mode: string, loading: boolean): void {
-        set((s) => {
-            const slot = s.slots[mode] ?? freshSlot();
-            return { slots: { ...s.slots, [mode]: { ...slot, isLoading: loading } } };
-        });
-    },
+            setLoading(mode: string, loading: boolean): void {
+                set((s) => {
+                    const slot = s.slots[mode] ?? freshSlot();
+                    return { slots: { ...s.slots, [mode]: { ...slot, isLoading: loading } } };
+                });
+            },
 
-    setError(mode: string, error: string | null): void {
-        set((s) => {
-            const slot = s.slots[mode] ?? freshSlot();
-            return { slots: { ...s.slots, [mode]: { ...slot, error } } };
-        });
-    },
+            setError(mode: string, error: string | null): void {
+                set((s) => {
+                    const slot = s.slots[mode] ?? freshSlot();
+                    return { slots: { ...s.slots, [mode]: { ...slot, error } } };
+                });
+            },
 
-    clearSlot(mode: string): void {
-        set((s) => ({
-            slots: { ...s.slots, [mode]: freshSlot() },
-            researchSlots: { ...s.researchSlots, [mode]: { ...INITIAL_RESEARCH } },
-        }));
-    },
+            clearSlot(mode: string): void {
+                set((s) => ({
+                    slots: { ...s.slots, [mode]: freshSlot() },
+                    researchSlots: { ...s.researchSlots, [mode]: { ...INITIAL_RESEARCH } },
+                }));
+            },
 
-    // -- Research slots --
-    researchSlots: {},
+            // -- Research slots --
+            researchSlots: {},
 
-    getResearchSlot(mode: string): ResearchSlot {
-        return get().researchSlots[mode] ?? INITIAL_RESEARCH;
-    },
+            getResearchSlot(mode: string): ResearchSlot {
+                return get().researchSlots[mode] ?? INITIAL_RESEARCH;
+            },
 
-    dispatchResearch(mode: string, action: ResearchAction): void {
-        set((s) => {
-            const current = s.researchSlots[mode] ?? { ...INITIAL_RESEARCH };
-            return {
-                researchSlots: { ...s.researchSlots, [mode]: reduceResearch(current, action) },
-            };
-        });
-    },
+            dispatchResearch(mode: string, action: ResearchAction): void {
+                set((s) => {
+                    const current = s.researchSlots[mode] ?? { ...INITIAL_RESEARCH };
+                    return {
+                        researchSlots: {
+                            ...s.researchSlots,
+                            [mode]: reduceResearch(current, action),
+                        },
+                    };
+                });
+            },
 
-    // -- Menu --
-    menuState: { ...INITIAL_MENU },
+            // -- Menu --
+            menuState: { ...INITIAL_MENU },
 
-    dispatchMenu(action: { type: string; [key: string]: unknown }): void {
-        set((s) => {
-            const st = s.menuState;
-            switch (action.type) {
-                case "SET_SECTIONS":
-                    return { menuState: { ...st, sections: action.sections as MenuSection[] } };
-                case "SET_PDF_URL":
-                    return { menuState: { ...st, pdfUrl: (action.url as string) ?? null } };
-                case "SET_GENERATING":
-                    return { menuState: { ...st, isGenerating: action.isGenerating as boolean } };
-                case "UPDATE_ITEM": {
-                    // Human-in-the-loop edit: patch a single catalog item by id.
-                    const id = action.id as string;
-                    const updates = action.updates as Partial<MenuSection["items"][number]>;
-                    const sections = st.sections.map((sec) => ({
-                        ...sec,
-                        items: sec.items.map((item) =>
-                            item.id === id ? { ...item, ...updates } : item
-                        ),
-                    }));
-                    return { menuState: { ...st, sections } };
-                }
-                case "SET_LAST_ITEM_IMAGE": {
-                    const sections = [...st.sections].map((sec) => ({
-                        ...sec,
-                        items: [...sec.items],
-                    }));
-                    let found = false;
-                    for (let si = sections.length - 1; si >= 0 && !found; si--) {
-                        for (let ii = sections[si].items.length - 1; ii >= 0 && !found; ii--) {
-                            if (!sections[si].items[ii].imageUrl) {
-                                sections[si].items[ii] = {
-                                    ...sections[si].items[ii],
-                                    imageUrl: action.imageUrl as string,
-                                };
-                                found = true;
-                            }
+            dispatchMenu(action: { type: string; [key: string]: unknown }): void {
+                set((s) => {
+                    const st = s.menuState;
+                    switch (action.type) {
+                        case "SET_SECTIONS":
+                            return {
+                                menuState: { ...st, sections: action.sections as MenuSection[] },
+                            };
+                        case "SET_PDF_URL":
+                            return { menuState: { ...st, pdfUrl: (action.url as string) ?? null } };
+                        case "SET_GENERATING":
+                            return {
+                                menuState: { ...st, isGenerating: action.isGenerating as boolean },
+                            };
+                        case "UPDATE_ITEM": {
+                            // Human-in-the-loop edit: patch a single catalog item by id.
+                            const id = action.id as string;
+                            const updates = action.updates as Partial<MenuSection["items"][number]>;
+                            const sections = st.sections.map((sec) => ({
+                                ...sec,
+                                items: sec.items.map((item) =>
+                                    item.id === id ? { ...item, ...updates } : item
+                                ),
+                            }));
+                            return { menuState: { ...st, sections } };
                         }
+                        case "SET_LAST_ITEM_IMAGE": {
+                            const sections = [...st.sections].map((sec) => ({
+                                ...sec,
+                                items: [...sec.items],
+                            }));
+                            let found = false;
+                            for (let si = sections.length - 1; si >= 0 && !found; si--) {
+                                for (
+                                    let ii = sections[si].items.length - 1;
+                                    ii >= 0 && !found;
+                                    ii--
+                                ) {
+                                    if (!sections[si].items[ii].imageUrl) {
+                                        sections[si].items[ii] = {
+                                            ...sections[si].items[ii],
+                                            imageUrl: action.imageUrl as string,
+                                        };
+                                        found = true;
+                                    }
+                                }
+                            }
+                            return found ? { menuState: { ...st, sections } } : {};
+                        }
+                        case "RESET":
+                            return { menuState: { ...INITIAL_MENU } };
+                        default:
+                            return {};
                     }
-                    return found ? { menuState: { ...st, sections } } : {};
+                });
+            },
+
+            // -- Research depth --
+            researchDepth: (localStorage.getItem("research-depth") as ResearchDepth) || "standard",
+
+            setResearchDepth(depth: ResearchDepth): void {
+                localStorage.setItem("research-depth", depth);
+                set({ researchDepth: depth });
+            },
+        }),
+        {
+            // Persist the visible conversation + catalog so a page refresh (or the
+            // OIDC re-auth redirect round-trip) keeps the previous run on screen.
+            // Only "New Chat" (clearSlot) wipes a slot. sessionStorage keeps this
+            // per-tab so parallel demo users don't share state, and it clears when
+            // the tab closes. Transient flags (isLoading/error/isGenerating) are
+            // reset on rehydrate so a refresh mid-stream can't get stuck.
+            name: "trinity-chat",
+            storage: createJSONStorage(() => sessionStorage),
+            partialize: (s) => ({ slots: s.slots, menuState: s.menuState }),
+            merge: (persisted, current) => {
+                const p = (persisted ?? {}) as Partial<ChatStore>;
+                const slots: Record<string, ChatSlot> = {};
+                for (const [key, slot] of Object.entries(p.slots ?? {})) {
+                    slots[key] = { ...slot, isLoading: false, error: null };
                 }
-                case "RESET":
-                    return { menuState: { ...INITIAL_MENU } };
-                default:
-                    return {};
-            }
-        });
-    },
-
-    // -- Research depth --
-    researchDepth: (localStorage.getItem("research-depth") as ResearchDepth) || "standard",
-
-    setResearchDepth(depth: ResearchDepth): void {
-        localStorage.setItem("research-depth", depth);
-        set({ researchDepth: depth });
-    },
-}));
+                return {
+                    ...current,
+                    slots,
+                    menuState: p.menuState
+                        ? { ...current.menuState, ...p.menuState, isGenerating: false }
+                        : current.menuState,
+                };
+            },
+        }
+    )
+);
