@@ -45,7 +45,7 @@
             "a2a": true,
             "a2a_parallel_research": true,
             "prompt_optimization": true,
-            "sagemaker_model": false,
+            "sagemaker_model": true,
             "kb_multimodal": true,
             "agent_registry": true,
             "agentcore_identity": true,
@@ -90,6 +90,7 @@
         "sagemaker": {
             "endpointName": "arn:aws:sagemaker:us-east-1:157000088284:endpoint/example-name-wtf7d-1-1787264167",
             "regionName": "",
+            "inferenceComponentName": "adapter-example-name-wtf7d-1-1787264167-1787264205",
             "maxTokens": 4096
         },
 

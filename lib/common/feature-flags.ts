@@ -347,6 +347,14 @@ export interface SageMakerConfig {
      * when left empty (the runtime falls back to its own AWS_REGION).
      */
     regionName: string;
+    /**
+     * Inference component to target on the endpoint. REQUIRED for
+     * inference-component endpoints (e.g. a base model + LoRA adapters served
+     * as components) — plain InvokeEndpoint fails without it. Leave empty for a
+     * classic single-model endpoint. The IAM grant is widened to the
+     * inference-component resource when this is set.
+     */
+    inferenceComponentName: string;
     /** Max output tokens for the SageMaker chat completion. */
     maxTokens: number;
 }
@@ -354,6 +362,7 @@ export interface SageMakerConfig {
 const DEFAULT_SAGEMAKER_CONFIG: SageMakerConfig = {
     endpointName: "PLACEHOLDER-ai-agent-sagemaker-endpoint",
     regionName: "",
+    inferenceComponentName: "",
     maxTokens: 4096,
 };
 

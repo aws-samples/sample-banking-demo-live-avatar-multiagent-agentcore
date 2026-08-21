@@ -2824,15 +2824,36 @@ def _build_sagemaker_model(endpoint_name: str, temperature: float, max_tokens: i
     serve an OpenAI-compatible chat-completion API (per the Strands SageMaker
     provider); this is what the customer-facing AI Agent runs on when
     `features.sagemaker_model` is enabled.
+
+    Two endpoint traits are handled from env (verified empirically against the
+    demo's Qwen3-8B LoRA endpoint):
+      - Inference-component endpoints REQUIRE an InferenceComponentName header;
+        pass it via `inference_component_name` when SAGEMAKER_INFERENCE_COMPONENT_NAME
+        is set, or InvokeEndpoint fails with a ValidationError.
+      - Qwen3 is a reasoning model that otherwise emits a `<think>…</think>`
+        block (which would be spoken/shown and adds latency). Disable it with
+        vLLM's `chat_template_kwargs={"enable_thinking": false}` unless
+        SAGEMAKER_ENABLE_THINKING is "true".
     """
     from strands.models.sagemaker import SageMakerAIModel
 
     region = os.environ.get("SAGEMAKER_REGION") or os.environ.get("AWS_REGION", "us-east-1")
-    print(f"[CHATBOT] Using SageMaker endpoint: {endpoint_name} ({region})")
-    return SageMakerAIModel(
-        endpoint_config={"endpoint_name": endpoint_name, "region_name": region},
-        payload_config={"max_tokens": max_tokens, "temperature": temperature, "stream": True},
+    endpoint_config: dict = {"endpoint_name": endpoint_name, "region_name": region}
+    inference_component = os.environ.get("SAGEMAKER_INFERENCE_COMPONENT_NAME", "").strip()
+    if inference_component:
+        endpoint_config["inference_component_name"] = inference_component
+
+    payload_config: dict = {"max_tokens": max_tokens, "temperature": temperature, "stream": True}
+    if os.environ.get("SAGEMAKER_ENABLE_THINKING", "false").lower() != "true":
+        # Sent at the top level of the request body; vLLM's OpenAI server forwards
+        # it to the Qwen3 chat template to suppress the <think> reasoning block.
+        payload_config["additional_args"] = {"chat_template_kwargs": {"enable_thinking": False}}
+
+    print(
+        f"[CHATBOT] Using SageMaker endpoint: {endpoint_name} ({region})"
+        f"{f' ic={inference_component}' if inference_component else ''}"
     )
+    return SageMakerAIModel(endpoint_config=endpoint_config, payload_config=payload_config)
 
 
 def _build_chatbot_model(requested_model: str, temperature: float, guardrail_kwargs: dict):

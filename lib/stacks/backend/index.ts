@@ -98,6 +98,7 @@ export class Backend extends Stack {
             enablePromptOptimization: features.prompt_optimization,
             enableSagemakerModel: features.sagemaker_model,
             sagemakerEndpointName: sagemaker.endpointName,
+            sagemakerInferenceComponentName: sagemaker.inferenceComponentName,
             enableAgentCoreIdentity: features.agentcore_identity,
             enableManagedEval: features.bedrock_managed_eval,
             enableAgentCoreEval: features.agentcore_evaluation,
@@ -1473,6 +1474,12 @@ export class Backend extends Stack {
                               SAGEMAKER_ENDPOINT_NAME: sagemaker.endpointName,
                               ...(sagemaker.regionName
                                   ? { SAGEMAKER_REGION: sagemaker.regionName }
+                                  : {}),
+                              ...(sagemaker.inferenceComponentName
+                                  ? {
+                                        SAGEMAKER_INFERENCE_COMPONENT_NAME:
+                                            sagemaker.inferenceComponentName,
+                                    }
                                   : {}),
                               SAGEMAKER_MAX_TOKENS: String(sagemaker.maxTokens),
                           }

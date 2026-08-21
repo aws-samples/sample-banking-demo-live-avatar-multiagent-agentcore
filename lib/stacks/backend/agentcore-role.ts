@@ -48,6 +48,14 @@ export interface AgentCoreRoleProps {
      */
     sagemakerEndpointName?: string;
     /**
+     * Inference component targeted on the endpoint. When set, the
+     * `sagemaker:InvokeEndpoint` grant is widened to the matching
+     * `inference-component/<name>` resource, which inference-component
+     * endpoints authorize against in addition to the endpoint. Ignored when the
+     * flag is off or the endpoint is a classic single-model endpoint.
+     */
+    sagemakerInferenceComponentName?: string;
+    /**
      * AgentCore Identity token path (`features.agentcore_identity`). When true,
      * runtimes are granted the Identity data-plane actions needed to mint
      * Gateway tokens through the token vault (GetWorkloadAccessToken →
@@ -157,13 +165,22 @@ export function createAgentCoreRole(
     // stack never holds a broad SageMaker permission by default. Includes the
     // streaming variant because the Strands SageMakerAIModel streams responses.
     if (props.enableSagemakerModel && props.sagemakerEndpointName) {
+        // InvokeEndpoint against an inference-component endpoint is authorized
+        // against BOTH the endpoint and the inference-component resource, so
+        // include the component ARN when one is configured.
+        const sagemakerResources = [
+            `arn:aws:sagemaker:${Aws.REGION}:${Aws.ACCOUNT_ID}:endpoint/${props.sagemakerEndpointName}`,
+        ];
+        if (props.sagemakerInferenceComponentName) {
+            sagemakerResources.push(
+                `arn:aws:sagemaker:${Aws.REGION}:${Aws.ACCOUNT_ID}:inference-component/${props.sagemakerInferenceComponentName}`
+            );
+        }
         role.addToPolicy(
             new PolicyStatement({
                 effect: Effect.ALLOW,
                 actions: ["sagemaker:InvokeEndpoint", "sagemaker:InvokeEndpointWithResponseStream"],
-                resources: [
-                    `arn:aws:sagemaker:${Aws.REGION}:${Aws.ACCOUNT_ID}:endpoint/${props.sagemakerEndpointName}`,
-                ],
+                resources: sagemakerResources,
             })
         );
     }
