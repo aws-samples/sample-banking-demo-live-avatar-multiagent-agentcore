@@ -26,7 +26,7 @@ const QUESTION_GROUPS: QuestionGroup[] = [
         title: "Products & Rates",
         icon: Landmark,
         questions: [
-            { label: "Savings rate", question: "What is the High-Yield Savings APY?" },
+            { label: "Services catalog", question: "What services do you have in your catalog?" },
             {
                 label: "Compare accounts",
                 question: "Compare Everyday Checking and High-Yield Savings",

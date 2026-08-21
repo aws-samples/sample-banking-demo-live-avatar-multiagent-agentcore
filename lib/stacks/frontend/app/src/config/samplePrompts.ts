@@ -41,7 +41,7 @@ export const SAMPLE_PROMPTS: Record<SamplePromptKey, SamplePrompt[]> = {
         },
     ],
     chatbot: [
-        { label: "Savings rate", question: "What is the High-Yield Savings APY?" },
+        { label: "Services catalog", question: "What services do you have in your catalog?" },
         {
             label: "Compare accounts",
             question: "Compare Everyday Checking and High-Yield Savings",
