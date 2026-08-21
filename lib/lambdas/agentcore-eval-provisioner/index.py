@@ -4,13 +4,15 @@
 """CDK custom-resource handler that provisions AgentCore Evaluations resources.
 
 There is no CloudFormation resource for AgentCore Evaluations, so this Lambda
-calls the preview `bedrock-agentcore-control` create/update/delete APIs on behalf
-of the stack, keeping a custom LLM-as-a-judge evaluator plus an online evaluation
-configuration inside the normal `cdk deploy` / `cdk destroy` lifecycle. The
-online config binds the evaluator to the AI Assistant runtime's live spans
-(``aws/spans`` filtered by service name), so the AgentCore console's
-"Custom evaluators" and "Evaluation configurations" tabs show real, app-tied
-entries and Observability starts scoring sessions.
+calls the `bedrock-agentcore-control` create/update/delete APIs on behalf of the
+stack, keeping a custom LLM-as-a-judge evaluator inside the normal `cdk deploy` /
+`cdk destroy` lifecycle. That evaluator is what the on-demand batch evaluation
+reuses (looked up by name at runtime).
+
+NOTE: This intentionally no longer provisions an online evaluation configuration.
+Online scoring is asynchronous (10-15 min), and the demo only shows the on-demand
+batch evaluation. The Update/Delete paths still delete any online config a prior
+deploy created, so it is cleaned out of the account on the next deploy.
 
 It is intentionally BEST-EFFORT: Evaluations is a preview control-plane API. If
 it is unavailable/denied in the account, this still returns success so the whole
@@ -195,10 +197,14 @@ def _unpack(physical_id: str) -> tuple[str, str]:
 def _on_create() -> dict:
     client = _client()
     ev_name = _safe_name(EVALUATOR_NAME)
-    oe_name = _safe_name(ONLINE_EVAL_NAME)
     try:
         evaluator_id = _create_evaluator(client, ev_name) or _find_evaluator(client, ev_name)
-        online_id = _create_online(client, oe_name, evaluator_id) if evaluator_id else None
+        # Online evaluation config intentionally NOT created: its scores are
+        # asynchronous (10-15 min) and we only demonstrate the on-demand batch
+        # evaluation, which reuses this same custom evaluator (looked up by name
+        # at runtime). The Update/Delete paths still tear down any online config
+        # a previous deploy created, so it is removed from the account too.
+        online_id = None
         if not evaluator_id and not online_id:
             print("[EVAL] nothing provisioned; continuing (deploy not blocked)")
             # Return the attribute keys (empty) even on skip so the stack's
