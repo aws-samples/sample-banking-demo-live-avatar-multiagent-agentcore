@@ -377,21 +377,39 @@ export default function AvatarInterface(): JSX.Element {
         if (!userText || userText === lastUserQuestionRef.current) return;
         lastUserQuestionRef.current = userText;
 
+        let target: { anchor: string; label: string } | null = null;
+
+        // 1) A specific product the site covers → that product's section.
         const item = findActiveItem(userText, catalogSections);
-        if (!item) return; // the customer didn't ask about a site-covered product
-        const section = catalogSections.find((s) => s.items.some((it) => it.name === item));
-        if (!section) return;
-        const anchor = sectionAnchor(section.category);
-        const match = website.sections.find(
-            (ws) =>
-                ws.anchor === anchor || ws.heading.toLowerCase() === section.category.toLowerCase()
-        );
-        if (!match) return;
+        if (item) {
+            const section = catalogSections.find((s) => s.items.some((it) => it.name === item));
+            if (section) {
+                const anchor = sectionAnchor(section.category);
+                const match = website.sections.find(
+                    (ws) =>
+                        ws.anchor === anchor ||
+                        ws.heading.toLowerCase() === section.category.toLowerCase()
+                );
+                if (match) target = { anchor: match.anchor, label: match.heading };
+            }
+        }
+
+        // 2) General "show me your website / services / catalog" intent → offer
+        // the generated services site itself, entering at its first section.
+        if (
+            !target &&
+            /\b(web\s?site|web\s?page|site|catalog(?:ue)?|services?)\b/i.test(userText)
+        ) {
+            const first = website.sections[0];
+            if (first) target = { anchor: first.anchor, label: first.heading };
+        }
+
+        if (!target) return; // the customer didn't ask about the site or a covered product
         // Don't open the site automatically — offer it. The customer confirms
         // via a card in the transcript (or declines and the chat continues).
         // Skip the offer if this exact section is already on screen.
-        if (showcaseTarget?.anchor === match.anchor && !showcaseClosed) return;
-        setPendingShowcase({ anchor: match.anchor, label: match.heading });
+        if (showcaseTarget?.anchor === target.anchor && !showcaseClosed) return;
+        setPendingShowcase(target);
     }, [transcript, website, catalogSections, showcaseTarget, showcaseClosed]);
 
     const showcaseOpen = !!showcaseTarget && !showcaseClosed;
@@ -1626,10 +1644,11 @@ export default function AvatarInterface(): JSX.Element {
             {/* Main content grid — panels are user-resizable (widths persist to localStorage).
                 The PDF column is conditionally rendered; its panel config is only included when present. */}
             <ResizablePanelLayout
-                // Bump the save id to invalidate old (narrow) layouts saved
-                // before the 50/50 default — on 4K screens the prior saved
-                // widths left the avatar canvas cramped.
-                autoSaveId="avatar-v3"
+                // Bump the save id to invalidate stale saved layouts. v4 clears
+                // layouts where the third (services catalog) column had been
+                // squeezed to an ungrabbable sliver at the far-right edge, so
+                // it restores to the sensible default width.
+                autoSaveId="avatar-v4"
                 direction="horizontal"
                 panels={avatarPanels}
                 className="avatar-page__main"

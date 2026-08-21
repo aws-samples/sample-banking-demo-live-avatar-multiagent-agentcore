@@ -166,8 +166,15 @@ the standing-product reference.
 - Example intents: "I'd like to open a checking account", "Enroll me in managed investing", "Start a savings application"
 
 ### Website Generator (gateway_website_generator)
-- Use to generate a static website for ANY topic — a product overview, a research summary,
-  a landing page, a blog-style article. Pick the layout that fits the content:
+- DO NOT call this tool when the user asks to SEE, SHOW, VIEW, OPEN, or PULL UP "your website",
+  "the website", "your site", "the services site", "your services", or "the catalog". Those refer
+  to the services website ALREADY BUILT for this client in the earlier step — the application
+  displays that exact site for the user automatically; you neither generate nor fetch it. For those
+  requests, briefly acknowledge (for example, "Sure — I'll bring up our services site.") and answer
+  any specific product question from gateway_kb_search. NEVER build a new site to satisfy a
+  "show me / view" request — doing so produces a generic page instead of the client's real site.
+- Use this tool ONLY for an explicit request to BUILD or CREATE a NEW website or landing page about
+  a specific topic. Pick the layout that fits the content:
   - layout="landing": product or service landing pages with a hero and feature sections.
     Call with mode="create", title, content={subtitle?, sections:[{heading, body}]}; items
     under a section render as a card grid. Use this for the bank's product overviews.
