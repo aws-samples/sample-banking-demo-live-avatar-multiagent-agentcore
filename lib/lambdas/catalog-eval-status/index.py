@@ -46,14 +46,22 @@ def _split_s3_uri(uri: str) -> tuple[str, str]:
     return bucket, prefix
 
 
+METRIC_NAME = "copy_quality"
+
+
 def _score_from_output(output_s3_uri: str) -> float | None:
     """Read a completed job's S3 output and return the mean copy_quality score
-    (0-100), or None if it cannot be determined.
+    on a 0-100 scale, or None if it cannot be determined.
 
-    Bedrock writes evaluation results as JSONL under the output prefix. Each
-    record carries the per-metric result; the exact field layout varies by
-    metric type, so this scans defensively for the numeric score attached to the
-    ``copy_quality`` custom metric and averages across records.
+    Verified output shape (one JSON object per line under
+    ``.../models/<id>/taskTypes/General/datasets/<name>/<uuid>_output.jsonl``):
+
+        {"automatedEvaluationResult": {"scores": [
+            {"metricName": "copy_quality", "result": 1.0, "evaluatorDetails": [...]}
+        ]}, "inputRecord": {...}, "modelResponses": [...]}
+
+    ``result`` is normalized to 0-1 (our two-point excellent/poor scale yields
+    1.0 / 0.0), so the mean is scaled to 0-100 for display.
     """
     try:
         bucket, prefix = _split_s3_uri(output_s3_uri)
@@ -61,12 +69,12 @@ def _score_from_output(output_s3_uri: str) -> float | None:
         token: dict = {}
         while True:
             resp = _s3.list_objects_v2(Bucket=bucket, Prefix=prefix, **token)
-            keys.extend(o["Key"] for o in resp.get("Contents", []) if o["Key"].endswith(".jsonl"))
+            keys.extend(o["Key"] for o in resp.get("Contents", []) if o["Key"].endswith("_output.jsonl"))
             if not resp.get("IsTruncated"):
                 break
             token = {"ContinuationToken": resp["NextContinuationToken"]}
 
-        scores: list[float] = []
+        results: list[float] = []
         for key in keys:
             body = _s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8", "replace")
             for line in body.splitlines():
@@ -77,56 +85,21 @@ def _score_from_output(output_s3_uri: str) -> float | None:
                     rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                val = _extract_metric_score(rec, "copy_quality")
-                if val is not None:
-                    scores.append(val)
-        if not scores:
+                for sc in (rec.get("automatedEvaluationResult") or {}).get("scores", []) or []:
+                    if sc.get("metricName") != METRIC_NAME:
+                        continue
+                    val = sc.get("result")
+                    if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        results.append(float(val))
+        if not results:
             return None
-        return round(sum(scores) / len(scores), 1)
+        mean = sum(results) / len(results)
+        # result is 0-1 for our scale; scale to 0-100. Guard against a job that
+        # ever returns raw 0-100 by only scaling when clearly a fraction.
+        return round(mean * 100, 1) if mean <= 1.0 else round(mean, 1)
     except Exception as exc:  # noqa: BLE001 - best effort
         logger.warning("score parse failed for %s: %s", output_s3_uri, exc)
         return None
-
-
-def _extract_metric_score(rec: object, metric_name: str) -> float | None:
-    """Depth-first search for a numeric score attached to ``metric_name`` in a
-    Bedrock evaluation output record. Handles the common shapes without pinning
-    to one exact layout (finalized against a real completed job)."""
-
-    def _num(v: object) -> float | None:
-        if isinstance(v, bool):
-            return None
-        if isinstance(v, (int, float)):
-            return float(v)
-        if isinstance(v, str):
-            try:
-                return float(v)
-            except ValueError:
-                return None
-        return None
-
-    def walk(node: object, near_metric: bool) -> float | None:
-        if isinstance(node, dict):
-            name = node.get("metricName") or node.get("name")
-            here = near_metric or (isinstance(name, str) and name == metric_name)
-            if here:
-                for k in ("value", "score", "result", "floatValue", "numericValue"):
-                    if k in node:
-                        n = _num(node[k])
-                        if n is not None:
-                            return n
-            for v in node.values():
-                r = walk(v, here)
-                if r is not None:
-                    return r
-        elif isinstance(node, list):
-            for v in node:
-                r = walk(v, near_metric)
-                if r is not None:
-                    return r
-        return None
-
-    return walk(rec, False)
 
 
 def _job_entry(job_arn: str) -> dict:
