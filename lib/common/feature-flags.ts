@@ -334,10 +334,12 @@ export function getTavusConfig(node: Node): TavusConfig {
 
 export interface SageMakerConfig {
     /**
-     * Name of the SageMaker inference endpoint the AI Agent invokes when
-     * `features.sagemaker_model` is on. This is a PLACEHOLDER by default — point
-     * it at a real deployed endpoint before enabling the flag. The IAM grant is
-     * scoped to this exact name.
+     * SageMaker inference endpoint the AI Agent invokes when
+     * `features.sagemaker_model` is on. Accepts either the bare endpoint NAME or
+     * a full endpoint ARN (`arn:aws:sagemaker:<region>:<acct>:endpoint/<name>`);
+     * `getSageMakerConfig` normalizes an ARN down to the name. PLACEHOLDER by
+     * default — point it at a real deployed endpoint before enabling the flag.
+     * The IAM grant is scoped to this endpoint.
      */
     endpointName: string;
     /**
@@ -357,7 +359,23 @@ const DEFAULT_SAGEMAKER_CONFIG: SageMakerConfig = {
 
 export function getSageMakerConfig(node: Node): SageMakerConfig {
     const sagemaker = node.tryGetContext("sagemaker") ?? {};
-    return { ...DEFAULT_SAGEMAKER_CONFIG, ...sagemaker };
+    const merged: SageMakerConfig = { ...DEFAULT_SAGEMAKER_CONFIG, ...sagemaker };
+    // Accept either a bare endpoint name or a full endpoint ARN in
+    // `endpointName`. Both the IAM grant (scoped as
+    // `arn:aws:sagemaker:<region>:<acct>:endpoint/<name>`) and the runtime's
+    // `invoke_endpoint` call need the bare NAME, so normalize an ARN
+    // (arn:aws:sagemaker:<region>:<acct>:endpoint/<name>) down to its final
+    // path segment. When a region wasn't set explicitly, derive it from the ARN
+    // so the runtime targets the endpoint's actual region.
+    const raw = String(merged.endpointName || "");
+    if (raw.startsWith("arn:")) {
+        merged.endpointName = raw.split("/").pop() || raw;
+        const parts = raw.split(":");
+        if (!merged.regionName && parts.length > 3 && parts[3]) {
+            merged.regionName = parts[3];
+        }
+    }
+    return merged;
 }
 
 export function getStackNameBase(node: Node): string {
