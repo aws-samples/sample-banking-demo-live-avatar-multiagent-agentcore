@@ -1,6 +1,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import base64
 import io
 import json
 import logging
@@ -44,9 +45,7 @@ def _record_website_run(user_id: str, s3_key: str, title: str, section_names: li
     logged rather than raised.
     """
     if not METADATA_TABLE or not user_id:
-        logger.info(
-            "Skipping website run record (table=%s, user=%s)", bool(METADATA_TABLE), bool(user_id)
-        )
+        logger.info("Skipping website run record (table=%s, user=%s)", bool(METADATA_TABLE), bool(user_id))
         return
 
     now = datetime.now(timezone.utc)
@@ -83,6 +82,63 @@ def _get_image_url(s3_key: str, image_url: str = "") -> str:
     except Exception:
         logger.warning("Failed to generate presigned URL for: %s", s3_key, exc_info=True)
     return image_url or ""
+
+
+_IMG_CONTENT_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "gif": "image/gif",
+    "svg": "image/svg+xml",
+}
+
+
+def _content_type_for(s3_key: str) -> str:
+    ext = s3_key.rsplit(".", 1)[-1].lower() if "." in s3_key else "png"
+    return _IMG_CONTENT_TYPES.get(ext, "image/png")
+
+
+def _embed_images_as_data_uris(html: str) -> str:
+    """Rewrite each ``<img data-s3-key=...>`` src to a base64 data URI.
+
+    The generated site is stored in S3 and viewed via a short-lived presigned
+    URL. Its images were previously ``<img src="<presigned URL>">`` minted with
+    a 1-hour expiry, so opening the site later (or after the view link is
+    re-signed) showed broken images. Inlining the bytes makes the site fully
+    self-contained — the images never depend on a separate URL that can expire.
+
+    The durable ``data-s3-key`` attribute is preserved so the update /
+    add_images flows can still re-resolve images later. Best-effort per image:
+    a fetch failure leaves that tag's src untouched.
+    """
+    if not IMAGES_BUCKET:
+        return html
+    cache: dict[str, str | None] = {}
+
+    def _data_uri(s3_key: str) -> str | None:
+        if s3_key in cache:
+            return cache[s3_key]
+        try:
+            raw = s3_client.get_object(Bucket=IMAGES_BUCKET, Key=s3_key)["Body"].read()
+            uri = f"data:{_content_type_for(s3_key)};base64,{base64.b64encode(raw).decode('ascii')}"
+        except Exception:
+            logger.warning("Failed to embed image %s", s3_key, exc_info=True)
+            uri = None
+        cache[s3_key] = uri
+        return uri
+
+    def _replace(match: re.Match) -> str:
+        tag = match.group(0)
+        key_match = re.search(r'data-s3-key="([^"]+)"', tag)
+        if not key_match:
+            return tag
+        uri = _data_uri(key_match.group(1))
+        if not uri:
+            return tag
+        return re.sub(r'src="[^"]*"', f'src="{uri}"', tag, count=1)
+
+    return re.sub(r'<img\s[^>]*data-s3-key="[^"]*"[^>]*/?\s*>', _replace, html)
 
 
 def _zip_key_for(html_key: str) -> str:
@@ -143,10 +199,14 @@ def _upload_html(html: str, s3_key: str, user_id: str = "", layout: str = "artic
     # `website` pipeline (not the menu pipeline — that was the old bug that made every
     # generated site look like a menu when searched via the chatbot).
     pipeline_tag = "menu_website" if layout == "menu" else "website"
+    # Inline images as base64 so the stored/served site is self-contained and
+    # its images never depend on a presigned URL that expires (the cause of the
+    # broken thumbnails when a site was viewed after generation).
+    served_html = _embed_images_as_data_uris(html)
     s3_client.put_object(
         Bucket=REPORTS_BUCKET,
         Key=s3_key,
-        Body=html.encode("utf-8"),
+        Body=served_html.encode("utf-8"),
         ContentType="text/html",
         Metadata={
             "generated_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -585,9 +645,11 @@ def _inject_images(new_html: str, image_map: dict[str, str]) -> str:
 
 
 def _strip_presigned_urls(html: str) -> str:
-    """Replace presigned URLs with placeholder to reduce tokens for Bedrock, keep data-s3-key."""
+    """Replace image srcs with a placeholder to reduce tokens for Bedrock, keeping
+    data-s3-key. Handles both presigned https URLs and inlined base64 data URIs —
+    the latter would otherwise send megabytes of image data through the model."""
     return re.sub(
-        r'(<img\s[^>]*?)src="https://[^"]*"([^>]*data-s3-key="[^"]*")',
+        r'(<img\s[^>]*?)src="(?:https://|data:)[^"]*"([^>]*data-s3-key="[^"]*")',
         r'\1src="PLACEHOLDER"\2',
         html,
     )
