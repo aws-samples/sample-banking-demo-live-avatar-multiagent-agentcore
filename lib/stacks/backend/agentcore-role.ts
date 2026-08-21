@@ -364,6 +364,21 @@ export function createAgentCoreRole(
                 resources: ["*"],
             })
         );
+        // StartBatchEvaluation creates its results log group and sets a
+        // retention policy on it, so the FAS credentials also need
+        // logs:PutRetentionPolicy. Without it the launch fails with:
+        //   "FAS credentials do not have permission to set log group retention
+        //    policy. Ensure logs:PutRetentionPolicy is in the FAS policy."
+        // Scoped to the AgentCore evaluations results log groups it manages.
+        role.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ["logs:PutRetentionPolicy"],
+                resources: [
+                    `arn:aws:logs:${Aws.REGION}:${Aws.ACCOUNT_ID}:log-group:/aws/bedrock-agentcore/evaluations/*`,
+                ],
+            })
+        );
     }
 
     // Runtime-to-runtime invocation
