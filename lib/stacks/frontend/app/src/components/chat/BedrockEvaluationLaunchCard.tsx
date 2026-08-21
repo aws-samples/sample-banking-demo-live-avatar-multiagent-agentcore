@@ -198,11 +198,9 @@ export function BedrockEvaluationLaunchCard({
                                 {metric ? ` on the “${metric}” rubric` : ""}.
                             </Box>
                             <Box variant="small" color="text-body-secondary">
-                                Full scorecards live in the <strong>Amazon Bedrock</strong> console
-                                →{" "}
+                                Full scorecards live in the AWS console →{" "}
                                 <em>Inference and assessment → Evaluations → Model evaluations</em>
-                                {region ? ` (${region})` : ""} — separate from the AgentCore
-                                evaluations page.
+                                {region ? ` (${region})` : ""}.
                             </Box>
                         </>
                     ) : (
