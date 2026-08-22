@@ -174,7 +174,6 @@ export function BedrockEvaluationLaunchCard({
     judgeModel,
     metric,
     region,
-    consoleUrl,
     itemCount,
     message,
     jobs = [],
@@ -261,18 +260,6 @@ export function BedrockEvaluationLaunchCard({
                                     ? "Evaluation complete — scores below, and full scorecards in the Bedrock console."
                                     : `${launched.length} model-as-a-judge job${launched.length === 1 ? "" : "s"} running on Amazon Bedrock. Tracking live…`
                                 : "The managed evaluation could not be launched."
-                        }
-                        actions={
-                            consoleUrl ? (
-                                <Button
-                                    iconName="external"
-                                    href={consoleUrl}
-                                    target="_blank"
-                                    ariaLabel="Open Bedrock evaluations in the AWS console"
-                                >
-                                    Open in Bedrock console
-                                </Button>
-                            ) : undefined
                         }
                     >
                         <span className="flex items-center gap-2">
