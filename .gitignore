@@ -15,19 +15,13 @@ cdk.out
 *.env
 .env*
 
-# Generative architecture toolkit
-tools/generative-architecture/outputs/
-tools/generative-architecture/genai_architect.py
-tools/generative-architecture/research_agent_architecture.png
-tools/generative-architecture/gartner_appdev_2026_architecture.png
-
-# Generated architecture artifacts at repo root (regenerable via `npm run diagram`)
+# Generated architecture artifacts at repo root
 /architecture.*
 /architecture-diagram.*
 /export.zip
 
 # Gartner-RESTRICTED reference material — never commit.
-# This repo is built for external export (see tools/export.ts), so these stay local.
+# This branch is the external customer build, so these stay local.
 docs/Welcome Packet for Magic Quadrant.pdf
 docs/Magic-Quadrant-and-Critical-Capabilities.xlsx
 docs/Vendor Demonstration Guidelines*.pdf

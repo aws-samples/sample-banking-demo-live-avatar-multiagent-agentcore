@@ -7,14 +7,6 @@ export type KbBackend = "s3-vectors" | "opensearch";
 export interface FeatureFlags {
     avatar: boolean;
     /**
-     * LiveKit voice path. When true, deploys the self-hosted LiveKit stack
-     * (VPC + ECS Fargate LiveKit server + Nova Sonic 2 agent worker + token
-     * API) and the frontend connects the Relationship Manager over WebRTC
-     * instead of the AgentCore avatar WebSocket. Independent of `avatar`
-     * during the migration; once proven, `avatar` can be turned off.
-     */
-    livekit: boolean;
-    /**
      * Tavus video-avatar path. When true, deploys the self-hosted Pipecat +
      * Nova Sonic worker (ECS Fargate) and its Cognito-authorized offer API, and
      * the frontend's "Realistic" avatar becomes a server-rendered Tavus video
@@ -34,7 +26,7 @@ export interface FeatureFlags {
     browser: boolean;
     sample_tool: boolean;
     /**
-     * AgentCore Payments (preview) for the Deep Research Agent.
+     * AgentCore Payments for the Deep Research Agent (GA since August 2026).
      *
      * When true, deploys a PaymentManager plus a SELF-HOSTED x402 merchant
      * (API Gateway + Lambda serving synthetic premium market data) so the
@@ -43,20 +35,22 @@ export interface FeatureFlags {
      * the merchant in-stack is what lets the demo stay self-contained: no
      * external API, no real funds, deploy and destroy with plain CDK.
      *
-     * Defaults to FALSE because AgentCore Payments is a preview service whose
-     * APIs may change before GA, and because a live payment path needs a
-     * funded (testnet) wallet the operator has to supply.
+     * Defaults to FALSE because a live payment path needs a funded (testnet)
+     * wallet the operator has to supply, not because the service is unavailable.
      */
     payments: boolean;
     /**
-     * AgentCore Policy engine on the Gateway. When true, provisions a Cedar
-     * policy engine associated with the Gateway that evaluates every tool call
-     * for authorization. Ships in LOG_ONLY mode — it records allow/deny traces
-     * on real traffic WITHOUT enforcing, which is the AWS-recommended way to
-     * validate policies before flipping to ENFORCE (ENFORCE is default-deny, so
-     * it must not be enabled until a complete permit set + per-agent identities
-     * are in place). Defaults to true; set false to skip if the preview
-     * PolicyEngine resource is unavailable in the target account.
+     * AgentCore Policy engine on the Gateway (GA since March 2026). When true,
+     * provisions a Cedar policy engine associated with the Gateway that
+     * evaluates every tool call for authorization. Ships in LOG_ONLY mode — it
+     * records allow/deny traces on real traffic WITHOUT enforcing, which is the
+     * AWS-recommended way to validate policies before flipping to ENFORCE
+     * (ENFORCE is default-deny, so it must not be enabled until a complete
+     * permit set + per-agent identities are in place). Defaults to true.
+     *
+     * NOTE: Cedar policies must constrain the resource to a specific
+     * AgentCore::Gateway resource or resource type — a wildcard resource is
+     * rejected by CreatePolicy, even with IGNORE_ALL_FINDINGS.
      */
     policy: boolean;
     /**
@@ -67,14 +61,16 @@ export interface FeatureFlags {
      */
     policyMode: "LOG_ONLY" | "ENFORCE";
     /**
-     * AgentCore Harness (managed agent loop). When true, provisions a small
-     * customer-facing "Quick Assistant" harness via a CDK custom resource so the
-     * Harness console page shows a real managed agent alongside the Runtime
-     * agents. It is additive (a new external experience), not a conversion of
-     * any existing agent, and has no in-app UI — it exists to demonstrate the
-     * config-only managed-loop build path. Provisioning is best-effort: if the
-     * preview control-plane API is unavailable in the account, the deploy still
-     * succeeds and the entry simply does not appear. Defaults to true.
+     * AgentCore Harness — the managed agent loop (GA since June 2026). When
+     * true, provisions a small customer-facing "Quick Assistant" harness via a
+     * CDK custom resource so the Harness console page shows a real managed agent
+     * alongside the Runtime agents. It is additive (a new external experience),
+     * not a conversion of any existing agent, and has no in-app UI — it exists
+     * to demonstrate the config-only managed-loop build path. There is no
+     * CloudFormation resource type for Harness, so it is provisioned through a
+     * custom resource that calls Create/Update/DeleteHarness. Provisioning is
+     * best-effort: if the API is unavailable in the deploy region, the deploy
+     * still succeeds and the entry simply does not appear. Defaults to true.
      */
     harness: boolean;
     /**
@@ -150,7 +146,7 @@ export interface FeatureFlags {
      */
     kb_multimodal: boolean;
     /**
-     * AWS Agent Registry (preview) publishing. When true, deploys a Lambda-backed
+     * AWS Agent Registry publishing (limited availability). When true, deploys a Lambda-backed
      * CloudFormation custom resource that, at deploy, creates an AWS Agent
      * Registry (AWS_IAM discovery) and publishes APPROVED AGENT records for the
      * demo's A2A agents (the Fraud & Research agent, and — when
@@ -163,9 +159,12 @@ export interface FeatureFlags {
      * blocked. When false, none of the registry resources are created, so the
      * demo still deploys and destroys cleanly.
      *
-     * Defaults to FALSE because the AWS Agent Registry is a preview service whose
-     * control-plane APIs may change before GA (and require a boto3 newer than the
-     * Lambda runtime's built-in, which the custom resource bundles).
+     * Defaults to FALSE: unlike the other AgentCore services this one is not
+     * broadly available — it is absent from several AgentCore GA regions and
+     * access is gated, so a customer deploy would create nothing and silently
+     * show an empty registry. Enable it only in a region/account where AWS Agent
+     * Registry is available. (It also needs a boto3 newer than the Lambda
+     * runtime's built-in, which the custom resource bundles.)
      */
     agent_registry: boolean;
     /**
@@ -179,7 +178,7 @@ export interface FeatureFlags {
      * active use. The resulting bearer is the SAME Cognito JWT the Gateway
      * already accepts, and the agent code automatically falls back to the
      * direct-Cognito path on any Identity failure, so enabling this cannot
-     * break tool calls. Defaults to FALSE.
+     * break tool calls. AgentCore Identity is GA. Defaults to TRUE.
      */
     agentcore_identity: boolean;
     /**
@@ -209,21 +208,20 @@ export interface FeatureFlags {
      * + a self-scoped `iam:PassRole`, and the frontend surfaces the button
      * (`VITE_BEDROCK_MANAGED_EVAL_ENABLED`). When false, the mode is rejected,
      * the IAM actions are not added, and the button is hidden — so the demo
-     * still deploys and destroys cleanly. Defaults to FALSE.
+     * still deploys and destroys cleanly. Defaults to TRUE.
      */
     bedrock_managed_eval: boolean;
     /**
-     * AgentCore Evaluations for the AI Assistant. When true, a custom-resource
-     * provisioner creates a custom LLM-as-a-judge evaluator plus an online
-     * evaluation configuration that scores the AI Assistant runtime's live spans
-     * (from CloudWatch `aws/spans`, filtered by service name) — populating the
-     * AgentCore console's "Custom evaluators" and "Evaluation configurations"
-     * tabs and feeding AgentCore Observability. This is the foundation of the
-     * AgentCore evaluation/optimization/A-B story (Option B). Requires per-runtime
-     * Tracing + CloudWatch Transaction Search to be enabled so spans exist.
-     * Provisioning is best-effort (preview control-plane API): if unavailable,
-     * the deploy still succeeds and the entries simply do not appear. Defaults to
-     * FALSE.
+     * AgentCore Evaluations for the AI Assistant (GA since March 2026). When
+     * true, a custom-resource provisioner creates a custom LLM-as-a-judge
+     * evaluator plus an online evaluation configuration that scores the AI
+     * Assistant runtime's live spans (from CloudWatch `aws/spans`, filtered by
+     * service name) — populating the AgentCore console's "Custom evaluators" and
+     * "Evaluation configurations" tabs and feeding AgentCore Observability.
+     * Requires per-runtime Tracing + CloudWatch Transaction Search to be enabled
+     * so spans exist. Provisioning is best-effort: if the API is unavailable in
+     * the deploy region, the deploy still succeeds and the entries simply do not
+     * appear. Defaults to TRUE.
      */
     agentcore_evaluation: boolean;
 }
@@ -243,7 +241,6 @@ export interface ModelConfig {
 
 const DEFAULT_FEATURES: FeatureFlags = {
     avatar: true,
-    livekit: false,
     tavus_avatar: false,
     knowledge_base: true,
     kb_backend: "s3-vectors",
@@ -261,14 +258,14 @@ const DEFAULT_FEATURES: FeatureFlags = {
     harness: true,
     a2a: true,
     a2a_parallel_research: false,
-    prompt_optimization: false,
+    prompt_optimization: true,
     sagemaker_model: false,
     kb_multimodal: false,
     agent_registry: false,
-    agentcore_identity: false,
+    agentcore_identity: true,
     managed_web_search: false,
-    bedrock_managed_eval: false,
-    agentcore_evaluation: false,
+    bedrock_managed_eval: true,
+    agentcore_evaluation: true,
 };
 
 const DEFAULT_MODELS: ModelConfig = {

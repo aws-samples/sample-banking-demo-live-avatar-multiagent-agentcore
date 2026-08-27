@@ -6,7 +6,6 @@ import { AgentRegistry, AgentRegistryAgent } from "./stacks/agent-registry";
 import { Auth } from "./stacks/auth";
 import { Backend } from "./stacks/backend";
 import { Frontend, FrontendDeployment } from "./stacks/frontend";
-import { LiveKit } from "./stacks/livekit";
 import { Shared } from "./stacks/shared";
 import { TavusAvatar } from "./stacks/tavus-avatar";
 
@@ -30,16 +29,6 @@ export class ApplicationStage extends Stage {
         });
         backend.addDependency(shared);
         backend.addDependency(auth);
-
-        // LiveKit voice path (Option 1 — LiveKit Cloud + Fargate worker).
-        // Gated on the `livekit` flag; depends on backend for the gateway_url
-        // SSM param the worker reads at runtime.
-        let livekit: LiveKit | undefined;
-        if (features.livekit) {
-            livekit = new LiveKit(this, "LiveKit", { auth });
-            livekit.addDependency(auth);
-            livekit.addDependency(backend);
-        }
 
         // Tavus video-avatar path (Strategy A — parallel Pipecat + Nova Sonic
         // worker). Gated on the `tavus_avatar` flag; depends on backend for the
@@ -259,14 +248,6 @@ export class ApplicationStage extends Stage {
             VITE_COGNITO_REDIRECT_URI: frontend.urls[0],
             VITE_COGNITO_POST_LOGOUT_REDIRECT_URI: frontend.urls[0],
             VITE_COGNITO_SCOPE: "email openid profile",
-            // Federated IdP — when midway is enabled, the AmazonFederate OIDC provider is
-            // registered on the user pool client (see FederateUserPoolClient). Surfacing the
-            // provider name to the frontend lets us pass identity_provider=AmazonFederate on
-            // signinRedirect so Cognito's Hosted UI skips the IdP chooser and jumps straight
-            // to Midway.
-            ...(this.node.getContext("accounts")?.[this.stageName ?? ""]?.midway
-                ? { VITE_COGNITO_IDENTITY_PROVIDER: "AmazonFederate" }
-                : {}),
             // Backend runtime ARNs (cross-stack references). One per agent
             // experience; the frontend picks the ARN by mode. ORCHESTRATOR is
             // kept as a back-compat alias pointing at the Deep Research runtime.
@@ -279,9 +260,6 @@ export class ApplicationStage extends Stage {
                 : {}),
             VITE_FEEDBACK_API_URL: backend.feedbackApiUrl,
             VITE_GATEWAY_URL: backend.gatewayUrl,
-            // LiveKit token endpoint — the browser POSTs here (with its Cognito
-            // JWT) to get a room token + LiveKit Cloud server URL.
-            ...(features.livekit && livekit ? { VITE_LIVEKIT_TOKEN_URL: livekit.tokenApiUrl } : {}),
             // Tavus offer endpoint — the browser POSTs here (with its Cognito
             // JWT) to start a Tavus video-avatar session. Presence of this var
             // is what makes the "Realistic" (Tavus) picker entry appear.

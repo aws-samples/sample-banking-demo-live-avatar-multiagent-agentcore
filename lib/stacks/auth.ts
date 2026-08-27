@@ -17,8 +17,6 @@ import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { CfnWebACL, CfnWebACLAssociation } from "aws-cdk-lib/aws-wafv2";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
-// @export {"deleteLines": 1}
-import { FederateUserPool, FederateUserPoolClient } from "../common/constructs/federate";
 import { Stack } from "../common/constructs/stack";
 import { getAdminUserEmail, getFeatureFlags, getStackNameBase } from "../common/feature-flags";
 import { createManagedRules } from "../common/utilities";
@@ -55,10 +53,8 @@ export class Auth extends Stack {
         const adminUserEmail = getAdminUserEmail(this.node);
         const features = getFeatureFlags(this.node);
 
-        // @export {"replace": "FederateUserPool", "with": "UserPool"}
-        const userPool = new FederateUserPool(this, "UserPool", {
-            // @export {"replace": "false,", "with": "true,"}
-            selfSignUpEnabled: false,
+        const userPool = new UserPool(this, "UserPool", {
+            selfSignUpEnabled: true,
             signInAliases: {
                 email: true,
             },
@@ -117,8 +113,7 @@ export class Auth extends Stack {
         });
 
         const tokenValidity = Duration.hours(8);
-        // @export {"replace": "FederateUserPoolClient", "with": "UserPoolClient"}
-        const userPoolClient = new FederateUserPoolClient(this, "UserPoolClient", {
+        const userPoolClient = new UserPoolClient(this, "UserPoolClient", {
             userPool,
             refreshTokenValidity: tokenValidity,
             accessTokenValidity: tokenValidity,
@@ -367,8 +362,7 @@ export class Auth extends Stack {
             webAclArn: regionalWebAclArn,
         });
 
-        // ─── User Pool Domain ─────────────────────────────────────────
-        // @export {"deleteLines": 1}
+        // ─── User Pool Domain (Cognito Hosted UI for OAuth code flow) ──
         const userPoolDomain = userPool.addDomain("UserPoolDomain", {
             cognitoDomain: {
                 domainPrefix: `${stackNameBase}-${Aws.ACCOUNT_ID}-${Aws.REGION}`,

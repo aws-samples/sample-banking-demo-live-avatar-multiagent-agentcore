@@ -4,17 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Multi-agent research platform built on Amazon Bedrock AgentCore + Strands Agents SDK + React 19. Two AgentCore Runtimes (orchestrator + avatar), an MCP Gateway with Lambda tools, multi-agent research pipelines, Knowledge Base (S3 Vectors), AgentCore Memory, Bedrock Guardrails, and a Cloudscape + Tailwind frontend. Deployed as 5 CDK stacks.
+Multi-agent research platform built on Amazon Bedrock AgentCore + Strands Agents SDK + React 19. AgentCore Runtimes (orchestrator + avatar + A2A fraud research), an MCP Gateway with Lambda tools, multi-agent research pipelines, Knowledge Base (S3 Vectors), AgentCore Memory/Identity/Policy/Evaluations/Harness, Bedrock Guardrails, and a Cloudscape + Tailwind frontend.
+
+> **This is the `mvp` branch** — the customer-deployable build. Internal-only
+> tooling (the `kit` CLI, the `@export` processor, diagram/doc generators) and the
+> Midway `Federate` Cognito constructs have been removed, and the LiveKit voice
+> path is gone. Auth is standard Cognito with self sign-up. Deploy with plain CDK.
 
 ## Common Commands
 
 ```bash
 npm install                      # Install all deps (also sets up Python venv via uv, installs ruff)
-npm run kit                      # Interactive CLI for all operations (credentials, deploy, destroy, etc.)
-npm run kit -- deploy [stage] --all   # Deploy all stacks headlessly
-npm run kit -- synth [stage]          # Synthesize + cdk-nag validation
-npm run kit -- hotswap [stage] --all  # Fast Lambda/asset deployment
-npm run kit -- destroy [stage]        # Destroy stacks (interactive selection)
+npm run cdk -- bootstrap              # One-time per account/region
+npm run cdk -- deploy "*/**" -c stage=dev   # Deploy all stacks
+npm run cdk -- synth -c stage=dev           # Synthesize + cdk-nag validation
+npm run cdk -- destroy "*/**" -c stage=dev  # Destroy stacks
 npm run build                    # TypeScript compilation (tsc)
 npm run test                     # Jest tests (from test/ directory)
 npm run lint                     # ESLint + ruff check
@@ -22,19 +26,24 @@ npm run format                   # Prettier + ruff format
 npm run commit                   # Interactive conventional commit (commitizen)
 npm run -w frontend dev          # Vite dev server on :3000
 npm run -w frontend build        # Build frontend (tsc -b && vite build)
-npm run cdk -- <command>         # Direct CDK CLI (pinned to 2.1108.0)
+npm run cdk -- <command>         # Direct CDK CLI (pinned to 2.1121.0)
 ```
+
+`bin/app.ts` falls back to `CDK_DEFAULT_ACCOUNT` / `CDK_DEFAULT_REGION` (default
+`us-east-1`) when `cdk.json` leaves `accounts.{stage}.id` null, so a deploy works
+against whatever credentials are active without editing config.
 
 ## Architecture
 
-### CDK 5-Stack Pattern
+### CDK Stack Pattern
 
 ```
 bin/app.ts → lib/stage.ts (ApplicationStage)
   ├── Frontend         — S3 + CloudFront (OAC) + WAF (CloudFront scope)
   ├── Auth             — Cognito User Pool/Client/Identity Pool + M2M OAuth2 + WAF (Regional)
   ├── Shared           — DynamoDB (3 tables) + S3 (4 buckets) + Knowledge Base (S3 Vectors) + Neptune (optional)
-  ├── Backend          — AgentCore Gateway (MCP, 17 tools) + 2 Runtimes + Memory + Guardrails + Feedback API
+  ├── Backend          — AgentCore Gateway (MCP tools) + Runtimes + Memory + Identity + Policy + Evaluations + Harness + Guardrails + Feedback API
+  ├── TavusAvatar      — [flag: tavus_avatar] ECS Fargate Pipecat worker + Cognito-authorized offer API
   └── FrontendDeployment — CodeBuild builds React app in-cloud, deploys to S3
 ```
 
@@ -182,7 +191,7 @@ React 19 + Vite 7 + TypeScript with Cloudscape Design System, Tailwind v4, Frame
 
 Pages: Home, Research, Menu, Chat, Avatar. SSE streaming via `AgentCoreClient` + `useChatEngine`. Avatar uses separate WebSocket client (`AvatarWebSocketClient`).
 
-Environment variables injected via CodeBuild at deploy time (prefixed with `VITE_`). For local dev, `npm run kit -- refresh-frontend [stage]` generates a `.env` file.
+Environment variables injected via CodeBuild at deploy time (prefixed with `VITE_`). For local dev, create a `.env` in the frontend workspace from the deployed stack outputs.
 
 ### Property Injectors (Blueprints)
 
@@ -205,7 +214,6 @@ lib/stacks/backend/index.ts         # Gateway, Runtimes, Memory, Guardrails, Fee
 lib/stacks/backend/agentcore-role.ts # Shared IAM role for both runtimes
 lib/stacks/frontend/                # S3 + CloudFront + CodeBuild deployment
 lib/common/constructs/stack.ts      # Custom Stack base class (auto projectId prefix)
-lib/common/constructs/federate/     # FederateUserPool/Client (Midway support)
 
 patterns/orchestrator-agent/        # In-process multi-agent orchestrator (6 modes)
 patterns/planner-agent/             # Research plan decomposition
@@ -216,8 +224,6 @@ patterns/avatar-agent/              # BidiAgent + Nova Sonic WebSocket
 patterns/utils/                     # auth.py, ssm.py, heartbeat.py, responses_api.py, tool_guard.py (UserScopeHook), pipeline_scope.py (PipelineScopeHook + MODE_PIPELINE_CONFIG)
 
 gateway/tools/{name}/               # Lambda tool handlers (handler.py + tool_spec.json)
-tools/kit.ts                        # Interactive CLI (deploy, synth, destroy, credentials)
-tools/export.ts                     # @export directive processor
 ```
 
 ## Configuration
@@ -226,26 +232,41 @@ tools/export.ts                     # @export directive processor
 
 - `projectId`: Resource naming prefix (< 15 chars)
 - `stackNameBase`: AgentCore naming prefix (< 35 chars)
-- `accounts`: Stage → `{ id, region, midway? }` mapping
+- `accounts`: Stage → `{ id, region }` mapping (`id: null` → use deployer's account)
 - `adminUserEmail`: Auto-create Cognito admin user (null to skip)
 - `features`: Feature flag object (see below)
 - `models`: Model ID overrides
 
 ### Feature Flags (`features` in cdk.json)
 
-| Flag                     | Default      | Controls                                              |
-| ------------------------ | ------------ | ----------------------------------------------------- |
-| `avatar`                 | true         | Avatar Runtime (Nova Sonic)                           |
-| `knowledge_base`         | true         | Bedrock KB deployment                                 |
-| `kb_backend`             | "s3-vectors" | KB storage backend (`s3-vectors` or `opensearch`)     |
-| `neptune`                | false        | Neptune Analytics (~$8/hr)                            |
-| `episodic_memory`        | true         | AgentCore episodic memory strategy                    |
-| `semantic_memory`        | true         | Semantic memory strategy                              |
-| `user_preference_memory` | true         | User preference memory strategy                       |
-| `durable_functions`      | false        | Lambda Durable Functions (research_orchestrator tool) |
-| `guardrails`             | true         | Bedrock Guardrails (chatbot mode)                     |
-| `browser`                | true         | AgentCore Browser tool (3D kitchen monitor)           |
-| `sample_tool`            | false        | Throwaway word-counter tool registered with Gateway   |
+| Flag                     | Default      | Controls                                               |
+| ------------------------ | ------------ | ------------------------------------------------------ |
+| `avatar`                 | true         | Avatar Runtime (Nova Sonic)                            |
+| `knowledge_base`         | true         | Bedrock KB deployment                                  |
+| `kb_backend`             | "s3-vectors" | KB storage backend (`s3-vectors` or `opensearch`)      |
+| `neptune`                | false        | Neptune Analytics (~$8/hr)                             |
+| `episodic_memory`        | true         | AgentCore episodic memory strategy                     |
+| `semantic_memory`        | true         | Semantic memory strategy                               |
+| `user_preference_memory` | true         | User preference memory strategy                        |
+| `durable_functions`      | false        | Lambda Durable Functions (research_orchestrator tool)  |
+| `guardrails`             | true         | Bedrock Guardrails (chatbot mode)                      |
+| `browser`                | true         | AgentCore Browser tool                                 |
+| `sample_tool`            | false        | Throwaway word-counter tool registered with Gateway    |
+| `tavus_avatar`           | true         | Tavus video avatar (needs a purchased Tavus key)       |
+| `a2a`                    | true         | A2A fraud-research runtime + distinct M2M principal    |
+| `policy`                 | true         | AgentCore Policy (Cedar) on the Gateway                |
+| `policyMode`             | "LOG_ONLY"   | `LOG_ONLY` or `ENFORCE` (Cedar is default-deny)        |
+| `harness`                | true         | AgentCore Harness ("Quick Assistant" managed loop)     |
+| `agentcore_identity`     | true         | Gateway tokens via the Identity token vault            |
+| `agentcore_evaluation`   | true         | Custom evaluator + online evaluation config            |
+| `prompt_optimization`    | true         | Bedrock `OptimizePrompt` showcase                      |
+| `bedrock_managed_eval`   | true         | Bedrock model-evaluation jobs for the catalog          |
+| `agent_registry`         | false        | AWS Agent Registry (limited regional availability)     |
+| `payments`               | false        | AgentCore Payments (needs a funded testnet wallet)     |
+| `managed_web_search`     | false        | Managed Web Search connector (changes tool name)       |
+| `a2a_parallel_research`  | false        | A2A section-researcher fan-out (in-process is default) |
+| `sagemaker_model`        | false        | Custom SageMaker endpoint for the AI Agent             |
+| `kb_multimodal`          | false        | Multimodal KB parsing (replaces the KB data source)    |
 
 ### Model Config (`models` in cdk.json)
 
@@ -259,8 +280,7 @@ tools/export.ts                     # @export directive processor
 ## Conventions
 
 - **cdk-nag**: `AwsSolutionsChecks` applied to the entire stage in `lib/stage.ts`. Suppressions colocated with constructs.
-- **Federate constructs**: `FederateUserPool`/`FederateUserPoolClient` in `lib/common/constructs/federate/` wrap Cognito with Midway support. Replace with standard constructs for public distribution.
-- **@export directives**: `tools/export.ts` processes these to strip internal code. Do not remove `// @export` or `<!-- @export -->` comments.
+- **Auth**: standard Cognito (`UserPool`/`UserPoolClient`) with self sign-up enabled. The internal Midway `Federate` constructs were removed on this branch — do not reintroduce them here.
 - **Monorepo workspaces**: Frontend is at `lib/stacks/frontend/app`. Use `-w frontend` for frontend commands.
 - **Pre-commit hooks**: Husky + lint-staged runs Prettier/ESLint on TS and ruff on Python.
 - **Tests**: Jest with ts-jest, test files expected in `test/` matching `**/*.test.ts` (directory not yet created).
@@ -277,5 +297,8 @@ tools/export.ts                     # @export directive processor
 - **IAM eventual consistency**: KB creation uses a 45s CustomResource waiter for IAM policy propagation.
 - **SSE anti-buffering**: Orchestrator monkey-patches Starlette's `StreamingResponse` to add `X-Accel-Buffering: no` header for AgentCore's nginx proxy.
 - **M2M token caching**: Cached with 60s safety margin before expiry. Uses Secrets Manager (not SSM) for client secret.
+- **Cedar policies reject a wildcard resource**: `CreatePolicy` refuses `permit(principal, action, resource);` — even with `validationMode: IGNORE_ALL_FINDINGS`. Constrain the resource to a specific `AgentCore::Gateway` resource or resource type. A rejected policy on an `ENFORCE` engine is the difference between permit-all and deny-all, so keep `policyMode: "LOG_ONLY"` until a complete permit set exists.
+- **AgentCore Evaluations needs spans**: online evaluation reads CloudWatch `aws/spans`, so per-runtime Tracing + CloudWatch Transaction Search must be enabled or the evaluator has nothing to score.
+- **Tavus secret is imported, not created**: the `TavusAvatar` stack references `/{stackNameBase}/tavus` by name. Create/populate it out of band; the worker idles until it exists.
 - **Lambda cross-compilation**: Tool Lambdas with native deps use `--platform manylinux2014_aarch64 --only-binary :all:` for ARM64 bundling from macOS.
 - **Cross-stack export removal**: If you remove a resource from Shared that Backend imports (via CloudFormation exports), deploy Backend first with `--exclusively` to remove the import, then deploy Shared to drop the export. Otherwise CloudFormation will fail with "Cannot delete export ... as it is in use".

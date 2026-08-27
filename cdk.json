@@ -16,42 +16,47 @@
         ]
     },
     "context": {
-        "@export": { "deleteLines": 20 },
-        "projectId": "gartner-appdev",
+        "projectId": "appdev-demo",
         "accounts": {
             "dev": {
-                "id": "157000088284",
-                "region": "us-east-1",
-                "midway": false
+                "id": null,
+                "region": "us-east-1"
             },
             "prod": {
-                "id": "157000088284",
-                "region": "us-east-1",
-                "midway": false
+                "id": null,
+                "region": "us-east-1"
             }
         },
-        "stackNameBase": "gartner-appdev-2026",
+        "stackNameBase": "appdev-demo-2026",
         "adminUserEmail": null,
         "features": {
             "avatar": true,
-            "livekit": true,
             "tavus_avatar": true,
             "knowledge_base": true,
             "kb_backend": "s3-vectors",
             "neptune": false,
             "episodic_memory": true,
-            "durable_functions": false,
+            "semantic_memory": true,
+            "user_preference_memory": true,
             "guardrails": true,
+            "browser": true,
             "a2a": true,
-            "a2a_parallel_research": true,
-            "prompt_optimization": true,
-            "sagemaker_model": true,
-            "kb_multimodal": true,
-            "agent_registry": true,
+            "policy": true,
+            "policyMode": "LOG_ONLY",
+            "harness": true,
             "agentcore_identity": true,
-            "managed_web_search": true,
+            "agentcore_evaluation": true,
+            "prompt_optimization": true,
             "bedrock_managed_eval": true,
-            "agentcore_evaluation": true
+
+            "sample_tool": false,
+            "durable_functions": false,
+            "payments": false,
+            "a2a_parallel_research": false,
+            "sagemaker_model": false,
+            "kb_multimodal": false,
+            "agent_registry": false,
+            "managed_web_search": false
         },
         "webSearch": {
             "excludeDomains": [
@@ -69,14 +74,6 @@
             "kb_embedding": "amazon.nova-2-multimodal-embeddings-v1:0",
             "kb_parser": "amazon.nova-lite-v1:0"
         },
-        "livekit": {
-            "serverImage": "livekit/livekit-server:v1.9",
-            "serverCpu": 512,
-            "serverMemory": 1024,
-            "workerCpu": 1024,
-            "workerMemory": 2048,
-            "voiceId": "tiffany"
-        },
         "tavus": {
             "workerCpu": 1024,
             "workerMemory": 2048,
@@ -86,12 +83,6 @@
                 "tiffany": "r3f427f43c9d",
                 "matthew": "rf8f3aa4b33e"
             }
-        },
-        "sagemaker": {
-            "endpointName": "arn:aws:sagemaker:us-east-1:157000088284:endpoint/example-name-wtf7d-1-1787264167",
-            "regionName": "",
-            "inferenceComponentName": "adapter-example-name-wtf7d-1-1787264167-1787264205",
-            "maxTokens": 4096
         },
 
         "@aws-cdk/aws-lambda:recognizeLayerVersion": true,

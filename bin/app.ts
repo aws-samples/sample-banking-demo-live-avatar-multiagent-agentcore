@@ -11,10 +11,14 @@ if (projectId) Tags.of(app).add("projectId", projectId);
 
 const stage = app.node.tryGetContext("stage");
 const account = app.node.tryGetContext("accounts")?.[stage];
+// Fall back to the deploying credentials' default account/region when cdk.json
+// leaves them null. This lets a customer run `cdk deploy` with their own AWS
+// profile and no config edits. Nova Sonic requires us-east-1, so that is the
+// default region when nothing else is set.
 const properties = {
     env: {
-        account: account?.id,
-        region: account?.region,
+        account: account?.id ?? process.env.CDK_DEFAULT_ACCOUNT,
+        region: account?.region ?? process.env.CDK_DEFAULT_REGION ?? "us-east-1",
     },
 };
 
