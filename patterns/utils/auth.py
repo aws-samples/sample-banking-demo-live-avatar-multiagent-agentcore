@@ -100,11 +100,14 @@ def extract_user_id_from_token(token: str) -> str:
     try:
         claims = jwt.decode(
             jwt=token,
+            # AgentCore Runtime's OIDC authorizer has already validated this
+            # JWT's signature before the request reaches the agent, and the
+            # token is read out of the authorizer-populated request context —
+            # not from a caller-supplied payload. Re-verifying would mean
+            # fetching the JWKS per invocation for a check AgentCore already
+            # owns. Any path that accepts a CLIENT-SUPPLIED token must use
+            # verify_user_pool_jwt instead (see the avatar WebSocket).
             # nosemgrep: unverified-jwt-decode
-            # AgentCore's M2M/OIDC authorizer has already validated the JWT
-            # signature before this Lambda runs; we only extract the `sub`
-            # claim here. Re-verifying would require fetching the JWKS per
-            # invocation, which AgentCore explicitly owns upstream.
             options={"verify_signature": False},
             algorithms=["RS256"],
         )
@@ -295,7 +298,12 @@ def _get_token_via_agentcore_identity(scope: str) -> str:
 
     # Cache until shortly before the token's own expiry (Cognito access tokens
     # carry `exp`); fall back to a conservative 5 minutes if it can't be read.
+    # This decode reads `exp` ONLY to pick a cache TTL — it makes no security
+    # decision and no identity claim. The token was just returned by the
+    # AgentCore Identity API in this same call, so it is not attacker-supplied;
+    # an unreadable or tampered value simply falls back to the 5-minute TTL.
     try:
+        # nosemgrep: unverified-jwt-decode
         claims = jwt.decode(jwt=access_token, options={"verify_signature": False}, algorithms=["RS256"])
         expires_at = float(claims["exp"]) - 60
     except Exception:  # noqa: BLE001 - opaque/undecodable token

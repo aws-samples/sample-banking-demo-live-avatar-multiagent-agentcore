@@ -392,15 +392,18 @@ export class Backend extends Stack {
                                       // arguments, pip fails, and CDK silently falls back to
                                       // Docker bundling.
                                       const requirements = path.join(toolDir, "requirements.txt");
-                                      // nosemgrep: detect-child-process
-                                      // CDK asset bundling: `outputDir` is a CDK-generated temp path,
-                                      // `toolDir` is a compile-time constant under gateway/tools/.
+                                      // CDK asset bundling, run at synth time on the
+                                      // developer's machine: `outputDir` is a
+                                      // CDK-generated temp path and `toolDir` is a
+                                      // compile-time constant under gateway/tools/.
+                                      // Neither is reachable from user input.
                                       cp.execSync(
+                                          // nosemgrep: detect-child-process
                                           `python3 -m pip install -r "${requirements}" -t "${outputDir}" --quiet --no-cache-dir --platform manylinux2014_aarch64 --only-binary :all: --implementation cp --python-version 3.13`,
                                           { stdio: "pipe" }
                                       );
-                                      // nosemgrep: detect-child-process
                                       // Same rationale as above — CDK-controlled paths only.
+                                      // nosemgrep: detect-child-process
                                       cp.execSync(`cp -r "${toolDir}/"* "${outputDir}/"`, {
                                           stdio: "pipe",
                                           shell: "/bin/bash",
@@ -1596,6 +1599,14 @@ export class Backend extends Stack {
                     ...runtimeEnv,
                     MODEL_ID: models.avatar_sonic,
                     TOOL_SELECTOR_MODEL_ID: models.avatar_tool_selector,
+                    // Cognito issuer + audience so the avatar can
+                    // CRYPTOGRAPHICALLY verify the id_token the browser sends in
+                    // the WebSocket `sessionStart` message. That token is
+                    // client-supplied, and its `sub` becomes the tenant key for
+                    // KB scoping and memory — so it must be verified, not merely
+                    // decoded. See utils.auth.verify_user_pool_jwt.
+                    COGNITO_USER_POOL_ISSUER: cognitoIssuer,
+                    COGNITO_USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
                     PERSONA: "friendly",
                     // Custom SageMaker model exposed as the `trinity_specialist`
                     // tool (features.sagemaker_model): Nova Sonic keeps the voice
@@ -1693,15 +1704,18 @@ export class Backend extends Stack {
                             tryBundle(outputDir: string): boolean {
                                 try {
                                     const cp = require("child_process");
-                                    // nosemgrep: detect-child-process
-                                    // CDK asset bundling: `outputDir` is a CDK-generated temp path,
-                                    // `feedbackLambdaDir` is a compile-time constant.
+                                    // CDK asset bundling, run at synth time on the
+                                    // developer's machine: `outputDir` is a
+                                    // CDK-generated temp path and `feedbackLambdaDir`
+                                    // is a compile-time constant. Neither is
+                                    // reachable from user input.
                                     cp.execSync(
+                                        // nosemgrep: detect-child-process
                                         `python3 -m pip install -r ${path.join(feedbackLambdaDir, "requirements.txt")} -t "${outputDir}" --quiet --no-cache-dir`,
                                         { stdio: "pipe" }
                                     );
-                                    // nosemgrep: detect-child-process
                                     // Same rationale as above — CDK-controlled paths only.
+                                    // nosemgrep: detect-child-process
                                     cp.execSync(`cp -r "${feedbackLambdaDir}/"* "${outputDir}/"`, {
                                         stdio: "pipe",
                                         shell: "/bin/bash",
@@ -1889,12 +1903,13 @@ export class Backend extends Stack {
                                             // CDK asset bundling: `outputDir` is a CDK-generated temp
                                             // path, `kbResetLambdaDir` is a compile-time constant.
                                             cp.execSync(
+                                                // nosemgrep: detect-child-process
                                                 `python3 -m pip install -r ${path.join(kbResetLambdaDir, "requirements.txt")} -t "${outputDir}" --quiet --no-cache-dir`,
                                                 { stdio: "pipe" }
                                             );
-                                            // nosemgrep: detect-child-process
                                             // Same rationale as above — CDK-controlled paths only.
                                             cp.execSync(
+                                                // nosemgrep: detect-child-process
                                                 `cp -r "${kbResetLambdaDir}/"* "${outputDir}/"`,
                                                 { stdio: "pipe", shell: "/bin/bash" }
                                             );

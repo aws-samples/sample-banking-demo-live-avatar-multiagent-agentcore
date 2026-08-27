@@ -94,6 +94,8 @@ def _wait_ready(client, gateway_id: str, target_id: str) -> None:
         if status in ("CREATE_FAILED", "UPDATE_FAILED", "FAILED"):
             reasons = resp.get("statusReasons") or resp.get("statusReason")
             raise RuntimeError(f"Web search target {target_id} entered {status}: {reasons}")
+        # Bounded polling while the gateway target synchronizes its tool catalog.
+        # nosemgrep: arbitrary-sleep
         time.sleep(_POLL_INTERVAL_SEC)
     # Timeout is not necessarily fatal — the target often finishes shortly
     # after — but surface it so the deploy does not report a false success.

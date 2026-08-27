@@ -49,14 +49,20 @@ def test_every_capped_phase_has_a_positive_deadline(orch):
     for phase, cap in orch.SEQUENTIAL_PHASE_WALL_CLOCK_SEC.items():
         assert cap > 0, phase
     assert orch.SEQUENTIAL_PHASE_WALL_CLOCK_DEFAULT_SEC > 0
-    assert orch.SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC > 0
+    # Idle timeout is a per-phase override dict plus a default, matching the
+    # wall-clock shape above.
+    assert orch.SEQUENTIAL_PHASE_IDLE_TIMEOUT_DEFAULT_SEC > 0
+    for phase, idle in orch.SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC.items():
+        assert idle > 0, phase
 
 
 def test_idle_backstop_is_generous_enough_for_thinking(orch):
     # The synchronous agent emits no queue events during a long thinking gap,
     # so the idle backstop must be generous (minutes, not seconds) to avoid
     # false aborts. Wall clock is the primary bound.
-    assert orch.SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC >= 300
+    assert orch.SEQUENTIAL_PHASE_IDLE_TIMEOUT_DEFAULT_SEC >= 300
+    for phase, idle in orch.SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC.items():
+        assert idle >= 300, phase
 
 
 # --- report recovery renderer ---------------------------------------------

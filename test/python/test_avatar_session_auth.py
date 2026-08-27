@@ -6,9 +6,12 @@ into the first `sessionStart` JSON message. The handler must:
 
 1. Accept the socket first (pre-accept close cannot send code 4401).
 2. Read the first JSON message.
-3. Extract `idToken` from sessionStart and call `extract_user_id_from_token`.
-4. On missing/invalid token: send an error frame and close with code 4401.
-5. On valid token: construct the agent with `user_id = sub claim`.
+3. Extract `idToken` from sessionStart and CRYPTOGRAPHICALLY verify it via
+   `verify_user_pool_jwt` — the token is client-supplied, and its `sub`
+   becomes the tenant key for KB scoping and memory, so an unverified
+   signature would let any caller impersonate another user.
+4. On missing/invalid/unverifiable token: send an error frame and close 4401.
+5. On verified token: construct the agent with `user_id = sub claim`.
 
 We drive the handler directly with a fake WebSocket rather than standing
 up a real uvicorn / AgentCore runtime.
@@ -30,8 +33,12 @@ _AVATAR_AGENT_PATH = Path(__file__).resolve().parents[2] / "patterns" / "avatar-
 
 
 def _make_jwt(payload: dict) -> str:
-    """Build an unsigned JWT — the helper under test skips signature
-    verification because upstream auth already validated the token."""
+    """Build an UNSIGNED JWT.
+
+    The avatar handler cryptographically verifies this token, so an unsigned
+    one is only useful for asserting rejection. Success-path tests stub
+    `verify_user_pool_jwt` instead of trying to forge a valid signature.
+    """
 
     def _b64(obj: dict | bytes) -> str:
         if isinstance(obj, dict):
@@ -154,8 +161,36 @@ class TestSessionStartAuthFailure:
         assert ws.closed_with == (4401, "invalid_id_token")
 
 
+class TestSessionStartSignatureVerification:
+    """A token that does not verify must never establish a session.
+
+    Regression test for the tenant-isolation hole where the handler decoded the
+    client-supplied id_token with `verify_signature: False`, so any caller could
+    present a self-made JWT carrying another user's `sub` and read that user's
+    knowledge-base documents and memory.
+    """
+
+    def test_forged_token_is_rejected(self, avatar_module, monkeypatch):
+        monkeypatch.setattr(
+            avatar_module,
+            "create_avatar_agent",
+            lambda **_: pytest.fail("must not create an agent for an unverified token"),
+        )
+
+        # Structurally valid, correctly-shaped claims — but not signed by the
+        # user pool. Verification must reject it on signature grounds.
+        forged = _make_jwt({"sub": "victim-user", "exp": 9999999999})
+        ws = FakeWebSocket(incoming=[{"type": "sessionStart", "sessionId": "s1", "idToken": forged}])
+
+        _run(avatar_module.websocket_handler(ws))
+
+        assert ws.accepted is True
+        assert ws.closed_with == (4401, "invalid_id_token")
+        assert any(m.get("type") == "error" for m in ws.sent)
+
+
 class TestSessionStartAuthSuccess:
-    """Valid idToken must reach create_avatar_agent with the verified sub."""
+    """Verified idToken must reach create_avatar_agent with the verified sub."""
 
     def test_valid_token_creates_agent_with_sub(self, avatar_module, monkeypatch):
         captured: dict[str, Any] = {}
@@ -173,6 +208,14 @@ class TestSessionStartAuthSuccess:
         monkeypatch.setattr(avatar_module, "get_gateway_access_token", lambda: "fake-access-token")
         monkeypatch.setattr(avatar_module, "create_gateway_mcp_client", lambda _t: object())
         monkeypatch.setattr(avatar_module, "create_avatar_agent", _fake_create_agent)
+        # Stand in for JWKS verification: signing a token the real user pool
+        # would accept is out of scope here, so assert on what the handler does
+        # with verified claims. Rejection paths are covered above.
+        monkeypatch.setattr(
+            avatar_module,
+            "verify_user_pool_jwt",
+            lambda _token: {"sub": "test-user"},
+        )
 
         token = _make_jwt({"sub": "test-user"})
         ws = FakeWebSocket(incoming=[{"type": "sessionStart", "sessionId": "s1", "idToken": token}])

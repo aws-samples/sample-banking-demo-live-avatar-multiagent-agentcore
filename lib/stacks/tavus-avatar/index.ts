@@ -305,8 +305,10 @@ export class TavusAvatar extends Stack {
                         tryBundle(outputDir: string): boolean {
                             try {
                                 const cp = require("child_process");
-                                // nosemgrep: detect-child-process — CDK-controlled constant paths.
+                                // CDK asset bundling at synth time — CDK-controlled
+                                // constant paths, not reachable from user input.
                                 cp.execSync(
+                                    // nosemgrep: detect-child-process
                                     `python3 -m pip install -r "${path.join(offerLambdaDir, "requirements.txt")}" -t "${outputDir}" --quiet --no-cache-dir`,
                                     { stdio: "pipe" }
                                 );

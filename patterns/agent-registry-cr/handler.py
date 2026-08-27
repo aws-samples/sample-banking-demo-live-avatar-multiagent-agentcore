@@ -130,6 +130,8 @@ def _wait_registry_ready(client, registry_id: str) -> bool:
         if status in _TERMINAL_UNHEALTHY:
             print(f"[REGISTRY] terminal status {status}; giving up on READY")
             return False
+        # Bounded polling for the registry record to reach READY.
+        # nosemgrep: arbitrary-sleep
         time.sleep(POLL_INTERVAL)
     print(f"[REGISTRY] timed out waiting for READY after {REGISTRY_READY_TIMEOUT}s")
     return False
@@ -229,6 +231,8 @@ def _wait_record_status(client, registry_id: str, record_id: str, targets: set[s
             return status
         if status in _TERMINAL_UNHEALTHY or status is None:
             return status
+        # Bounded polling for a target status transition.
+        # nosemgrep: arbitrary-sleep
         time.sleep(POLL_INTERVAL)
     return status
 

@@ -22,7 +22,7 @@ from strands.experimental.bidi import BidiAgent
 from strands.experimental.bidi.models import BidiNovaSonicModel
 from strands.tools.mcp import MCPClient
 from system_prompt_augmenter import augment_system_prompt
-from utils.auth import extract_user_id_from_token, get_gateway_access_token
+from utils.auth import IdentityVerificationError, get_gateway_access_token, verify_user_pool_jwt
 from utils.mcp_client import create_gateway_mcp_client as build_timebound_gateway_client
 from utils.pipeline_scope import VALID_PIPELINES, PipelineScopeHook
 from utils.ssm import get_ssm_parameter
@@ -327,10 +327,17 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
                 first_msg.get("type") if isinstance(first_msg, dict) else type(first_msg),
             )
 
+        # The id_token arrives in a CLIENT-SUPPLIED message, so it must be
+        # cryptographically verified rather than just decoded: `user_id` below
+        # becomes the tenant key for KB scoping and memory, so accepting an
+        # unverified `sub` would let any caller read another user's data.
+        # verify_user_pool_jwt checks the RS256 signature against the user
+        # pool's JWKS plus the issuer, expiry, and audience.
         try:
-            user_id = extract_user_id_from_token(id_token)
-        except ValueError as exc:
-            logger.warning("[AVATAR] Refusing connection — invalid id_token: %s", exc)
+            claims = verify_user_pool_jwt(id_token)
+            user_id = claims["sub"]
+        except IdentityVerificationError as exc:
+            logger.warning("[AVATAR] Refusing connection — unverified id_token: %s", exc)
             await websocket.send_json({"type": "error", "content": "invalid_id_token"})
             await websocket.close(code=4401, reason="invalid_id_token")
             return

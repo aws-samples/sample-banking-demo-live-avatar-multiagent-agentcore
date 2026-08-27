@@ -48,11 +48,16 @@ def create_app() -> FastAPI:
 
     app = FastAPI()
 
+    # The two handlers below are registered with FastAPI by their decorators, so
+    # they are never referenced by name. semgrep's useless-inner-function rule
+    # does not model decorator registration and reports them as unused.
     @app.get("/health")
+    # nosemgrep: useless-inner-function
     async def health():  # noqa: ANN202
         return {"status": "ok"}
 
     @app.post("/start")
+    # nosemgrep: useless-inner-function
     async def start(request: Request):  # noqa: ANN202
         try:
             payload = await request.json()

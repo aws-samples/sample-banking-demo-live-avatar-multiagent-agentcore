@@ -231,6 +231,9 @@ def _delete_online(client, online_id: str) -> None:
             if code == "ResourceNotFoundException":
                 return
             if code == "ConflictException":  # still CREATING/updating — wait
+                # Bounded retry loop against the AgentCore control plane, which
+                # rejects mutations while a resource is in a transitional state.
+                # nosemgrep: arbitrary-sleep
                 time.sleep(10)
                 continue
             print(f"[EVAL] delete online-eval failed (ignored): {exc}")
@@ -253,6 +256,9 @@ def _delete_evaluator(client, evaluator_id: str) -> None:
             if code == "ResourceNotFoundException":
                 return
             if code in ("ConflictException", "ValidationException"):  # locked — wait
+                # Bounded retry loop while the resource is locked by the control
+                # plane.
+                # nosemgrep: arbitrary-sleep
                 time.sleep(10)
                 continue
             print(f"[EVAL] delete evaluator failed (ignored): {exc}")

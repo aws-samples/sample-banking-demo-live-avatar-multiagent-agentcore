@@ -98,7 +98,9 @@ export default function ContinuousFeedbackLoop(): JSX.Element | null {
             icon: RefreshCw,
             color: "#e0b850",
             value: String(improvements),
-            unit: improvements === 1 ? "applied" : "applied",
+            // "applied" reads correctly for any count, matching the other
+            // entries' invariant units ("approved").
+            unit: "applied",
         },
     ] as const;
 

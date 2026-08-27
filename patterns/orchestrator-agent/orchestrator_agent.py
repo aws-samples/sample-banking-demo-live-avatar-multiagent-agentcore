@@ -3915,6 +3915,10 @@ async def _handle_optimize_sample(
     """
     baseline_label = f"{_CURRENT_MODEL_LABEL} · current prompt"
 
+    # Consumed twice below via `async for` (baseline, then candidate). semgrep's
+    # useless-inner-function rule does not track async-generator consumption and
+    # reports it as unused.
+    # nosemgrep: useless-inner-function
     async def _run_variant(variant, model_label, requested_model, system_prompt_override, sub_session_id):
         try:
             async for event in _handle_chatbot(
@@ -6473,6 +6477,9 @@ async def _run_pipeline(
                                 model=bedrock_model,
                                 callback_handler=_pipeline_callback,
                             )
+                            # Deliberate backoff before retrying a failed pipeline
+                            # phase, not leftover debug code.
+                            # nosemgrep: arbitrary-sleep
                             time.sleep(SEQ_PHASE_RETRY_BACKOFF_SEC)
                             continue
                         if _is_max_tokens_error(exc):
@@ -6492,6 +6499,8 @@ async def _run_pipeline(
                                 model=bedrock_model,
                                 callback_handler=_pipeline_callback,
                             )
+                            # Deliberate backoff before the compact re-ask.
+                            # nosemgrep: arbitrary-sleep
                             time.sleep(SEQ_PHASE_RETRY_BACKOFF_SEC)
                             continue
                         if _is_transient_bedrock_error(exc):
@@ -6506,6 +6515,8 @@ async def _run_pipeline(
                                 active_agent.messages = list(initial_messages)
                             except Exception:  # noqa: BLE001 — reset is best-effort
                                 pass
+                            # Exponential backoff between phase retries.
+                            # nosemgrep: arbitrary-sleep
                             time.sleep(backoff)
                             continue
                         tq.put((_ERROR, exc))
