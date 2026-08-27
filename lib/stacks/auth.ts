@@ -1,4 +1,5 @@
 import { Aws, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
+import { CfnAccount } from "aws-cdk-lib/aws-apigateway";
 import {
     AccountRecovery,
     CfnIdentityPool,
@@ -11,7 +12,14 @@ import {
     UserPoolDomain,
     UserPoolGroup,
 } from "aws-cdk-lib/aws-cognito";
-import { Effect, FederatedPrincipal, PolicyStatement, Role } from "aws-cdk-lib/aws-iam";
+import {
+    Effect,
+    FederatedPrincipal,
+    ManagedPolicy,
+    PolicyStatement,
+    Role,
+    ServicePrincipal,
+} from "aws-cdk-lib/aws-iam";
 import { Function } from "aws-cdk-lib/aws-lambda";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { CfnWebACL, CfnWebACLAssociation } from "aws-cdk-lib/aws-wafv2";
@@ -285,6 +293,43 @@ export class Auth extends Stack {
                 ],
             });
         }
+
+        // ─── Account-level API Gateway CloudWatch Logs role ───────────
+        // API Gateway refuses to create a stage with method logging enabled
+        // ("CloudWatch Logs role ARN must be set in account settings to enable
+        // logging") unless a CloudWatch Logs role is configured at the
+        // ACCOUNT + REGION level. That setting is a regional singleton, not a
+        // per-stack resource.
+        //
+        // `@aws-cdk/aws-apigateway:disableCloudWatchRole` is true in cdk.json, so
+        // the RestApi constructs do NOT each create one. Both REST APIs in this
+        // app enable logging (Backend's FeedbackApi and, when the flag is on,
+        // TavusAvatar's offer API) and both stacks already depend on Auth — so
+        // creating it once here guarantees it exists before either is deployed.
+        //
+        // NOTE: this writes an account/region-wide API Gateway setting. In an
+        // account that already has one configured, deploying overwrites it with
+        // the equivalent role below, and destroying this stack clears it.
+        const apiGatewayCloudWatchRole = new Role(this, "ApiGatewayCloudWatchRole", {
+            assumedBy: new ServicePrincipal("apigateway.amazonaws.com"),
+            description:
+                "Account-level role allowing API Gateway to write execution logs to CloudWatch",
+            managedPolicies: [
+                ManagedPolicy.fromAwsManagedPolicyName(
+                    "service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+                ),
+            ],
+        });
+        NagSuppressions.addResourceSuppressions(apiGatewayCloudWatchRole, [
+            {
+                id: "AwsSolutions-IAM4",
+                reason: "AmazonAPIGatewayPushToCloudWatchLogs is the AWS-managed policy required for the account-level API Gateway logging role.",
+            },
+        ]);
+
+        new CfnAccount(this, "ApiGatewayAccount", {
+            cloudWatchRoleArn: apiGatewayCloudWatchRole.roleArn,
+        });
 
         // ─── Regional WAF ─────────────────────────────────────────────
         const regionalWebAcl = new CfnWebACL(this, "RegionalWebAcl", {

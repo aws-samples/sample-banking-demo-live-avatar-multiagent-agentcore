@@ -250,6 +250,47 @@ See the [AWS Pricing Calculator](https://calculator.aws/#/) for estimates.
 
 ---
 
+## Troubleshooting the deploy
+
+**`SignatureDoesNotMatch: Signature expired`, or the CLI reports a stack failed
+while the console shows it succeeded.** The CDK CLI polls CloudFormation while it
+waits; if one of those requests stalls past the 5-minute SigV4 signature window
+(flaky network or VPN), the CLI aborts even though CloudFormation carries on
+server-side. Check the real state before assuming failure:
+
+```bash
+aws cloudformation list-stacks --region us-east-1 \
+  --query "StackSummaries[?contains(StackName,'appdev')].[StackName,StackStatus]" --output text
+```
+
+Then re-run the same `cdk deploy` — it is idempotent and resumes from where it
+stopped. Also confirm the machine's clock is accurate (a skew over 5 minutes
+causes the same error on every request); container and VM clocks drift after the
+host sleeps.
+
+**A stack is stuck in `ROLLBACK_FAILED` mentioning `AgentMemory`.** AgentCore
+Memory takes several minutes to create and cannot be deleted while it is still in
+the `CREATING` state, so if something else in the Backend stack fails during that
+window the automatic rollback cannot finish. Wait for the memory to finish
+creating, then delete the failed stack and deploy again:
+
+```bash
+aws cloudformation delete-stack --region us-east-1 --stack-name dev-appdev-demo-Backend
+aws cloudformation wait stack-delete-complete --region us-east-1 --stack-name dev-appdev-demo-Backend
+npm run cdk -- deploy "*/**" -c stage=dev
+```
+
+A stack whose _initial_ create failed must be deleted rather than updated — that
+is CloudFormation behaviour, not a problem with this app. To avoid the wedged
+rollback entirely on a first deploy, you can add `--no-rollback` so failed
+resources are left in place for inspection instead of being torn down.
+
+**API Gateway logging.** The Auth stack sets the account/region-level API Gateway
+CloudWatch Logs role, which API Gateway requires before any stage can enable
+logging. Note this is an **account-wide** setting: if you already have one
+configured, deploying overwrites it with an equivalent role, and destroying the
+Auth stack clears it.
+
 ## Clean-up
 
 ```bash
