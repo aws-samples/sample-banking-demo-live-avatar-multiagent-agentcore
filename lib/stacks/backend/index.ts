@@ -777,9 +777,11 @@ export class Backend extends Stack {
         // BEST-EFFORT: if the preview API is unavailable/denied in the account,
         // the deploy still succeeds and the entry simply does not appear.
         if (features.harness) {
-            // Fixed harness name (was `${stackName}_quick_assistant`). Must satisfy
-            // the CreateHarness constraint ^[a-zA-Z][a-zA-Z0-9_]{0,39}$.
-            const harnessName = "trinityresearch_trinity_research".slice(0, 40);
+            // Derived from the stack name so two deployments in one account do
+            // not collide on a fixed harness name. Must satisfy the CreateHarness
+            // constraint ^[a-zA-Z][a-zA-Z0-9_]{0,39}$, hence the underscore
+            // conversion and the 40-char clamp.
+            const harnessName = `${stackName.replace(/-/g, "_")}_quick_assistant`.slice(0, 40);
             const harnessSystemPrompt =
                 "You are the Trinity Reserve Bank Quick Assistant, a friendly customer-facing " +
                 "helper. Answer questions about the bank's accounts, cards, investing and " +
@@ -896,6 +898,23 @@ export class Backend extends Stack {
                             "iam:PassedToService": "bedrock-agentcore.amazonaws.com",
                         },
                     },
+                })
+            );
+            // CreateHarness provisions an AgentCore service-linked role the first
+            // time it runs in an account. Without this the call is accepted but
+            // the harness lands in CREATE_FAILED with "Failed creating service
+            // linked role ... (403)". Accounts that already have the SLR (from an
+            // earlier harness or runtime) succeed without it, which is why this
+            // only surfaces on a first deploy into a clean account. Scoped to the
+            // AgentCore service-role path, covering its sub-principals
+            // (e.g. runtime-identity.bedrock-agentcore.amazonaws.com).
+            harnessFn.addToRolePolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["iam:CreateServiceLinkedRole"],
+                    resources: [
+                        `arn:${Aws.PARTITION}:iam::${Aws.ACCOUNT_ID}:role/aws-service-role/*bedrock-agentcore.amazonaws.com/*`,
+                    ],
                 })
             );
 

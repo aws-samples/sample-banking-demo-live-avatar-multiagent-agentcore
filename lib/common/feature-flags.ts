@@ -214,13 +214,19 @@ export interface FeatureFlags {
     /**
      * AgentCore Evaluations for the AI Assistant (GA since March 2026). When
      * true, a custom-resource provisioner creates a custom LLM-as-a-judge
-     * evaluator plus an online evaluation configuration that scores the AI
-     * Assistant runtime's live spans (from CloudWatch `aws/spans`, filtered by
-     * service name) — populating the AgentCore console's "Custom evaluators" and
-     * "Evaluation configurations" tabs and feeding AgentCore Observability.
-     * Requires per-runtime Tracing + CloudWatch Transaction Search to be enabled
-     * so spans exist. Provisioning is best-effort: if the API is unavailable in
-     * the deploy region, the deploy still succeeds and the entries simply do not
+     * evaluator, which appears in the AgentCore console's "Custom evaluators"
+     * tab and is reused by the on-demand batch evaluation of recent session
+     * traces.
+     *
+     * NOTE: an *online* evaluation config is deliberately NOT created — its
+     * scores land 10-15 minutes later, which does not demonstrate well, so only
+     * the on-demand batch path is wired up. The Update/Delete paths still tear
+     * down an online config left behind by an earlier deploy. Batch evaluation
+     * reads CloudWatch `aws/spans`, so per-runtime Tracing + CloudWatch
+     * Transaction Search must be enabled for spans to exist.
+     *
+     * Provisioning is best-effort: if the API is unavailable in the deploy
+     * region, the deploy still succeeds and the evaluator simply does not
      * appear. Defaults to TRUE.
      */
     agentcore_evaluation: boolean;

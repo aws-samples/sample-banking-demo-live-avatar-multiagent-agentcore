@@ -39,7 +39,7 @@ tooling have been removed or disabled (see [What's in this MVP](#whats-in-this-m
 | **Code Interpreter** | Sandboxed Python for PDF image extraction                                         |
 | **Observability**    | OpenTelemetry traces and logs to CloudWatch                                       |
 | **Policy**           | Cedar policy engine on the Gateway, in `LOG_ONLY` mode                            |
-| **Evaluations**      | Custom LLM-as-a-judge evaluator + online evaluation config                        |
+| **Evaluations**      | Custom LLM-as-a-judge evaluator, used by on-demand batch evaluation               |
 | **Harness**          | Config-only managed agent loop ("Quick Assistant")                                |
 
 Alongside these: **Bedrock Knowledge Base** on S3 Vectors, **Bedrock Guardrails**,
@@ -145,7 +145,7 @@ The application deploys as CDK stacks (stack names are prefixed with the
   (Bedrock console → Model access): Claude Sonnet, Nova Sonic, Nova Lite, Nova
   Canvas, and Nova Multimodal Embeddings.
 - **For AgentCore Evaluations:** enable **CloudWatch Transaction Search** in the
-  deploy account. Online evaluation scores the runtime's OpenTelemetry spans, so
+  deploy account. Batch evaluation scores the runtime's OpenTelemetry spans, so
   without it the evaluator deploys but has no spans to score. The rest of the
   application is unaffected.
 
