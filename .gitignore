@@ -20,6 +20,11 @@ cdk.out
 /architecture-diagram.*
 /export.zip
 
+# CDK context cache. Regenerated on synth and keyed by AWS account id, so
+# committing it leaks the deploying account into the repo for no benefit —
+# this app only caches availability-zone lookups.
+cdk.context.json
+
 # Gartner-RESTRICTED reference material — never commit.
 # This branch is the external customer build, so these stay local.
 docs/Welcome Packet for Magic Quadrant.pdf
