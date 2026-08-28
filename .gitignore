@@ -1,5 +1,14 @@
 .DS_STORE
+.DS_Store
 .vscode
+
+# Test / tooling caches
+.hypothesis/
+.pytest_cache/
+.ruff_cache/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
 
 # Word/Office lock files
 ~$*

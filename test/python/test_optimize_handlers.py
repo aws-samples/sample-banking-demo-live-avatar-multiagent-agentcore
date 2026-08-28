@@ -8,7 +8,7 @@ twice). Both are exercised fully offline — the boto3 `bedrock-agent-runtime`
 client and `_handle_chatbot` are replaced with fakes so no network or deploy is
 required.
 
-Coverage (see `.kiro/specs/prompt-optimization-showcase/{requirements,design}.md`):
+Coverage:
 
 * **Req 13.1** — `_handle_optimize_prompt` submits ONLY the Current_System_Prompt
   (`CHATBOT_PROMPT`) text, never another agent phase's prompt, and only the three

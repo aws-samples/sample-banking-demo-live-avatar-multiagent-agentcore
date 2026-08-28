@@ -8,7 +8,7 @@ tool's error-state handling — all with the downstream A2A client
 (`a2a_client.consult_fraud_research`) replaced by an async spy/fake so no
 network or deploy is required.
 
-Coverage (see `.kiro/specs/a2a-agent-collaboration/{requirements,design}.md`):
+Coverage:
 
 * **Req 4.1** — driving the tool once triggers exactly one downstream A2A
   invoke (the spy's call count is 1) and forwards the applicant unchanged.

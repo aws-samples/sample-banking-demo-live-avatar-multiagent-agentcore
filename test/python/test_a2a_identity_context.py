@@ -1,7 +1,7 @@
 """Property-based tests for the A2A identity-context build/verify seam.
 
 Covers two of the design's correctness properties for the fraud-hop identity
-propagation (see `.kiro/specs/a2a-agent-collaboration/design.md`):
+propagation:
 
 * **Property 5 — Identity context is bound from the verified JWT, never from
   model input.** `build_identity_context` (`patterns/utils/identity_context.py`)

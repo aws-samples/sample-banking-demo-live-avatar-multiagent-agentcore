@@ -1,2 +1,0 @@
-# LiveKit server SDK for minting access tokens (JWT signing).
-livekit-api~=1.0

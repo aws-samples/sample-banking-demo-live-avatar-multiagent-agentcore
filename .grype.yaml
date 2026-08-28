@@ -1,15 +1,12 @@
 # Grype ignore rules — per-(GHSA, package, version) suppressions.
 #
 # Policy mirrors `.gitleaksignore`: every rule names its GHSA, the package
-# + version it targets, and a `reason:` field with provenance. Rationale
-# for accepting these findings lives in docs/security/probe-scan.md
-# (see "Known limitations" under the 2026-05-11 baseline and the
-# 2026-05-19 rescan section).
+# + version it targets, and a `reason:` field with provenance.
 #
 # Common rationale across every entry below:
 #   - All vulnerable copies trace to `@aws/pdk` (build-time WAF synthesis
-#     via `CloudfrontWebAcl` in lib/stacks/frontend/index.ts) or to
-#     `commitizen`/`eslint`/`archiver` dev-tool chains.
+#     via `CloudfrontWebAcl` in lib/stacks/frontend/index.ts) or to the
+#     `commitizen`/`eslint` dev-tool chains.
 #   - `@aws/pdk` ships its dependency tree as `bundledDependencies`,
 #     which `package.json` `overrides` cannot reach (npm honors overrides
 #     only at the resolution layer; bundled deps come pre-resolved in

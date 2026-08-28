@@ -1,8 +1,7 @@
 """Property-based tests for the fraud-research A2A server handler.
 
 Covers seven of the design's correctness properties for the callee side of the
-account-opening → fraud-research hop (see
-`.kiro/specs/a2a-agent-collaboration/design.md`). The pure gating/handler seams
+account-opening → fraud-research hop. The pure gating/handler seams
 in `patterns/fraud-research-agent/fraud_research_agent.py` are exercised with the
 model and the Gateway MCP client mocked, so no network or deploy is required:
 

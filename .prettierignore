@@ -9,11 +9,3 @@ architecture.drawio
 architecture.drawio.svg
 architecture.drawio.dot
 architecture.dot
-tools/generative-architecture/architecture.svg
-tools/generative-architecture/architecture.html
-tools/generative-architecture/architecture.drawio
-tools/generative-architecture/research_agent_architecture.svg
-tools/generative-architecture/research_agent_architecture.dot
-# Reference implementation (separate project) used as the base for the Tavus
-# avatar integration — not part of this repo's formatting.
-gartner-ai-appdev-platforms-avatar-tavus

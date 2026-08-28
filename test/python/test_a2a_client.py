@@ -1,7 +1,7 @@
 """Property-based tests for the caller-side A2A client.
 
 Covers four of the design's correctness properties for the account-opening →
-fraud-research hop (see `.kiro/specs/a2a-agent-collaboration/design.md`). The
+fraud-research hop. The
 pure logic seams in `patterns/utils/a2a_client.py` are exercised with a fake
 Strands `A2AAgent` and a fake card fetcher that record call order/timestamps,
 so no network or deploy is required:

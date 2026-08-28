@@ -2,7 +2,7 @@
 builder (`patterns/orchestrator-agent/optimize_targets.py`).
 
 Covers two of the design's correctness properties for the prompt-optimization
-showcase (see `.kiro/specs/prompt-optimization-showcase/design.md`). The module
+showcase. The module
 under test is pure — no boto3, no I/O — so these run fully in-process with no
 AWS and no deploy:
 

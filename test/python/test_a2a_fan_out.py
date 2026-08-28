@@ -1,8 +1,7 @@
 """Property-based tests for the section-researcher A2A fan-out dispatcher/merge.
 
 Covers three of the design's correctness properties for the parallel
-section-researcher A2A conversion (see
-`.kiro/specs/a2a-agent-collaboration/design.md`). The pure dispatcher/merge
+section-researcher A2A conversion. The pure dispatcher/merge
 seams in `patterns/orchestrator-agent/orchestrator_agent.py` are exercised with
 the A2A client mocked out entirely — the `invoke_section` callable is a fake
 async closure, so no network, no runtime, and no deploy is required:

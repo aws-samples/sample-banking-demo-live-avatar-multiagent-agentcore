@@ -1,8 +1,7 @@
 """Property-based tests for the Bedrock-event -> `prompt_opt` mapper
 (`patterns/orchestrator-agent/optimize_targets.py::map_optimize_event`).
 
-Covers the design's correctness property for the pure event mapper (see
-`.kiro/specs/prompt-optimization-showcase/design.md`). The mapper is pure — no
+Covers the design's correctness property for the pure event mapper. The mapper is pure — no
 boto3, no I/O — so this runs fully in-process with no AWS and no deploy:
 
 * **Property 3 — Bedrock optimize events map to typed events preserving kind,

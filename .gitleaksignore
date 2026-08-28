@@ -2,9 +2,11 @@
 #
 # Each line is <commit-sha>:<path>:<rule>:<line> as reported by gitleaks.
 # Policy: a fingerprint suppression requires an accompanying `#` comment
-# explaining provenance (see docs/security/probe-scan.md).
+# explaining provenance.
 #
-# Generated in response to the 2026-05-11 ProbeScan ERROR findings.
+# All entries below are either canonical AWS documentation example keys
+# (AKIA…EXAMPLE), values in files that no longer exist in the tree, or public
+# Cognito client IDs — none are real credentials.
 
 # --- Historical starter-kit Cloudscape mock fixtures ------------------------
 # File was deleted from the repo; the flagged values are Cloudscape

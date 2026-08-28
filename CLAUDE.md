@@ -7,9 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Multi-agent research platform built on Amazon Bedrock AgentCore + Strands Agents SDK + React 19. AgentCore Runtimes (orchestrator + avatar + A2A fraud research), an MCP Gateway with Lambda tools, multi-agent research pipelines, Knowledge Base (S3 Vectors), AgentCore Memory/Identity/Policy/Evaluations/Harness, Bedrock Guardrails, and a Cloudscape + Tailwind frontend.
 
 > **This is the `mvp` branch** — the customer-deployable build. Internal-only
-> tooling (the `kit` CLI, the `@export` processor, diagram/doc generators) and the
-> Midway `Federate` Cognito constructs have been removed, and the LiveKit voice
-> path is gone. Auth is standard Cognito with self sign-up. Deploy with plain CDK.
+> tooling (an internal deploy CLI, a source-stripping processor, diagram/doc
+> generators) and the internal federated-auth Cognito constructs have been
+> removed, and the LiveKit voice path is gone. Auth is standard Cognito with
+> self sign-up. Deploy with plain CDK.
 
 ## Common Commands
 
@@ -280,7 +281,7 @@ gateway/tools/{name}/               # Lambda tool handlers (handler.py + tool_sp
 ## Conventions
 
 - **cdk-nag**: `AwsSolutionsChecks` applied to the entire stage in `lib/stage.ts`. Suppressions colocated with constructs.
-- **Auth**: standard Cognito (`UserPool`/`UserPoolClient`) with self sign-up enabled. The internal Midway `Federate` constructs were removed on this branch — do not reintroduce them here.
+- **Auth**: standard Cognito (`UserPool`/`UserPoolClient`) with self sign-up enabled. Internal federated-auth constructs were removed for this public build — do not reintroduce them here.
 - **Monorepo workspaces**: Frontend is at `lib/stacks/frontend/app`. Use `-w frontend` for frontend commands.
 - **Pre-commit hooks**: Husky + lint-staged runs Prettier/ESLint on TS and ruff on Python.
 - **Tests**: Jest with ts-jest, test files expected in `test/` matching `**/*.test.ts` (directory not yet created).
