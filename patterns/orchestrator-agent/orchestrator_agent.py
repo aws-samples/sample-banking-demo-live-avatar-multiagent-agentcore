@@ -2711,7 +2711,25 @@ def _apply_depth_to_phases(phases: list[dict], depth: str) -> list[dict]:
                     "Be concise but thorough. Organize the research findings into a coherent narrative.\nInclude the most important data points and statistics.",
                 )
             p["prompt"] = prompt
-            p["thinking_budget"] = cfg["thinking_budget"]
+            # Cap the synthesizer's Claude thinking effort at "low" (<4096).
+            #
+            # Adaptive extended thinking streams NO bytes on the wire until the
+            # think completes, so a long silent-think window trips the model
+            # call's socket read_timeout (1800s) — which equals the phase
+            # wall-clock watchdog — before a single token is emitted. The call
+            # then dies with a bare ReadTimeoutError, gateway_pdf_generator is
+            # never reached, and the UI freezes on "Synthesizer & Report".
+            # On a broad brief the merged research runs 100k+ tokens and even
+            # medium-effort silent thinking exceeds the timeout (confirmed in
+            # traces for both Sonnet 4.6 and Opus 4.7).
+            #
+            # LOW effort keeps time-to-first-token to seconds/low-minutes, so
+            # output starts streaming well inside the timeout. Synthesis is an
+            # "EXPAND and ORGANIZE" task over already-gathered findings, not a
+            # deep-reasoning turn, so low effort preserves report quality.
+            # Researcher/planner keep their full depth budgets — only the silent
+            # synthesis turn is capped.
+            p["thinking_budget"] = min(cfg["thinking_budget"], 2048)
             p["max_tokens"] = cfg["max_tokens"]
         adjusted.append(p)
     return adjusted
