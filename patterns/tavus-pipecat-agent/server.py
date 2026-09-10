@@ -41,55 +41,53 @@ START_TIMEOUT_SECONDS = 18.0
 _sessions: set[asyncio.Task] = set()
 
 
+async def health() -> dict:
+    """ALB target-group health check."""
+    return {"status": "ok"}
+
+
+async def start(request: Request) -> JSONResponse:
+    """Start one avatar session and return the Tavus room URL."""
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001 - tolerate empty/invalid bodies
+        payload = {}
+
+    # The offer Lambda nests the verified session data under "body"; accept a
+    # bare body too for direct calls.
+    body = payload.get("body") if isinstance(payload, dict) else None
+    if not isinstance(body, dict):
+        body = payload if isinstance(payload, dict) else {}
+
+    if not _tavus_creds_present():
+        logger.warning("[TAVUS] Credentials not configured — refusing /start")
+        return JSONResponse({"error": "tavus_not_configured"}, status_code=503)
+
+    loop = asyncio.get_running_loop()
+    url_future: asyncio.Future = loop.create_future()
+    task = asyncio.create_task(run_session(body, url_future))
+    _sessions.add(task)
+    task.add_done_callback(_sessions.discard)
+
+    try:
+        # Shield so a timeout here does not cancel the running session task.
+        room_url = await asyncio.wait_for(asyncio.shield(url_future), timeout=START_TIMEOUT_SECONDS)
+    except Exception as exc:  # noqa: BLE001 - surface a clean error, cancel the session
+        logger.exception("[TAVUS] Session failed to start: {}", exc)
+        task.cancel()
+        return JSONResponse({"error": "tavus_start_failed"}, status_code=502)
+
+    return JSONResponse({"room_url": room_url})
+
+
 def create_app() -> FastAPI:
     # Load Tavus credentials into the environment once at process startup, before
     # any request builds a transport.
     _load_tavus_secret()
 
     app = FastAPI()
-
-    # The two handlers below are registered with FastAPI by their decorators, so
-    # they are never referenced by name. semgrep's useless-inner-function rule
-    # does not model decorator registration and reports them as unused.
-    @app.get("/health")
-    # nosemgrep: useless-inner-function
-    async def health():  # noqa: ANN202
-        return {"status": "ok"}
-
-    @app.post("/start")
-    # nosemgrep: useless-inner-function
-    async def start(request: Request):  # noqa: ANN202
-        try:
-            payload = await request.json()
-        except Exception:  # noqa: BLE001 - tolerate empty/invalid bodies
-            payload = {}
-
-        # The offer Lambda nests the verified session data under "body"; accept a
-        # bare body too for direct calls.
-        body = payload.get("body") if isinstance(payload, dict) else None
-        if not isinstance(body, dict):
-            body = payload if isinstance(payload, dict) else {}
-
-        if not _tavus_creds_present():
-            logger.warning("[TAVUS] Credentials not configured — refusing /start")
-            return JSONResponse({"error": "tavus_not_configured"}, status_code=503)
-
-        loop = asyncio.get_running_loop()
-        url_future: asyncio.Future = loop.create_future()
-        task = asyncio.create_task(run_session(body, url_future))
-        _sessions.add(task)
-        task.add_done_callback(_sessions.discard)
-
-        try:
-            # Shield so a timeout here does not cancel the running session task.
-            room_url = await asyncio.wait_for(asyncio.shield(url_future), timeout=START_TIMEOUT_SECONDS)
-        except Exception as exc:  # noqa: BLE001 - surface a clean error, cancel the session
-            logger.exception("[TAVUS] Session failed to start: {}", exc)
-            task.cancel()
-            return JSONResponse({"error": "tavus_start_failed"}, status_code=502)
-
-        return JSONResponse({"room_url": room_url})
-
+    app.add_api_route("/health", health, methods=["GET"])
+    app.add_api_route("/start", start, methods=["POST"])
     return app
 
 
