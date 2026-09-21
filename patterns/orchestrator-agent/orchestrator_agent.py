@@ -821,9 +821,29 @@ def _parse_json_object(text: str) -> dict | None:
 
     # 3) Strip trailing commas (`... ,}` / `... ,]`) — the most common LLM JSON
     #    error — and retry.
-    result = _load(re.sub(r",(\s*[}\]])", r"\1", candidate))
+    no_trailing_commas = re.sub(r",(\s*[}\]])", r"\1", candidate)
+    result = _load(no_trailing_commas)
     if result is not None:
         return result
+
+    # 4) Strip erroneous string method calls the model sometimes appends to a
+    #    value — e.g. `"images/x.png".replace("x.png","sub/x.png")` — which is
+    #    valid JavaScript but not valid JSON and breaks the whole parse. Collapse
+    #    `"literal".method(...)` back to just the string literal. In practice the
+    #    designer emits a corrected duplicate key right after the broken one, so
+    #    json's last-key-wins rule then recovers the intended value. Applied
+    #    repeatedly to unwind chained calls, then trailing commas are re-stripped.
+    method_call_re = re.compile(r'("(?:[^"\\]|\\.)*")\s*\.\s*[A-Za-z_]\w*\s*\([^()]*\)')
+    salvaged = no_trailing_commas
+    for _ in range(5):
+        stripped = method_call_re.sub(r"\1", salvaged)
+        if stripped == salvaged:
+            break
+        salvaged = stripped
+    if salvaged != no_trailing_commas:
+        result = _load(re.sub(r",(\s*[}\]])", r"\1", salvaged))
+        if result is not None:
+            return result
 
     return None
 
@@ -2756,7 +2776,12 @@ def _effort_for_budget(thinking_budget: int) -> str:
 
 
 def _build_model(
-    model_id: str, temperature: float, max_tokens: int = 65535, thinking_budget: int = 4096, **extra_kwargs
+    model_id: str,
+    temperature: float,
+    max_tokens: int = 65535,
+    thinking_budget: int = 4096,
+    read_timeout: int = 1800,
+    **extra_kwargs,
 ) -> BedrockModel:
     """Build a BedrockModel with model-appropriate extended thinking config.
 
@@ -2805,7 +2830,7 @@ def _build_model(
     kwargs.setdefault("streaming", True)
     kwargs["max_tokens"] = clamp_max_tokens(model_id, max_tokens)
     kwargs["boto_client_config"] = BotocoreConfig(
-        read_timeout=1800,
+        read_timeout=read_timeout,
         connect_timeout=60,
         retries={"max_attempts": 3, "mode": "adaptive"},
     )
@@ -4610,6 +4635,27 @@ SEQUENTIAL_PHASE_IDLE_TIMEOUT_SEC: dict[str, int] = {
     "synthesizer": 1200,
 }
 
+# Per-phase Bedrock socket read timeout (seconds), passed to `_build_model`.
+#
+# The idle watchdog above only fires once the model has produced SOME output
+# (the `saw_model_output` gate), so a ConverseStream that never emits its first
+# byte — a stalled Bedrock connection — is caught ONLY by the 1800s wall clock,
+# i.e. it hangs for the full 30 minutes then fails. Capping the synthesizer's
+# read timeout BELOW its wall clock makes a first-byte stall raise
+# ReadTimeoutError at 900s instead; botocore's adaptive retry (max_attempts=3,
+# configured in `_build_model`) then re-establishes a fresh connection, and
+# because a healthy synthesis needs only a few minutes the retry completes
+# comfortably inside the untouched 1800s wall clock — an automatic recovery. If
+# retries are exhausted it fails fast (~15 min) rather than dead-hanging for 30.
+# 900s is safe: the synthesizer is pinned to effort=low (thinking capped to
+# 2048), so its first token arrives well under that. Other phases keep the
+# 1800s default; their own tighter wall clocks fire first, so it is never
+# reached.
+SEQUENTIAL_PHASE_MODEL_READ_TIMEOUT_DEFAULT_SEC = 1800
+SEQUENTIAL_PHASE_MODEL_READ_TIMEOUT_SEC: dict[str, int] = {
+    "synthesizer": 900,
+}
+
 # Transient Bedrock errors during a sequential phase's ConverseStream. These are
 # server-side ("Try your request again") and — critically — a failure that
 # arrives AFTER the stream has opened surfaces as an EventStreamError that
@@ -6125,8 +6171,18 @@ async def _run_pipeline(
         phase_model_id = phase.get("model_id") or model_id
         if phase_model_id != model_id:
             print(f"[ORCHESTRATOR] Phase '{agent_name}' uses model: {phase_model_id}")
+        # Cap the synthesizer's read timeout below its wall clock so a stalled
+        # first-byte ConverseStream is retried by botocore instead of hanging the
+        # full 30-min wall clock (see SEQUENTIAL_PHASE_MODEL_READ_TIMEOUT_SEC).
+        phase_read_timeout = SEQUENTIAL_PHASE_MODEL_READ_TIMEOUT_SEC.get(
+            agent_name, SEQUENTIAL_PHASE_MODEL_READ_TIMEOUT_DEFAULT_SEC
+        )
         bedrock_model = _build_model(
-            phase_model_id, temperature=0.1, thinking_budget=thinking_budget, max_tokens=phase_max_tokens
+            phase_model_id,
+            temperature=0.1,
+            thinking_budget=thinking_budget,
+            max_tokens=phase_max_tokens,
+            read_timeout=phase_read_timeout,
         )
 
         # Emit phase start
