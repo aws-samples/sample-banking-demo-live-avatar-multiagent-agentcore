@@ -1196,6 +1196,31 @@ export class Backend extends Stack {
             // The AI Assistant runtime re-signs catalog product images and (when
             // managed evaluation is on) writes evaluation datasets here.
             IMAGES_BUCKET: shared.imagesBucket.bucketName,
+            // ─── AgentCore Observability (spans → aws/spans) ───────────────
+            // The image already installs aws-opentelemetry-distro and launches
+            // under `opentelemetry-instrument`, but AgentCore does NOT inject the
+            // ADOT enablement flag for CDK/SDK-created runtimes (only the starter
+            // toolkit does). Without AGENT_OBSERVABILITY_ENABLED=true the distro
+            // runs yet exports OTLP to the SDK default http://localhost:4318 —
+            // where nothing listens — so ZERO spans reach the shared `aws/spans`
+            // log group and the AgentCore batch evaluation has nothing to score.
+            // The three companions make the spans useful, not just present:
+            //   • OTEL_TRACES_SAMPLER=always_on — ADOT Python defaults to the
+            //     X-Ray remote sampler, which drops application-level spans;
+            //     without it Strands' invoke_agent/chat/execute_tool spans never
+            //     appear.
+            //   • OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true — else
+            //     spans carry no prompt/response body, so the TRACE-level
+            //     evaluator's placeholders resolve to nothing.
+            //   • OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental —
+            //     required for Strands 1.x invoke_agent spans to emit the
+            //     gen_ai content events (without it the spans carry events: []).
+            // The execution role already grants xray:PutTraceSegments +
+            // logs:PutLogEvents, so no IAM change is needed.
+            AGENT_OBSERVABILITY_ENABLED: "true",
+            OTEL_TRACES_SAMPLER: "always_on",
+            OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "true",
+            OTEL_SEMCONV_STABILITY_OPT_IN: "gen_ai_latest_experimental",
         };
 
         const runtimeArns: Record<string, string> = {};
