@@ -201,6 +201,9 @@ function LoadingState(): JSX.Element {
 type FormMode = "signIn" | "newPassword";
 
 function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX.Element {
+    // Only deployments that attach an external identity provider set this, so it
+    // doubles as the switch for showing the federated sign-in button.
+    const federateProviderConfigured = !!import.meta.env.VITE_COGNITO_IDENTITY_PROVIDER;
     const [mode, setMode] = useState<FormMode>("signIn");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -427,19 +430,26 @@ function SignInCard({ onFederateSignIn }: { onFederateSignIn: () => void }): JSX
                     </form>
                 )}
 
-                {/* Federated sign-in */}
-                <button
-                    type="button"
-                    onClick={onFederateSignIn}
-                    className="w-full cursor-pointer rounded-[4px] px-6 py-2.5 text-sm font-medium transition-colors"
-                    style={{
-                        border: "1px solid rgba(255,255,255,0.14)",
-                        color: "rgba(255,255,255,0.72)",
-                        background: "transparent",
-                    }}
-                >
-                    Continue with SSO
-                </button>
+                {/* Federated sign-in, only when an external identity provider is
+                    actually configured. VITE_COGNITO_IDENTITY_PROVIDER is set by
+                    the stage only for deployments that attach one; without it the
+                    button would bounce the user to a Hosted UI with no provider
+                    to choose, which is a dead end next to the email/password form
+                    directly above. */}
+                {federateProviderConfigured ? (
+                    <button
+                        type="button"
+                        onClick={onFederateSignIn}
+                        className="w-full cursor-pointer rounded-[4px] px-6 py-2.5 text-sm font-medium transition-colors"
+                        style={{
+                            border: "1px solid rgba(255,255,255,0.14)",
+                            color: "rgba(255,255,255,0.72)",
+                            background: "transparent",
+                        }}
+                    >
+                        Continue with SSO
+                    </button>
+                ) : null}
 
                 <div className="rule" style={{ background: "rgba(255,255,255,0.08)" }} />
 

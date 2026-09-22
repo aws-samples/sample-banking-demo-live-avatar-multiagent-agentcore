@@ -91,7 +91,16 @@ export class Frontend extends Stack {
 
         const websiteAsset: AssetConfig = {
             path: join(__dirname, "app"),
-            exclude: ["dist", "node_modules"],
+            // `.env` files are excluded deliberately. They are a LOCAL dev
+            // convenience (see the README: create one from the stack outputs to
+            // run `npm run -w frontend dev`), and they are gitignored — but the
+            // asset is taken from the working tree, so without this they ride
+            // along and Vite reads them during the in-cloud build. Any VITE_* key
+            // the stage does not inject then silently keeps its stale local value:
+            // a leftover VITE_LIVEKIT_TOKEN_URL pointed a fresh deployment at a
+            // torn-down LiveKit endpoint and broke the avatar with an opaque
+            // CORS/NetworkError.
+            exclude: ["dist", "node_modules", ".env", ".env.*"],
         };
 
         this.websiteBucket = websiteBucket;
