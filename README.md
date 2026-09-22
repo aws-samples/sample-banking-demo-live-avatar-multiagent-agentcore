@@ -1,8 +1,8 @@
-# AppDev Research Agent — MVP
+# Multi-agent banking demo with a live avatar, built on Amazon Bedrock AgentCore
 
 A multi-agent research platform built on **Amazon Bedrock AgentCore** that produces
 comprehensive PDF research reports through a human-in-the-loop pipeline, plus an
-AI menu/catalog designer, a guardrailed concierge chat with a live browser
+AI services-catalog designer, a guardrailed concierge chat with a live browser
 sub-agent, and a real-time voice avatar. It deploys entirely with the AWS CDK and
 costs ~$0 when idle (fully pay-per-use).
 
@@ -10,6 +10,66 @@ This is the **customer MVP build**: a trimmed, self-contained version of the
 internal demo that a team outside AWS can deploy into their own account with
 plain CDK. Third-party voice paths, preview-only services, and internal Amazon
 tooling have been removed or disabled (see [What's in this MVP](#whats-in-this-mvp)).
+
+---
+
+## Overview
+
+### The scenario
+
+Trinity Reserve Bank is a **fictional, proposed bank**, not an operating one. The
+demo opens from a founder's brief and works it up into a business: research the
+market, design the client services catalog, stand up a customer onboarding agent,
+and put a live advisor in front of customers. Every document, rate, price, and
+product image is synthetic or model-generated. Nothing here is real customer data,
+and nothing here is financial advice.
+
+### What it is actually demonstrating
+
+Getting an agent from prototype to production takes far more than a model call. A
+real agentic application needs multi-agent orchestration, tool integration,
+persistent memory, guardrails, grounded retrieval, live web action, code execution,
+identity, and observability. Assembling that yourself means gluing frameworks
+together, running and securing servers, managing sessions and auth, and paying for
+idle capacity.
+
+This application builds the same feature set out of **managed AgentCore
+primitives**, so each moving part maps to a service you do not have to operate.
+The point of the demo is less "look at the bank" and more "look at how little
+plumbing is left".
+
+### The four experiences
+
+All four run from a **single orchestrator container image**, deployed as separate
+AgentCore Runtimes that differ only by an `AGENT_PROFILE` environment variable.
+Adding an experience does not mean adding a service to operate.
+
+| Experience               | Audience           | What it shows                                                                                                                                                                                    |
+| ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Deep Research Agent**  | Internal employees | Planner, Researcher, Synthesizer and PDF Writer running in one Runtime, pausing for human approval of the plan, then emitting a cited 12-section PDF that an LLM-as-a-judge evaluator scores.    |
+| **AI Assistant**         | Internal employees | Turns the strategy report into the client services catalog: retrieval grounded in the knowledge base, Nova Canvas product imagery, then deterministic quality control before anything ships.     |
+| **AI Agent**             | External customers | A guardrailed onboarding and KYC concierge. Bedrock Guardrails refuse off-topic and sensitive asks, and an AgentCore Browser microVM is driven live on screen when a real web session is needed. |
+| **Avatar/Digital Human** | External customers | Real-time speech-to-speech advisory over Amazon Nova Sonic with selectable personas and languages, plus an optional photoreal video avatar.                                                      |
+
+A flow sidebar lights up each AgentCore component as it is invoked, so the
+primitives stay visible while the agents work instead of being buried in logs.
+
+### What to take away
+
+- **Composable managed primitives.** Runtime, Gateway (MCP tools), Memory,
+  Identity, Browser, Code Interpreter, Policy, Evaluations and Observability are
+  wired together rather than hand-built.
+- **Grounded retrieval with tenant isolation.** One Bedrock Knowledge Base on S3
+  Vectors is split into logical views, with per-user and per-pipeline filters
+  enforced server-side, so one user's generated reports never surface for another.
+- **Enterprise defaults from the start.** Cognito OIDC for users,
+  machine-to-machine OAuth2 for agent-to-Gateway calls, WAF on the entry points,
+  and managed encryption.
+- **Infrastructure as code, and reversible.** Five CDK stacks (six with the
+  optional Tavus video avatar) stand the whole thing up and tear it back down with
+  standard commands.
+- **Pay-per-use.** Scale-to-zero throughout, so an idle deployment costs roughly
+  nothing.
 
 ---
 
