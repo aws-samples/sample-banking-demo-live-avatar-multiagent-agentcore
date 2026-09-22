@@ -275,10 +275,68 @@ def _batch_entry(batch_id: str) -> dict:
     return entry
 
 
+def _observability_status() -> dict:
+    """Report whether CloudWatch Transaction Search is ingesting OTEL spans.
+
+    Transaction Search is the account-level setting that makes X-Ray deliver
+    spans into CloudWatch Logs, creating the shared `aws/spans` log group that
+    AgentCore batch evaluation reads. Without it the evaluation cannot run, so the
+    UI checks this up front and offers the fix instead of waiting for the run to
+    fail with a raw ValidationException.
+
+    The trace-segment destination is the authoritative signal; the log group is
+    corroborating detail (it only appears once delivery starts). Never raises: an
+    indeterminate check reports ready so it can never block the feature on its own.
+    """
+    spans_log_group = os.environ.get("SPANS_LOG_GROUP", "aws/spans")
+    out: dict = {
+        "spansLogGroup": spans_log_group,
+        # Console path rather than a deep link, and the AWS how-to as the action,
+        # so neither can rot into a dead end.
+        "consolePath": "CloudWatch > Application Signals (APM) > Transaction search",
+        "docsUrl": (
+            "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/"
+            "observability-configure.html#observability-configure-builtin-cw"
+        ),
+    }
+    try:
+        dest = boto3.client("xray", region_name=REGION).get_trace_segment_destination()
+        destination = dest.get("Destination", "Unknown")
+        state = dest.get("Status", "Unknown")
+        out["destination"] = destination
+        out["destinationStatus"] = state
+        enabled = destination == "CloudWatchLogs"
+        out["transactionSearchEnabled"] = enabled
+        out["ready"] = enabled and state == "ACTIVE"
+        if not enabled:
+            out["message"] = (
+                "CloudWatch Transaction Search is not enabled in this account, so the agent's "
+                "OpenTelemetry spans are not being ingested and there is nothing for the "
+                "evaluation to score."
+            )
+        elif state != "ACTIVE":
+            out["message"] = (
+                f"CloudWatch Transaction Search is enabling (status {state}). Spans start "
+                "arriving once it becomes ACTIVE, usually within a few minutes."
+            )
+    except Exception as exc:  # noqa: BLE001 - advisory only, never block the UI
+        logger.warning("observability check failed: %s", exc)
+        out["ready"] = True
+        out["indeterminate"] = True
+    return out
+
+
 def handler(event, _context):
     if (event.get("httpMethod") or "").upper() == "OPTIONS":
         return {"statusCode": 200, "headers": _headers(), "body": "{}"}
     params = event.get("queryStringParameters") or {}
+    # Observability readiness (Transaction Search), checked before evaluating.
+    if (params.get("check") or "").strip() == "observability":
+        return {
+            "statusCode": 200,
+            "headers": _headers(),
+            "body": json.dumps(_observability_status()),
+        }
     # AgentCore batch evaluation status/scores.
     batch_id = (params.get("batch") or "").strip()
     if batch_id:

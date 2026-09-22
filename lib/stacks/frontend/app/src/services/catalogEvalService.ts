@@ -88,6 +88,39 @@ export interface BatchEvalStatus {
     error?: string;
 }
 
+/**
+ * Whether CloudWatch Transaction Search is ingesting the agent's OpenTelemetry
+ * spans. Without it there are no spans for AgentCore evaluation to score.
+ */
+export interface ObservabilityStatus {
+    /** False only when we positively determined ingestion is not working. */
+    ready: boolean;
+    transactionSearchEnabled?: boolean;
+    /** "CloudWatchLogs" once enabled, otherwise "XRay". */
+    destination?: string;
+    destinationStatus?: string;
+    spansLogGroup?: string;
+    consolePath?: string;
+    docsUrl?: string;
+    message?: string;
+    /** The check itself could not run; treated as ready so it never blocks. */
+    indeterminate?: boolean;
+}
+
+/** Check whether span ingestion (Transaction Search) is on, before evaluating. */
+export async function fetchObservabilityStatus(idToken: string): Promise<ObservabilityStatus> {
+    const apiUrl = getApiUrl();
+    if (!apiUrl) return { ready: true, indeterminate: true };
+    const response = await fetch(`${apiUrl}?check=observability`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+    });
+    if (!response.ok) {
+        // Never block the feature on a failed advisory check.
+        return { ready: true, indeterminate: true };
+    }
+    return (await response.json()) as ObservabilityStatus;
+}
+
 /** Fetch current status/scores for an AgentCore batch evaluation. */
 export async function fetchBatchStatus(
     batchEvaluationId: string,

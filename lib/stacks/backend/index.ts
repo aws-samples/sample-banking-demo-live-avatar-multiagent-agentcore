@@ -1915,6 +1915,18 @@ export class Backend extends Stack {
                         ],
                     })
                 );
+                // Read-only Transaction Search check (`?check=observability`), so
+                // the UI can tell the operator that span ingestion is off and
+                // offer the fix instead of letting the evaluation fail. The
+                // trace-segment destination is an account-level singleton, so it
+                // is not resource-scopeable.
+                evalStatusLambda.addToRolePolicy(
+                    new PolicyStatement({
+                        effect: Effect.ALLOW,
+                        actions: ["xray:GetTraceSegmentDestination"],
+                        resources: ["*"],
+                    })
+                );
                 shared.imagesBucket.grantRead(evalStatusLambda);
 
                 const evalStatusIntegration = new apigateway.LambdaIntegration(evalStatusLambda);

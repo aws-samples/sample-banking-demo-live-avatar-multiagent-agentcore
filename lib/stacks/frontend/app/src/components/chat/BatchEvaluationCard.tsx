@@ -5,9 +5,15 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import Alert from "@cloudscape-design/components/alert";
 import { Gauge } from "lucide-react";
 import { useAuth } from "react-oidc-context";
-import { fetchBatchStatus, type BatchEvalStatus } from "@/services/catalogEvalService";
+import {
+    fetchBatchStatus,
+    fetchObservabilityStatus,
+    type BatchEvalStatus,
+    type ObservabilityStatus,
+} from "@/services/catalogEvalService";
 
 /**
  * Live tracker for the AgentCore batch evaluation that auto-fires when the
@@ -73,6 +79,24 @@ export function BatchEvaluationCard({
     const [done, setDone] = useState(false);
     const pollsRef = useRef(0);
 
+    // Span-ingestion readiness, checked as soon as the card appears rather than
+    // after a failed run. Transaction Search is an account-level prerequisite for
+    // AgentCore evaluation, and when it is off the run either cannot start or
+    // scores nothing — so surface the fix here instead of leaving the operator to
+    // decode a ValidationException. Advisory only: an indeterminate check reports
+    // ready and nothing is shown.
+    const [obs, setObs] = useState<ObservabilityStatus | null>(null);
+    useEffect(() => {
+        if (!idToken) return;
+        let cancelled = false;
+        void fetchObservabilityStatus(idToken).then((s) => {
+            if (!cancelled) setObs(s);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [idToken]);
+
     const poll = useCallback(async (): Promise<boolean> => {
         if (!idToken || !batchEvaluationId) return true;
         try {
@@ -111,6 +135,32 @@ export function BatchEvaluationCard({
 
     return (
         <div className="my-3">
+            {obs && !obs.ready ? (
+                <div className="mb-2">
+                    <Alert
+                        type="warning"
+                        header="Enable CloudWatch Transaction Search to score sessions"
+                        action={
+                            obs.docsUrl ? (
+                                <Button iconName="external" href={obs.docsUrl} target="_blank">
+                                    How to enable
+                                </Button>
+                            ) : undefined
+                        }
+                    >
+                        {obs.message ??
+                            "CloudWatch Transaction Search is not enabled, so the agent's OpenTelemetry spans are not being ingested."}{" "}
+                        Transaction Search is the ingestion setting for OpenTelemetry spans: it
+                        delivers them to the <code>{obs.spansLogGroup ?? "aws/spans"}</code> log
+                        group that AgentCore evaluation reads. Turn it on under{" "}
+                        <strong>
+                            {obs.consolePath ??
+                                "CloudWatch > Application Signals (APM) > Transaction search"}
+                        </strong>
+                        , then run the catalog flow again so spans exist to score.
+                    </Alert>
+                </div>
+            ) : null}
             <Container
                 header={
                     <Header
