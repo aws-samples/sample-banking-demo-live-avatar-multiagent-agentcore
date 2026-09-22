@@ -230,26 +230,6 @@ export interface FeatureFlags {
      * appear. Defaults to TRUE.
      */
     agentcore_evaluation: boolean;
-
-    /**
-     * Enable CloudWatch Transaction Search automatically at deploy time, via a
-     * custom resource (see lib/lambdas/transaction-search-provisioner).
-     *
-     * Transaction Search is what makes X-Ray deliver trace segments to
-     * CloudWatch Logs, which creates the shared `aws/spans` log group that
-     * AgentCore batch evaluation reads. It has no CloudFormation resource and is
-     * otherwise a manual, one-time console step, so leaving it to the operator
-     * meant a fresh account hit
-     * "ValidationException: Log group 'aws/spans' not found in your account"
-     * the first time the evaluation step ran.
-     *
-     * This is ACCOUNT-LEVEL shared configuration, so the provisioner reads
-     * before writing, never lowers an indexing percentage another workload
-     * raised, and deliberately does NOT revert on stack deletion. Set this to
-     * FALSE if observability is managed centrally for the account and you do not
-     * want a stack deployment touching it. Defaults to TRUE.
-     */
-    auto_enable_transaction_search: boolean;
 }
 
 export interface ModelConfig {
@@ -292,7 +272,6 @@ const DEFAULT_FEATURES: FeatureFlags = {
     managed_web_search: false,
     bedrock_managed_eval: true,
     agentcore_evaluation: true,
-    auto_enable_transaction_search: true,
 };
 
 const DEFAULT_MODELS: ModelConfig = {

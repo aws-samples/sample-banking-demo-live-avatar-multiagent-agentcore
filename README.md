@@ -242,34 +242,47 @@ The application deploys as CDK stacks (stack names are prefixed with the
 - Access to the required Bedrock models must be **enabled in the account**
   (Bedrock console → Model access): Claude Sonnet, Nova Sonic, Nova Lite, Nova
   Canvas, and Nova Multimodal Embeddings.
-- **CloudWatch Transaction Search is enabled for you.** No manual step required.
+- **For AgentCore Evaluations, enable CloudWatch Transaction Search** in the deploy
+  account. This is a one-time, account-level setting that makes AWS X-Ray deliver
+  trace segments to CloudWatch Logs, which creates the shared `aws/spans` log group
+  that batch evaluation reads. Everything else deploys and runs without it; only
+  the evaluation step is affected, and it will tell you if the group is missing.
 
-    AgentCore batch evaluation reads agent sessions out of the shared `aws/spans` log
-    group, and that group only exists once Transaction Search is turned on for the
-    account. It has no CloudFormation resource, so `cdk deploy` handles it with a
-    small custom resource
-    ([`lib/lambdas/transaction-search-provisioner`](lib/lambdas/transaction-search-provisioner/index.py))
-    that makes the same three calls the console button makes: a Logs resource policy
-    letting X-Ray write spans, switching the X-Ray trace-segment destination to
-    CloudWatch Logs, and setting span indexing to 1% (the free tier).
+    Easiest path is the console: **CloudWatch > Application Signals (APM) >
+    Transaction search > Enable Transaction Search**, ticking _ingest spans as
+    structured logs_. The equivalent CLI is:
 
-    Because this is **account-level shared configuration**, the provisioner is
-    deliberately conservative: it reads before writing, skips the switch when the
-    destination is already CloudWatch Logs, never lowers an indexing percentage
-    another workload raised, and **does not revert on `cdk destroy`** (reverting
-    would break Transaction Search for every other application in the account). It
-    is best-effort, so a deployer whose role cannot change X-Ray settings still gets
-    a successful deploy.
+    ```bash
+    ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+    REGION=us-east-1
 
-    Set `"auto_enable_transaction_search": false` in [`cdk.json`](cdk.json) if
-    observability is managed centrally and you would rather a deployment did not
-    touch it. Enable it yourself under **CloudWatch > Application Signals (APM) >
-    Transaction search**, ticking _ingest spans as structured logs_.
+    # 1. Let X-Ray write spans into CloudWatch Logs. Note the braces around
+    #    ${ACCOUNT}: in zsh, "$ACCOUNT:log-group" is parsed as the :l (lowercase)
+    #    modifier and silently corrupts the ARN.
+    cat > /tmp/xray-spans-policy.json <<JSON
+    {"Version":"2012-10-17","Statement":[{"Sid":"TransactionSearchXRayAccess",
+      "Effect":"Allow","Principal":{"Service":"xray.amazonaws.com"},
+      "Action":"logs:PutLogEvents",
+      "Resource":["arn:aws:logs:${REGION}:${ACCOUNT}:log-group:aws/spans:*",
+                  "arn:aws:logs:${REGION}:${ACCOUNT}:log-group:/aws/application-signals/data:*"],
+      "Condition":{"ArnLike":{"aws:SourceArn":"arn:aws:xray:${REGION}:${ACCOUNT}:*"},
+                   "StringEquals":{"aws:SourceAccount":"${ACCOUNT}"}}}]}
+    JSON
+    aws logs put-resource-policy --policy-name TransactionSearchXRayAccess \
+      --policy-document file:///tmp/xray-spans-policy.json --region "$REGION"
 
-    Two timing notes: the destination reports `PENDING` and settles to `ACTIVE`
-    asynchronously (usually a few minutes), and spans only exist after the agent has
-    run. Run a catalog flow once before launching an evaluation, otherwise there is
-    nothing to score.
+    # 2. Switch the trace-segment destination (fails with AccessDenied if step 1
+    #    is missing or its ARNs are wrong).
+    aws xray update-trace-segment-destination --destination CloudWatchLogs --region "$REGION"
+
+    # 3. Span indexing percentage; 1% is the free tier.
+    aws xray update-indexing-rule --name Default \
+      --rule '{"Probabilistic":{"DesiredSamplingPercentage":1}}' --region "$REGION"
+    ```
+
+    The destination reports `PENDING` and settles to `ACTIVE` after a few minutes.
+    Spans only exist once the agent has run, so run a catalog flow before launching
+    an evaluation, otherwise there is nothing to score.
 
 ---
 

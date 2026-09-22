@@ -46,7 +46,6 @@
             "harness": true,
             "agentcore_identity": true,
             "agentcore_evaluation": true,
-            "auto_enable_transaction_search": true,
             "prompt_optimization": true,
             "bedrock_managed_eval": true,
 
