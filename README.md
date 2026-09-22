@@ -243,9 +243,34 @@ The application deploys as CDK stacks (stack names are prefixed with the
   (Bedrock console → Model access): Claude Sonnet, Nova Sonic, Nova Lite, Nova
   Canvas, and Nova Multimodal Embeddings.
 - **For AgentCore Evaluations:** enable **CloudWatch Transaction Search** in the
-  deploy account. Batch evaluation scores the runtime's OpenTelemetry spans, so
-  without it the evaluator deploys but has no spans to score. The rest of the
-  application is unaffected.
+  deploy account. This is a one-time, account-level setting that creates the shared
+  `aws/spans` log group the batch evaluation reads. Without it the evaluator still
+  deploys, but launching a batch evaluation fails with
+  `ValidationException: Log group 'aws/spans' not found in your account`. The rest
+  of the application is unaffected.
+
+    Enable it in the console under **CloudWatch → Application Signals (APM) →
+    Transaction search → Enable Transaction Search** (tick _ingest spans as
+    structured logs_), or from the CLI:
+
+    ```bash
+    # 1. Let X-Ray deliver spans into CloudWatch Logs
+    ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+    REGION=us-east-1
+    aws logs put-resource-policy \
+      --policy-name TransactionSearchXRayAccess \
+      --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"TransactionSearchXRayAccess\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"xray.amazonaws.com\"},\"Action\":\"logs:PutLogEvents\",\"Resource\":[\"arn:aws:logs:$REGION:$ACCOUNT:log-group:aws/spans:*\",\"arn:aws:logs:$REGION:$ACCOUNT:log-group:/aws/application-signals/data:*\"],\"Condition\":{\"ArnLike\":{\"aws:SourceArn\":\"arn:aws:xray:$REGION:$ACCOUNT:*\"},\"StringEquals\":{\"aws:SourceAccount\":\"$ACCOUNT\"}}}]}"
+
+    # 2. Send trace segments to CloudWatch Logs
+    aws xray update-trace-segment-destination --destination CloudWatchLogs --region $REGION
+
+    # 3. (Optional) indexing percentage; 1% is the free tier
+    aws xray update-indexing-rule --name Default \
+      --rule '{"Probabilistic":{"DesiredSamplingPercentage":1}}' --region $REGION
+    ```
+
+    Then run a catalog flow once so the agent emits spans before launching an
+    evaluation.
 
 ---
 

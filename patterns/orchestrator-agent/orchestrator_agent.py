@@ -1437,6 +1437,34 @@ def _launch_batch_evaluation() -> dict:
         evaluator_id = _find_evaluator_id_by_name(ctl, evaluator_name)
         if not evaluator_id:
             return {"status": "error", "message": "Evaluator not found.", "consoleUrl": console_url}
+
+        # Preflight the span log group before starting the run.
+        #
+        # AgentCore validates the source log group and rejects the whole call with
+        # a ValidationException when it is absent, which reached the UI verbatim as
+        # "Log group 'aws/spans' not found in your account". That group is created
+        # by CloudWatch Transaction Search — an account-level, one-time setup — so
+        # report the actual prerequisite instead of the raw API wording. A failure
+        # of the check itself never blocks: fall through and let the API decide.
+        spans_log_group = os.environ.get("SPANS_LOG_GROUP", "aws/spans")
+        try:
+            logs = boto3.client("logs", region_name=region)
+            groups = logs.describe_log_groups(logGroupNamePrefix=spans_log_group).get("logGroups", [])
+            spans_group_exists = any(g.get("logGroupName") == spans_log_group for g in groups)
+        except Exception as exc:  # noqa: BLE001 - advisory check only
+            logger.debug("Span log-group preflight skipped: %s", exc)
+            spans_group_exists = True
+        if not spans_group_exists:
+            return {
+                "status": "error",
+                "message": (
+                    f"No traces to score yet: the '{spans_log_group}' log group does not exist in "
+                    "this account. Enable CloudWatch Transaction Search (one-time account setup), "
+                    "then run the catalog flow again so the agent emits spans."
+                ),
+                "consoleUrl": console_url,
+            }
+
         now = int(_t.time())
         r = dp.start_batch_evaluation(
             batchEvaluationName=f"catalog{now}",

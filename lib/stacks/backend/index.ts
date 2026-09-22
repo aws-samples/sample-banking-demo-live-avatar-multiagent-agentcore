@@ -1221,6 +1221,25 @@ export class Backend extends Stack {
             OTEL_TRACES_SAMPLER: "always_on",
             OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "true",
             OTEL_SEMCONV_STABILITY_OPT_IN: "gen_ai_latest_experimental",
+            // Deliver spans to the SHARED `aws/spans` log group rather than each
+            // runtime's own group.
+            //
+            // In Regions that support the unified span destination, a newly
+            // created AgentCore runtime defaults to writing spans into
+            // `/aws/bedrock-agentcore/runtimes/<id>-DEFAULT` instead. Everything
+            // on the evaluation path here is built around the shared group: the
+            // batch evaluation's dataSourceConfig, the eval provisioner's
+            // SPANS_LOG_GROUP, and the execution role's log-group grant are all
+            // scoped to `aws/spans`. Leaving the default in place meant spans
+            // landed somewhere the evaluation never reads, so the batch run found
+            // no sessions to score. Setting this to "false" opts back into the
+            // shared destination so producer and consumer agree.
+            //
+            // NOTE: the shared group is created by CloudWatch Transaction Search,
+            // which is an account-level one-time setup (see the README
+            // prerequisites). Without it the group does not exist and
+            // StartBatchEvaluation fails validation.
+            UNIFIED_TRACES_DESTINATION_ENABLED: "false",
         };
 
         const runtimeArns: Record<string, string> = {};
