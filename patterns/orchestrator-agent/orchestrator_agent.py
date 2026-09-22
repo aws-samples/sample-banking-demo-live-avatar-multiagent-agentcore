@@ -4683,6 +4683,18 @@ _TRANSIENT_BEDROCK_MARKERS = (
     "modelerrorexception",
     "modeltimeoutexception",
     "unexpected error during processing",
+    # A socket read timeout on the ConverseStream — the synthesizer's stream
+    # stalling before its first byte. This MUST be treated as transient and
+    # re-driven here, because botocore will not do it for us: the stall happens
+    # while reading the event-stream body, i.e. AFTER the response was returned,
+    # which is outside botocore's retry scope (same reason the mid-stream
+    # EventStreamError above needs application-level retry). Without these
+    # markers the phase failed outright with
+    # "ReadTimeoutError: ... Read timed out." once the per-phase read timeout
+    # fired. Two markers so it matches on either the class name
+    # (botocore/urllib3 `ReadTimeoutError`) or the message text.
+    "readtimeout",
+    "read timed out",
 )
 
 

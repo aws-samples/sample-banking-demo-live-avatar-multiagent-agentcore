@@ -67,6 +67,44 @@ agent-to-agent fraud/KYC hop.
 Everything above is a feature flag in [`cdk.json`](cdk.json); items that are off
 create no resources. Turn any of them on there.
 
+### AgentCore Runtime platform version (V1 vs V2)
+
+This demo's runtimes currently run on **AgentCore Runtime platform version V1**,
+which is the service default.
+
+AWS [announced the next-generation AgentCore Runtime on 18 September 2026](https://aws.amazon.com/about-aws/whats-new/2026/09/new-agentcore-runtime-generally-available/).
+Opted into per-runtime with `platformVersion: "V2"`, it starts each instance by
+restoring a prepared snapshot instead of initializing the environment every time.
+That gives consistent cold starts regardless of image size (AWS reports a P75 of
+1.9–2.0s for 200 MB–2 GB images, versus 5.4–30s on V1) and elastic memory that is
+reclaimed during a session, so you pay for actual usage rather than the peak. V2
+is available in `us-east-1`, `us-east-2`, `us-west-2`, `eu-west-1`, and
+`ap-northeast-1`.
+
+V2 is attractive for this application — the orchestrator image is ~1.5 GB, right
+in the band where V1 cold starts are slowest — but it is **not enabled here yet**,
+for three reasons:
+
+1. **No infrastructure-as-code support.** Per the
+   [platform versions documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-how-it-works.html#runtime-platform-versions),
+   CloudFormation and the AWS CDK cannot set `platformVersion` today, and
+   `CfnRuntime` (aws-cdk-lib 2.253.1) exposes no such property. Every runtime here
+   is deployed as `AWS::BedrockAgentCore::Runtime`, so enabling V2 would require an
+   out-of-band `update-agent-runtime` call rather than a one-line CDK change.
+2. **Snapshot-safe cryptography.** V2 requires crypto libraries that reseed after
+   a restore; the documentation names `openssl-snapsafe-libs` on Amazon Linux 2023.
+   The agent containers here are Debian (`uv:python3.13-bookworm-slim`), so moving
+   to V2 means revisiting the base image first.
+3. **Startup contract.** V2 snapshots on the first healthy `/ping` and requires
+   initialization to finish within 120 seconds, and anything computed at startup is
+   shared by every restored instance. Adopting it warrants an audit against the
+   [V2 optimization guidance](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-v2-optimize.html)
+   (per-request identifiers, timestamps, and credentials must not be captured in
+   the snapshot).
+
+One constraint that is **not** a blocker: V2 caps container environment variables
+at 2.5 KB (versus 4 KB on V1), and the largest runtime in this stack is ~1.2 KB.
+
 ---
 
 ## Architecture
