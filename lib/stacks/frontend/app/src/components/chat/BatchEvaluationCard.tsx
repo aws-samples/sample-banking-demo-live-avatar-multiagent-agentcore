@@ -209,8 +209,13 @@ export function BatchEvaluationCard({
                                         className="mt-1 text-[11px]"
                                         style={{ color: "var(--app-text-secondary)" }}
                                     >
-                                        Scores are still being written — check the AgentCore console
-                                        for the full run.
+                                        {/* The status Lambda explains *why* nothing scored —
+                                            usually that spans had not reached CloudWatch yet.
+                                            Falling back to the generic line only when it is
+                                            absent avoids the old, misleading "still being
+                                            written" message on a job that had zero sessions. */}
+                                        {live?.note ??
+                                            "Scores are still being written — check the AgentCore console for the full run."}
                                     </p>
                                 ) : null}
                             </div>

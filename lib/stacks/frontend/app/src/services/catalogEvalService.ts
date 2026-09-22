@@ -75,6 +75,16 @@ export interface BatchEvalStatus {
     count?: number;
     /** A sample evaluator explanation, when available. */
     explanation?: string;
+    /** Session counts reported by AgentCore for the run. */
+    sessionsTotal?: number;
+    sessionsScored?: number;
+    sessionsFailed?: number;
+    /**
+     * Human-readable explanation of a zero/partial result, e.g. spans had not
+     * reached CloudWatch yet, or transport-only sessions were skipped. Preferred
+     * over the generic "still being written" copy when present.
+     */
+    note?: string;
     error?: string;
 }
 

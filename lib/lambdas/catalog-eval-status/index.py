@@ -224,6 +224,45 @@ def _batch_entry(batch_id: str) -> dict:
         status = b.get("status", "Unknown")
         entry["status"] = status
         entry["done"] = status in _BATCH_TERMINAL
+
+        # Surface the session counts so the UI can tell "spans not there yet"
+        # apart from "scored". Two behaviours are normal here and both used to
+        # render as an unexplained "0 scores aggregated":
+        #
+        #  * Right after a run, aws/spans has not received the session yet (X-Ray
+        #    delivery to CloudWatch Logs lags by a minute or two), so the job
+        #    completes with totalNumberOfSessions == 0. Re-running it later finds
+        #    the sessions.
+        #  * Each turn produces a parent session id plus one per phase
+        #    (`{session}-{agent}`). Only the phase sessions carry agent spans; the
+        #    parent carries just the HTTP/ASGI transport spans, so it fails with
+        #    "No evaluable agent spans found" and the job ends
+        #    COMPLETED_WITH_ERRORS even though scoring worked.
+        results = b.get("evaluationResults") or {}
+
+        def _count(key: str) -> int:
+            try:
+                return int(results.get(key) or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        entry["sessionsTotal"] = _count("totalNumberOfSessions")
+        entry["sessionsScored"] = _count("numberOfSessionsCompleted")
+        entry["sessionsFailed"] = _count("numberOfSessionsFailed")
+
+        if entry["done"]:
+            if entry["sessionsTotal"] == 0:
+                entry["note"] = (
+                    "No sessions were visible in aws/spans for this window yet. Spans reach "
+                    "CloudWatch a minute or two after a run finishes — launch the evaluation "
+                    "again shortly to score this run."
+                )
+            elif entry["sessionsScored"] and entry["sessionsFailed"]:
+                entry["note"] = (
+                    f"{entry['sessionsScored']} of {entry['sessionsTotal']} sessions scored. The "
+                    "rest carried only transport spans (no agent turns) and were skipped."
+                )
+
         if status in ("COMPLETED", "COMPLETED_WITH_ERRORS"):
             out = (b.get("outputConfig") or {}).get("cloudWatchConfig") or {}
             lg, ls = out.get("logGroupName"), out.get("logStreamName")
