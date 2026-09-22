@@ -448,6 +448,10 @@ All configuration lives in [`cdk.json`](cdk.json) `context`:
   Manager/SSM path prefix.
 - `accounts.{stage}` — `{ id, region }`; leave `id: null` to use the deployer's
   default account.
+- `adminUserEmail` — optional. When set, an email-verified Cognito user is
+  pre-created at deploy time so you do not have to self-register. Cognito emails
+  that address a temporary password. Leave it `null` to skip it and use **Create
+  Account** on the login screen instead.
 - `features` — feature flags (see [What's in this MVP](#whats-in-this-mvp)).
 - `models` — Bedrock model ID overrides.
 
