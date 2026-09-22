@@ -38,6 +38,7 @@ COPY patterns/utils/ utils/
 COPY patterns/avatar-agent/avatar_agent.py .
 COPY patterns/avatar-agent/persona_prompts.py .
 COPY patterns/avatar-agent/system_prompt_augmenter.py .
+COPY patterns/avatar-agent/sagemaker_specialist.py .
 
 # Healthcheck using Python (no extra dependencies needed)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

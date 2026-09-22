@@ -1,4 +1,9 @@
-strands-agents[bidi-all]>=1.33.0,<2.0.0
+# Pinned below 1.55.0: the avatar is the only agent here that uses the
+# `strands.experimental.bidi` namespace, and experimental APIs break between
+# minors. 1.55.0 renamed BidiNovaSonicModel -> BedrockNovaSonicModel and
+# replaced its `provider_config` block with `audio=` / `voice=` / `params=`,
+# which silently broke container startup on the next image rebuild.
+strands-agents[bidi-all]>=1.54.0,<1.55.0
 bedrock-agentcore>=1.4.1,<2.0.0
 fastapi
 uvicorn[standard]
