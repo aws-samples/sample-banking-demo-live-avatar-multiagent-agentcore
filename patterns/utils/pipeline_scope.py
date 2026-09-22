@@ -33,9 +33,10 @@ Isolation contract (enforced here + in gateway/tools/kb_search/handler.py):
 import logging
 from typing import Any
 
-from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
+from strands.hooks import HookProvider, HookRegistry
 
 from utils.gateway_tools import bare_tool_name
+from utils.hook_events import BEFORE_TOOL_CALL_EVENTS, BeforeToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -178,9 +179,10 @@ class PipelineScopeHook(HookProvider):
         return cleaned  # may be empty; caller decides whether that's fail-closed
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
-        registry.add_callback(BeforeToolCallEvent, self._inject_pipeline)
+        for event_type in BEFORE_TOOL_CALL_EVENTS:
+            registry.add_callback(event_type, self._inject_pipeline)
 
-    def _inject_pipeline(self, event: BeforeToolCallEvent) -> None:
+    def _inject_pipeline(self, event: BeforeToolCall) -> None:
         # Bare name: a gateway tool registers as "<prefix>_<target>___<tool>",
         # so comparing the full string matched nothing and this hook never
         # applied a filter. See gateway_tools.bare_tool_name.

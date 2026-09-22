@@ -464,11 +464,18 @@ async def websocket_handler(websocket: WebSocket, request_context=None):
                 tool_name_val = ctu.get("name", "") if isinstance(ctu, dict) else event.get("name", "")
                 if tool_name_val:
                     last_tool_name_holder[0] = tool_name_val
+                # `input` is a dict once the arguments have finished streaming.
+                # The frontend contract (AvatarWSMessage.toolInput) is a string,
+                # and sending the raw dict crashed the transcript renderer, so
+                # serialize it here rather than leaving it to the consumer.
+                raw_input = ctu.get("input") if isinstance(ctu, dict) else event.get("input")
+                if raw_input is not None and not isinstance(raw_input, str):
+                    raw_input = json.dumps(raw_input, default=str)
                 await websocket.send_json(
                     {
                         "type": "toolInvocation",
                         "toolName": last_tool_name_holder[0],
-                        "toolInput": ctu.get("input") if isinstance(ctu, dict) else event.get("input"),
+                        "toolInput": raw_input,
                     }
                 )
             elif event_type == "tool_result":

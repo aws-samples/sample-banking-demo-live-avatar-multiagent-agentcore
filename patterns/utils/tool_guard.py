@@ -1,15 +1,17 @@
 """Force-inject verified user_id into MCP tool calls before dispatch.
 
-Uses Strands SDK HookProvider + BeforeToolCallEvent so the runtime (not the LLM)
-controls which user_id is sent to every user-scoped Gateway tool.
+Uses Strands SDK HookProvider + the before-tool-call events so the runtime (not
+the LLM) controls which user_id is sent to every user-scoped Gateway tool. See
+utils.hook_events for why more than one event type is registered.
 """
 
 import logging
 from typing import Any
 
-from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
+from strands.hooks import HookProvider, HookRegistry
 
 from utils.gateway_tools import USER_SCOPED_TOOLS, bare_tool_name
+from utils.hook_events import BEFORE_TOOL_CALL_EVENTS, BeforeToolCall
 
 __all__ = [
     "FRAUD_RESEARCH_TOOL",
@@ -35,9 +37,10 @@ class UserScopeHook(HookProvider):
         self._user_id = user_id
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
-        registry.add_callback(BeforeToolCallEvent, self._inject_user_id)
+        for event_type in BEFORE_TOOL_CALL_EVENTS:
+            registry.add_callback(event_type, self._inject_user_id)
 
-    def _inject_user_id(self, event: BeforeToolCallEvent) -> None:
+    def _inject_user_id(self, event: BeforeToolCall) -> None:
         tool_name = bare_tool_name(event.tool_use["name"])
         if tool_name not in USER_SCOPED_TOOLS:
             return
@@ -73,9 +76,10 @@ class FraudIdentityHook(HookProvider):
         self._tool_name = tool_name
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
-        registry.add_callback(BeforeToolCallEvent, self._scrub_identity_args)
+        for event_type in BEFORE_TOOL_CALL_EVENTS:
+            registry.add_callback(event_type, self._scrub_identity_args)
 
-    def _scrub_identity_args(self, event: BeforeToolCallEvent) -> None:
+    def _scrub_identity_args(self, event: BeforeToolCall) -> None:
         if bare_tool_name(event.tool_use["name"]) != self._tool_name:
             return
 

@@ -24,8 +24,18 @@ interface ToolCallCardProps {
     output?: string;
 }
 
-/** Pretty-print JSON, or return the text unchanged when it is not JSON. */
-function format(raw: string): string {
+/**
+ * Pretty-print JSON, or return the text unchanged when it is not JSON.
+ *
+ * Takes `unknown` rather than `string` on purpose. These values arrive as JSON
+ * over the avatar WebSocket, so the declared type is a contract rather than a
+ * guarantee: a producer that sent an object here put that object straight into
+ * the DOM as a React child, which throws and blanks the whole page.
+ */
+function format(raw: unknown): string {
+    if (typeof raw !== "string") {
+        return JSON.stringify(raw, null, 2);
+    }
     try {
         return JSON.stringify(JSON.parse(raw), null, 2);
     } catch {
@@ -48,7 +58,9 @@ export default function ToolCallCard({
     output,
 }: ToolCallCardProps): JSX.Element {
     const hasDetail = Boolean(input || output);
-    const urls = output ? findUrls(output) : [];
+    const inputText = input ? format(input) : undefined;
+    const outputText = output ? format(output) : undefined;
+    const urls = outputText ? findUrls(outputText) : [];
 
     const summary = (
         <>
@@ -90,17 +102,17 @@ export default function ToolCallCard({
                     </div>
                 )}
 
-                {input && (
+                {inputText && (
                     <>
                         <div className="avatar-page__tool-label">Input</div>
-                        <pre className="avatar-page__tool-pre">{format(input)}</pre>
+                        <pre className="avatar-page__tool-pre">{inputText}</pre>
                     </>
                 )}
 
-                {output && (
+                {outputText && (
                     <>
                         <div className="avatar-page__tool-label">Result</div>
-                        <pre className="avatar-page__tool-pre">{format(output)}</pre>
+                        <pre className="avatar-page__tool-pre">{outputText}</pre>
                     </>
                 )}
             </div>
