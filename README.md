@@ -242,35 +242,34 @@ The application deploys as CDK stacks (stack names are prefixed with the
 - Access to the required Bedrock models must be **enabled in the account**
   (Bedrock console → Model access): Claude Sonnet, Nova Sonic, Nova Lite, Nova
   Canvas, and Nova Multimodal Embeddings.
-- **For AgentCore Evaluations:** enable **CloudWatch Transaction Search** in the
-  deploy account. This is a one-time, account-level setting that creates the shared
-  `aws/spans` log group the batch evaluation reads. Without it the evaluator still
-  deploys, but launching a batch evaluation fails with
-  `ValidationException: Log group 'aws/spans' not found in your account`. The rest
-  of the application is unaffected.
+- **CloudWatch Transaction Search is enabled for you.** No manual step required.
 
-    Enable it in the console under **CloudWatch → Application Signals (APM) →
-    Transaction search → Enable Transaction Search** (tick _ingest spans as
-    structured logs_), or from the CLI:
+    AgentCore batch evaluation reads agent sessions out of the shared `aws/spans` log
+    group, and that group only exists once Transaction Search is turned on for the
+    account. It has no CloudFormation resource, so `cdk deploy` handles it with a
+    small custom resource
+    ([`lib/lambdas/transaction-search-provisioner`](lib/lambdas/transaction-search-provisioner/index.py))
+    that makes the same three calls the console button makes: a Logs resource policy
+    letting X-Ray write spans, switching the X-Ray trace-segment destination to
+    CloudWatch Logs, and setting span indexing to 1% (the free tier).
 
-    ```bash
-    # 1. Let X-Ray deliver spans into CloudWatch Logs
-    ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-    REGION=us-east-1
-    aws logs put-resource-policy \
-      --policy-name TransactionSearchXRayAccess \
-      --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"TransactionSearchXRayAccess\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"xray.amazonaws.com\"},\"Action\":\"logs:PutLogEvents\",\"Resource\":[\"arn:aws:logs:$REGION:$ACCOUNT:log-group:aws/spans:*\",\"arn:aws:logs:$REGION:$ACCOUNT:log-group:/aws/application-signals/data:*\"],\"Condition\":{\"ArnLike\":{\"aws:SourceArn\":\"arn:aws:xray:$REGION:$ACCOUNT:*\"},\"StringEquals\":{\"aws:SourceAccount\":\"$ACCOUNT\"}}}]}"
+    Because this is **account-level shared configuration**, the provisioner is
+    deliberately conservative: it reads before writing, skips the switch when the
+    destination is already CloudWatch Logs, never lowers an indexing percentage
+    another workload raised, and **does not revert on `cdk destroy`** (reverting
+    would break Transaction Search for every other application in the account). It
+    is best-effort, so a deployer whose role cannot change X-Ray settings still gets
+    a successful deploy.
 
-    # 2. Send trace segments to CloudWatch Logs
-    aws xray update-trace-segment-destination --destination CloudWatchLogs --region $REGION
+    Set `"auto_enable_transaction_search": false` in [`cdk.json`](cdk.json) if
+    observability is managed centrally and you would rather a deployment did not
+    touch it. Enable it yourself under **CloudWatch > Application Signals (APM) >
+    Transaction search**, ticking _ingest spans as structured logs_.
 
-    # 3. (Optional) indexing percentage; 1% is the free tier
-    aws xray update-indexing-rule --name Default \
-      --rule '{"Probabilistic":{"DesiredSamplingPercentage":1}}' --region $REGION
-    ```
-
-    Then run a catalog flow once so the agent emits spans before launching an
-    evaluation.
+    Two timing notes: the destination reports `PENDING` and settles to `ACTIVE`
+    asynchronously (usually a few minutes), and spans only exist after the agent has
+    run. Run a catalog flow once before launching an evaluation, otherwise there is
+    nothing to score.
 
 ---
 
