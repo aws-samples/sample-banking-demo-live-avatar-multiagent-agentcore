@@ -30,7 +30,7 @@
         "tw-animate-css": "^1.2.9",
         "typescript": "^5.9.3",
         "typescript-eslint": "^8.56.1",
-        "vite": "^7.3.1"
+        "vite": "^7.3.7"
     },
     "dependencies": {
         "@aws-crypto/sha256-js": "^5.2.0",
